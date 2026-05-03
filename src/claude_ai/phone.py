@@ -105,6 +105,10 @@ Rules:
   Family relationships in the context are NEVER romantic regardless of romance score.
 - Do NOT assume sims with the same last name are related or share a household — \
   only use what's explicitly stated in the relationship info above.
+- Geography matters: ONLY mention "running into" or "bumping into" mutual contacts if \
+  those mutuals live in the SAME world as the caller. Don't claim to randomly run into \
+  someone who lives in a different world. For long-distance friends, reference seeing \
+  them on social media, hearing from them, or planning visits — not chance encounters.
 - Write dialogue lines only, prefixed with the caller's first name
 - NEVER break character. NEVER say you don't have information or need more details. \
   You are the sim — always stay in character and improvise. If someone mentions a person \
@@ -158,6 +162,9 @@ Rules:
   Family relationships in the context are NEVER romantic regardless of romance score.
 - Do NOT assume sims with the same last name are related or share a household — \
   only use what's explicitly stated in the sender info above.
+- Geography matters: ONLY mention "running into" or "bumping into" mutual contacts if \
+  those mutuals live in the SAME world as the sender. For long-distance friends, \
+  reference seeing them on social media, video calls, or planning visits.
 - NEVER break character. NEVER say you don't have information, can't roleplay, or need more details. \
   You are the sim — always stay in character and improvise naturally. If someone mentions a person \
   or event you weren't given details about, react like the sim would (curious, gossipy, confused, etc.) \
@@ -390,12 +397,16 @@ def _get_mutual_contacts(contact):
                 except Exception:
                     pass
 
+                # Include their world so Claude knows if they're nearby
+                world = _get_sim_home_world(si)
+                world_part = f", lives in {world}" if world else ""
+
                 if main_bits or other_bits:
                     main_label = ", ".join(main_bits[:2]) if main_bits else "acquaintance"
                     other_label = ", ".join(other_bits[:2]) if other_bits else "acquaintance"
-                    mutuals.append(f"{name} (your {main_label}, their {other_label})")
+                    mutuals.append(f"{name} (your {main_label}, their {other_label}{world_part})")
                 else:
-                    mutuals.append(f"{name} (mutual acquaintance)")
+                    mutuals.append(f"{name} (mutual acquaintance{world_part})")
             except Exception:
                 continue
     except Exception:

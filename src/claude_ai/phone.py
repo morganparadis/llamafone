@@ -481,42 +481,93 @@ def _get_mutual_contacts(contact):
     return mutuals
 
 
-# Map internal region names to friendly world names
+# Map internal region names (and pack codes) to friendly world names.
+# Sims 4 worlds are usually identified by EP/GP/SP pack codes.
 _WORLD_NAMES = {
+    # Base game
     "willowcreek": "Willow Creek",
     "oasissprings": "Oasis Springs",
     "newcrest": "Newcrest",
+    # EP01 Get to Work
+    "magnoliapromenade": "Magnolia Promenade",
+    "ep01": "Magnolia Promenade",
+    # EP02 Get Together
     "windenburg": "Windenburg",
+    "ep02": "Windenburg",
+    # EP03 City Living
     "sanmyshuno": "San Myshuno",
+    "ep03": "San Myshuno",
+    # EP04 Cats & Dogs
     "brindletonbay": "Brindleton Bay",
+    "ep04": "Brindleton Bay",
+    # EP05 Seasons (no new world)
+    # EP06 Get Famous
     "delsolvalley": "Del Sol Valley",
+    "ep06": "Del Sol Valley",
+    # EP07 Island Living
     "sulani": "Sulani",
+    "ep07": "Sulani",
+    # EP08 Discover University
     "britechester": "Britechester",
+    "ep08": "Britechester",
+    # EP09 Eco Lifestyle
     "evergreenharbor": "Evergreen Harbor",
-    "forgottenhollow": "Forgotten Hollow",
-    "strangerville": "StrangerVille",
-    "magicvenue": "Glimmerbrook",
-    "glimmerbrook": "Glimmerbrook",
+    "ep09": "Evergreen Harbor",
+    # EP10 Snowy Escape
     "mtkomorebi": "Mt. Komorebi",
+    "ep10": "Mt. Komorebi",
+    # EP11 Cottage Living
     "henfordonbagley": "Henford-on-Bagley",
     "henford": "Henford-on-Bagley",
-    "tartosa": "Tartosa",
-    "weddingworld": "Tartosa",
-    "magnoliapromenade": "Magnolia Promenade",
-    "moonwoodmill": "Moonwood Mill",
+    "ep11": "Henford-on-Bagley",
+    # EP12 High School Years
     "copperdale": "Copperdale",
-    "selvadorada": "Selvadorada",
-    "batuu": "Batuu",
-    "alienworld": "Sixam",
+    "ep12": "Copperdale",
+    # EP13 Growing Together
+    "sansequoia": "San Sequoia",
+    "ep13": "San Sequoia",
+    # EP14 Horse Ranch
+    "chestnutridge": "Chestnut Ridge",
+    "ep14": "Chestnut Ridge",
+    # EP15 For Rent
+    "tomarang": "Tomarang",
+    "ep15": "Tomarang",
+    # EP16 Life & Death
+    "ravenwood": "Ravenwood",
+    "ep16": "Ravenwood",
+    # EP17 Lovestruck
+    "ciudadenamorada": "Ciudad Enamorada",
+    "ep17": "Ciudad Enamorada",
+    # EP18 Businesses & Hobbies
+    "nordhaven": "Nordhaven",
+    "ep18": "Nordhaven",
+    # GP packs with worlds
     "granitefalls": "Granite Falls",
     "outdoorretreat": "Granite Falls",
-    "sansequoia": "San Sequoia",
-    "chestnutridge": "Chestnut Ridge",
-    "tomarang": "Tomarang",
-    "ciudadenamorada": "Ciudad Enamorada",
-    "ravenwood": "Ravenwood",
-    "nordhaven": "Nordhaven",
+    "gp01": "Granite Falls",
+    "forgottenhollow": "Forgotten Hollow",
+    "gp04": "Forgotten Hollow",
+    "selvadorada": "Selvadorada",
+    "gp06": "Selvadorada",
+    "strangerville": "StrangerVille",
+    "gp07": "StrangerVille",
+    "glimmerbrook": "Glimmerbrook",
+    "magicvenue": "Glimmerbrook",
+    "gp08": "Glimmerbrook",
+    "batuu": "Batuu",
+    "gp09": "Batuu",
+    "tartosa": "Tartosa",
+    "weddingworld": "Tartosa",
+    "gp11": "Tartosa",
+    "moonwoodmill": "Moonwood Mill",
+    "gp12": "Moonwood Mill",
     "innisgreen": "Innisgreen",
+    "gp14": "Innisgreen",
+    # Hidden worlds
+    "alienworld": "Sixam",
+    "sixam": "Sixam",
+    "forgottengrotto": "Forgotten Grotto",
+    "sylvanglade": "Sylvan Glade",
 }
 
 
@@ -524,21 +575,36 @@ def _friendly_world_name(raw):
     """Convert internal region name to friendly name. Returns None for unknowns."""
     if not raw:
         return None
-    # Strip pack prefixes like EP18, GP12, etc.
     import re
-    cleaned = re.sub(r'^(EP|GP|SP|FP)\d+[_ ]?', '', raw, flags=re.IGNORECASE)
-    cleaned = re.sub(r'(EP|GP|SP|FP)\d+', '', cleaned, flags=re.IGNORECASE)
-    key = cleaned.lower().replace(" ", "").replace("_", "")
-    if not key:
+    full_key = raw.lower().replace(" ", "").replace("_", "")
+    if not full_key:
         return None
-    name = _WORLD_NAMES.get(key)
+
+    # 1. Try exact match on the full normalized key
+    name = _WORLD_NAMES.get(full_key)
     if name:
         return name
-    # Try partial matches
+
+    # 2. Try matching by pack code prefix (ep18, gp12, etc.)
+    m = re.match(r'(ep|gp|sp|fp)(\d+)', full_key)
+    if m:
+        pack_code = m.group(1) + m.group(2)
+        name = _WORLD_NAMES.get(pack_code)
+        if name:
+            return name
+
+    # 3. Try after stripping the pack prefix
+    stripped = re.sub(r'^(ep|gp|sp|fp)\d+', '', full_key)
+    if stripped:
+        name = _WORLD_NAMES.get(stripped)
+        if name:
+            return name
+
+    # 4. Try partial matches
     for k, v in _WORLD_NAMES.items():
-        if k in key or key in k:
+        if len(k) >= 4 and (k in full_key or k in stripped):
             return v
-    # Unknown world — return None so we don't show garbage like "ep18world"
+
     return None
 
 

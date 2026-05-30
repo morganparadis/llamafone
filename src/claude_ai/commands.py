@@ -85,8 +85,6 @@ try:
         output("  claude.sendcall First Last msg — call a specific sim")
         output("  claude.reply <message>      — reply to the last call or text")
         output("  claude.chat <message>       — chat about your game")
-        output("  claude.set_main First Last  — set your protagonist sim")
-        output("  claude.main                 — show protagonist info")
         output("  claude.journal              — view recent journal entries")
         output("  claude.reload               — reload config file")
 
@@ -382,61 +380,6 @@ try:
         if convo:
             output(f"[Claude AI] Replying to {convo['contact']['name']}...")
         phone.generate_reply(message, output=output)
-
-    # -------------------------------------------------------------------------
-    # Main sim (protagonist)
-    # -------------------------------------------------------------------------
-
-    @sims4.commands.Command("claude.set_main", command_type=sims4.commands.CommandType.Live)
-    def cmd_set_main(first_name: str = None, last_name: str = None, _connection=None):
-        output = sims4.commands.CheatOutput(_connection)
-        if not first_name:
-            output("[Claude AI] Usage: claude.set_main <FirstName> <LastName>")
-            output("[Claude AI] Example: claude.set_main Lily Feng")
-            current = config.get_main_sim_name()
-            if current:
-                output(f"[Claude AI] Current protagonist: {current}")
-            else:
-                output("[Claude AI] No protagonist set — using active sim as fallback.")
-            return
-
-        full_name = f"{first_name} {last_name}".strip() if last_name else first_name
-
-        # Temporarily set the name and try to find them
-        config.set_main_sim_name(full_name)
-        sim_context._main_sim_cache = None
-        found = sim_context.get_main_sim_info()
-
-        if found:
-            output(f"[Claude AI] Protagonist set to: {found.first_name} {found.last_name}")
-            output("[Claude AI] All story, event, and chat prompts will now centre on them.")
-        else:
-            output(f"[Claude AI] Saved '{full_name}' as protagonist, but couldn't find them")
-            output("[Claude AI] in the current save right now. This is fine — they'll be")
-            output("[Claude AI] found when you load a save where they exist.")
-
-    @sims4.commands.Command("claude.main", command_type=sims4.commands.CommandType.Live)
-    def cmd_main(_connection=None):
-        output = sims4.commands.CheatOutput(_connection)
-        name = config.get_main_sim_name()
-        if not name:
-            output("[Claude AI] No protagonist set.")
-            output("[Claude AI] Usage: claude.set_main <FirstName> <LastName>")
-            return
-        found = sim_context.get_main_sim_info()
-        if found:
-            hh_members, rels = sim_context.get_main_sim_network(found)
-            traits = sim_context.get_sim_traits(found, limit=4)
-            mood = sim_context.get_sim_mood(found)
-            career = sim_context.get_sim_career(found)
-            output(f"[Claude AI] Protagonist: {found.first_name} {found.last_name}")
-            output(f"  Mood: {mood}  |  Traits: {', '.join(traits) or 'none'}")
-            if career:
-                output(f"  Career: {career}")
-            output(f"  Household members tracked: {len(hh_members)}")
-            output(f"  Relationships tracked: {len(rels)}")
-        else:
-            output(f"[Claude AI] Protagonist set to '{name}' but not found in current save.")
 
     # -------------------------------------------------------------------------
     # Debug

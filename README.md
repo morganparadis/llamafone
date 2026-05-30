@@ -22,7 +22,7 @@ Every time you run a command, the mod reads live data from the game and sends it
 **What it reads:**
 | Data | Example |
 |---|---|
-| Protagonist sim's name, age, mood | Lily Feng, Young Adult, Confident |
+| Focus sim's name, age, mood | Lily Feng, Young Adult, Confident |
 | Traits (up to 6) | Bookworm, Ambitious, Loner |
 | Career and aspiration | Doctor, Renaissance Sim |
 | Skill levels | Cooking 7, Programming 4, Fitness 2 |
@@ -76,18 +76,6 @@ Open the cheat console with `Ctrl+Shift+C`, type a command, press Enter.
 Calls and texts show as in-game phone dialogs with the sim's portrait. Click **Reply** on the popup to continue the conversation via `claude.reply`. The full conversation history is tracked, so back-and-forth exchanges stay coherent.
 
 Each sim has a unique voice based on their **age, traits, mood, career, and aspiration**. A Goofball Teen texts completely differently from a Snob Elder. Past interactions with that sim are also included, so they'll reference previous conversations naturally.
-
-### Protagonist
-| Command | What it does |
-|---|---|
-| `claude.set_main Lily Feng` | Set Lily Feng as your protagonist sim |
-| `claude.main` | Show your current protagonist and their relationship network |
-
-Setting a protagonist focuses all story, event, and chat prompts on that sim and the sims they have relationships with — rather than every sim in the save file. This keeps the AI grounded in the story you're actually playing.
-
-You can also set the protagonist in `claude_config.cfg` with `main_sim_name = Lily Feng`. The in-game command saves to `ClaudeAI_Settings.json` and persists across sessions.
-
-If no protagonist is set, the mod falls back to your currently active sim.
 
 ### General
 | Command | What it does |
@@ -143,7 +131,6 @@ claude.auto_events off
 | `fast_model` | `claude-haiku-4-5` | Model for dialogue, events, calls, texts |
 | `max_tokens` | `512` | Max length of responses |
 | `language` | `English` | Language for all generated content |
-| `main_sim_name` | *(blank)* | Protagonist sim (FirstName LastName). Falls back to active sim. |
 | `phone_allow_ghosts` | `true` | Allow ghost sims to call/text. Set `false` to only hear from the living. |
 | `auto_events_enabled` | `false` | Turn on random auto-events |
 | `auto_event_interval_minutes` | `20` | Real-world minutes between checks |

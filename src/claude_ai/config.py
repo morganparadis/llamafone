@@ -119,18 +119,3 @@ def is_configured():
     return bool(key and key != "YOUR_API_KEY_HERE")
 
 
-def get_main_sim_name():
-    """
-    Return the protagonist sim's full name, or empty string if not set.
-    Checks ClaudeAI_Settings.json first (set via claude.set_main command),
-    then falls back to main_sim_name in claude_config.cfg.
-    """
-    runtime = get_setting("main_sim_name", "")
-    if runtime:
-        return runtime.strip()
-    return get_config().get("claude_ai", "main_sim_name", fallback="").strip()
-
-
-def set_main_sim_name(name):
-    """Persist the protagonist sim name for future sessions."""
-    return set_setting("main_sim_name", name.strip())

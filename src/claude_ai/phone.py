@@ -463,7 +463,7 @@ def _pick_random_relationship_sim(recipient=None):
         contacts = relationships
     else:
         active = sim_context.get_active_sim()
-        if not active:
+        if not active or not active.sim_info:
             return None
         rels = sim_context.get_sim_relationships(active.sim_info)
         contacts = [r for r in rels if not r.get("in_household")]
@@ -508,8 +508,12 @@ def _has_platonic_bit(bits):
     return False
 
 
-def _describe_recipient(recipient_sim):
-    """Build a short recipient block — just enough so the caller knows who they're addressing."""
+def _describe_recipient(recipient_sim, contact=None):
+    """Build a short recipient block — just enough so the caller knows who they're addressing.
+    Includes the recipient's household members with both their relationship to the recipient
+    AND (if known) their relationship to the contact. Prevents the caller from inventing
+    identities for household members like a spouse/child who don't appear in the contact's
+    relationship tracker."""
     if not recipient_sim:
         return ""
     name = f"{recipient_sim.first_name} {recipient_sim.last_name}".strip()
@@ -529,6 +533,47 @@ def _describe_recipient(recipient_sim):
     traits = sim_context.get_sim_traits(recipient_sim, limit=4)
     if traits:
         parts.append(f"{recipient_sim.first_name}'s traits: {', '.join(traits)}")
+
+    # Household members the recipient lives with — so Claude knows about kids/spouses/etc
+    # who might come up in conversation but aren't in the contact's relationship tracker.
+    household_lines = []
+    contact_si = contact.get("sim_info") if contact else None
+    try:
+        import services
+        hh = services.active_household()
+        if hh:
+            for si in hh.sim_info_gen():
+                try:
+                    if si.sim_id == recipient_sim.sim_id:
+                        continue
+                    mname = f"{si.first_name} {si.last_name}".strip()
+                    mage = str(getattr(si, "age", "")).replace("Age.", "")
+                    # How this household member relates to the recipient
+                    rel_to_recipient = _get_family_relationship(si, {}, recipient=recipient_sim)
+                    # How this household member relates to the contact (so the contact
+                    # knows e.g. that the recipient's husband is also the contact's son)
+                    rel_to_contact = None
+                    if contact_si and contact_si.sim_id != si.sim_id:
+                        rel_to_contact = _get_family_relationship(si, {}, recipient=contact_si)
+
+                    pieces = []
+                    if rel_to_recipient:
+                        pieces.append(f"{recipient_sim.first_name}'s {rel_to_recipient}")
+                    else:
+                        pieces.append(f"lives with {recipient_sim.first_name}")
+                    if rel_to_contact:
+                        pieces.append(f"your {rel_to_contact}")
+                    pieces.append(mage)
+                    household_lines.append(f"  - {mname} ({', '.join(pieces)})")
+                except Exception:
+                    continue
+    except Exception:
+        pass
+
+    if household_lines:
+        parts.append(f"\n{recipient_sim.first_name}'s household:")
+        parts.extend(household_lines)
+
     return "\n".join(parts)
 
 
@@ -1000,7 +1045,22 @@ def _get_family_relationship(other_si, contact, recipient=None):
             def any_bit(*keywords):
                 return any(any(kw in bn for kw in keywords) for bn in bit_names)
 
-            # Most-specific first
+            # Detect in-law bits explicitly (use normalised compact form so
+            # "Is_Parent_In_Law_Of" matches as "parentinlaw")
+            compact_bits = [bn.replace("_", "").replace("-", "") for bn in bit_names]
+
+            def has_compact(substr):
+                return any(substr in cb for cb in compact_bits)
+
+            # IN-LAWS — check before generic parent/child to avoid the substring bug.
+            if has_compact("parentinlaw"):
+                return male_or("Father-in-law", "Mother-in-law")
+            if has_compact("childinlaw") or has_compact("inlawchild"):
+                return male_or("Son-in-law", "Daughter-in-law")
+            if has_compact("siblinginlaw") or has_compact("brotherinlaw") or has_compact("sisterinlaw"):
+                return male_or("Brother-in-law", "Sister-in-law")
+
+            # Other specific terms first
             if any_bit("grandparent"):
                 return male_or("Grandfather", "Grandmother")
             if any_bit("grandchild", "grandson", "granddaughter"):
@@ -1015,10 +1075,11 @@ def _get_family_relationship(other_si, contact, recipient=None):
                 return male_or("Husband", "Wife")
             if any_bit("sibling", "brother", "sister"):
                 return male_or("Brother", "Sister")
-            # Generic parent/child LAST — these are substrings of more specific terms
-            if any_bit("parent") and not any_bit("grandparent"):
+            # Generic parent/child LAST — exclude grandparent AND in-law substrings
+            if any_bit("parent") and not any_bit("grandparent") and not has_compact("inlaw"):
                 return male_or("Father", "Mother")
-            if any_bit("offspring") or any(("child" in bn and "grandchild" not in bn) for bn in bit_names):
+            if (any_bit("offspring") or any(("child" in bn and "grandchild" not in bn) for bn in bit_names)) \
+                    and not has_compact("inlaw"):
                 return male_or("Son", "Daughter")
     except Exception:
         pass
@@ -1195,7 +1256,7 @@ DO NOT invent any other sim names — if you need to reference someone not on th
 use a generic reference like 'a coworker', 'my neighbor', 'this friend of mine' instead."
 
 
-    recipient_block = _describe_recipient(recipient)
+    recipient_block = _describe_recipient(recipient, contact=contact)
 
     prompt = (
         f"Caller info:\n{rel_desc}{history_block}{mutual_block}\n\n"
@@ -1267,7 +1328,7 @@ DO NOT invent any other sim names — if you need to reference someone not on th
 use a generic reference like 'a coworker', 'my neighbor', 'this friend of mine' instead."
 
 
-    recipient_block = _describe_recipient(recipient)
+    recipient_block = _describe_recipient(recipient, contact=contact)
 
     prompt = (
         f"Sender info:\n{rel_desc}{history_block}{mutual_block}\n\n"

@@ -88,9 +88,12 @@ they cannot assume the player shares them.
 # Voice
 The caller's family role to the player, age stage, and traits define how they speak.
 
-Family roles (when listed) lock the voice — a Father speaks like a dad, a Sibling teases, \
-a Spouse is intimate, a Grandparent dotes. Modify warmth by friendship score: high = warm, \
-low = stilted, negative = hostile.
+If the sender info explicitly lists a family role (Father, Mother, Sibling, etc.), THAT \
+is the relationship. Speak accordingly — Father = dad voice, Sibling teases, Spouse is \
+intimate, Grandparent dotes. If NO family role is listed, the sender is a friend, \
+coworker, or acquaintance — NEVER assume any family relationship and NEVER use family \
+terms like "mom", "dad", "son", "daughter". Modify warmth by friendship score: high = \
+warm, low = stilted, negative = hostile.
 
 Age:
 - Teen: dramatic, slang
@@ -489,12 +492,6 @@ def _pick_random_relationship_sim(recipient=None):
 # Bits that signal a relationship is platonic (no longer romantic).
 # Sims 4 adds these when a romance ends — they override any lingering romantic bits.
 _PLATONIC_BIT_KEYWORDS = ("justfriends", "justgoodfriends", "platonic")
-# Bits that indicate ACTIVE romance (vs historical romantic bits)
-_ACTIVE_ROMANCE_BIT_KEYWORDS = (
-    "married", "spouse", "engaged", "fiance",
-    "soulmate", "significant_other", "significantother",
-    "boyfriend", "girlfriend", "partner",
-)
 
 
 def _has_platonic_bit(bits):
@@ -505,20 +502,6 @@ def _has_platonic_bit(bits):
         try:
             bn = sim_context._get_trait_name(bit).lower().replace("_", "")
             if any(kw in bn for kw in _PLATONIC_BIT_KEYWORDS):
-                return True
-        except Exception:
-            pass
-    return False
-
-
-def _has_active_romance_bit(bits):
-    """Return True if any bit indicates an active romantic relationship."""
-    if not bits:
-        return False
-    for bit in bits:
-        try:
-            bn = sim_context._get_trait_name(bit).lower().replace("_", "")
-            if any(kw in bn for kw in _ACTIVE_ROMANCE_BIT_KEYWORDS):
                 return True
         except Exception:
             pass
@@ -940,83 +923,6 @@ def _get_family_relationship(other_si, contact, recipient=None):
     return None
 
 
-def _get_protagonist_relationships(recipient=None):
-    """
-    Build an unambiguous summary of the recipient's key relationships.
-    Falls back to protagonist if no recipient supplied.
-    Uses explicit "X is married to Y" phrasing to avoid confusion.
-    """
-    main_si = recipient or sim_context.get_main_sim_info()
-    if not main_si:
-        return ""
-
-    main_name = main_si.first_name + " " + main_si.last_name
-    facts = []
-
-    try:
-        rt = main_si.relationship_tracker
-        import services
-        sm = services.sim_info_manager()
-
-        for target_id in rt.target_sim_gen():
-            other_si = sm.get(target_id)
-            if not other_si:
-                continue
-            other_name = other_si.first_name + " " + other_si.last_name
-
-            try:
-                bits = list(rt.get_all_bits(target_id))
-                if not bits:
-                    continue
-                # Pre-scan: is this relationship now platonic, or actively romantic?
-                is_platonic = _has_platonic_bit(bits)
-                has_active_romance = _has_active_romance_bit(bits)
-                # Build the lowercased bit name list once
-                bit_names = []
-                for bit in bits:
-                    try:
-                        bit_names.append(sim_context._get_trait_name(bit).lower())
-                    except Exception:
-                        pass
-
-                # Priority: spouse > parent/child/sibling > active romance > nothing
-                # Historical romantic bits are IGNORED when there's a platonic bit
-                # or when the relationship has no active-romance signal.
-                added = False
-                for bn in bit_names:
-                    if "spouse" in bn or "married" in bn:
-                        facts.append(main_name + " is married to " + other_name)
-                        added = True
-                        break
-                    elif "parent" in bn:
-                        facts.append(main_name + " is " + other_name + "'s parent")
-                        added = True
-                        break
-                    elif "child" in bn or "offspring" in bn:
-                        facts.append(main_name + " is " + other_name + "'s child")
-                        added = True
-                        break
-                    elif "sibling" in bn:
-                        facts.append(main_name + " and " + other_name + " are siblings")
-                        added = True
-                        break
-
-                if not added and has_active_romance and not is_platonic:
-                    facts.append(main_name + " is in a romantic relationship with " + other_name)
-            except Exception:
-                pass
-
-            if len(facts) >= 6:
-                break
-    except Exception:
-        pass
-
-    if not facts:
-        return ""
-
-    return "IMPORTANT — the player's sim's relationships (these are FACTS, do not contradict them):\n" + "\n".join("- " + f for f in facts)
-
-
 def _describe_relationship(contact, recipient=None):
     """Build a detailed character description for the prompt.
     All facts are explicitly labeled as belonging to the contact, not the player,
@@ -1142,11 +1048,9 @@ def generate_call(callback=None, output=None):
 DO NOT invent any other sim names — if you need to reference someone not on this list, \
 use a generic reference like 'a coworker', 'my neighbor', 'this friend of mine' instead."
 
-    protag_rels = _get_protagonist_relationships(recipient=recipient)
-    protag_block = f"\n\n{protag_rels}" if protag_rels else ""
 
     prompt = (
-        f"Caller info:\n{rel_desc}{history_block}{mutual_block}{protag_block}\n\n"
+        f"Caller info:\n{rel_desc}{history_block}{mutual_block}\n\n"
         f"They are calling {recipient_name}{_location_context(recipient, contact)}.\n\n"
         f"Write what {contact['name']} says during this phone call."
     )
@@ -1213,11 +1117,9 @@ def generate_text(callback=None, output=None):
 DO NOT invent any other sim names — if you need to reference someone not on this list, \
 use a generic reference like 'a coworker', 'my neighbor', 'this friend of mine' instead."
 
-    protag_rels = _get_protagonist_relationships(recipient=recipient)
-    protag_block = f"\n\n{protag_rels}" if protag_rels else ""
 
     prompt = (
-        f"Sender info:\n{rel_desc}{history_block}{mutual_block}{protag_block}\n\n"
+        f"Sender info:\n{rel_desc}{history_block}{mutual_block}\n\n"
         f"They are texting {recipient_name}{_location_context(recipient, contact)}.\n\n"
         f"Write 1-2 short text messages from {contact['name']}."
     )
@@ -1293,11 +1195,9 @@ def generate_reply(player_message, callback=None, output=None):
         mutual_block = "\n\nPeople BOTH of you know (the ONLY mutual sims you can name):\n" + "\n".join(f"  - {m}" for m in mutuals)
         mutual_block += "\nDO NOT invent other sim names — use generic references like 'a coworker' if needed."
 
-    protag_rels = _get_protagonist_relationships(recipient=recipient)
-    protag_block = f"\n\n{protag_rels}" if protag_rels else ""
 
     prompt = (
-        f"Relationship info:\n{rel_desc}{history_block}{mutual_block}{protag_block}\n\n"
+        f"Relationship info:\n{rel_desc}{history_block}{mutual_block}\n\n"
         f"Conversation so far:\n{convo_text}\n\n"
         f"Write {other_name}'s reply (1-3 short text messages)."
     )
@@ -1363,11 +1263,9 @@ def send_text(contact, player_message, callback=None, output=None):
         mutual_block = "\n\nPeople BOTH of you know (the ONLY mutual sims you can name):\n" + "\n".join(f"  - {m}" for m in mutuals)
         mutual_block += "\nDO NOT invent other sim names — use generic references like 'a coworker' if needed."
 
-    protag_rels = _get_protagonist_relationships()
-    protag_block = f"\n\n{protag_rels}" if protag_rels else ""
 
     prompt = (
-        f"Relationship info:\n{rel_desc}{history_block}{mutual_block}{protag_block}\n\n"
+        f"Relationship info:\n{rel_desc}{history_block}{mutual_block}\n\n"
         f"{main_name} just texted {other_name}: \"{player_message}\"\n\n"
         f"Write {other_name}'s reply (1-3 short text messages). "
         f"If {main_name} mentions people or events you don't have details about, "
@@ -1428,11 +1326,9 @@ def send_call(contact, player_topic, callback=None, output=None):
         mutual_block = "\n\nPeople BOTH of you know (the ONLY mutual sims you can name):\n" + "\n".join(f"  - {m}" for m in mutuals)
         mutual_block += "\nDO NOT invent other sim names — use generic references like 'a coworker' if needed."
 
-    protag_rels = _get_protagonist_relationships()
-    protag_block = f"\n\n{protag_rels}" if protag_rels else ""
 
     prompt = (
-        f"Person being called:\n{rel_desc}{history_block}{mutual_block}{protag_block}\n\n"
+        f"Person being called:\n{rel_desc}{history_block}{mutual_block}\n\n"
         f"{main_name} is calling {other_name}. {main_name} says: \"{player_topic}\"\n\n"
         f"Write what {other_name} says in response (3-5 lines of dialogue). "
         f"They should react naturally to what {main_name} said."

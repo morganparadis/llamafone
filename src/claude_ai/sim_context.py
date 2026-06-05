@@ -145,24 +145,49 @@ def _read_relationship_for_target(rt, target_sim_id, sim_manager):
 
     # Get friendship/romance scores
     friendship, romance = 0, 0
+
+    # Try iterating the actual track objects on the relationship — gives us both
+    # friendship and romance scores reliably. Falls back to get_relationship_score
+    # which only returns one score (friendship by default).
     try:
-        # Try get_relationship_score with track type names
-        for method in ("get_relationship_score",):
-            fn = getattr(rt, method, None)
-            if not fn:
-                continue
-            # Try to get friendship track
+        rel = None
+        try:
+            rel = rt.relationships[target_sim_id]
+        except Exception:
             try:
-                val = fn(target_sim_id)
-                if val is not None:
-                    friendship = int(val)
-            except TypeError:
-                # Might need a track type argument — try without
-                pass
+                rel = rt._relationships[target_sim_id]
             except Exception:
                 pass
+        if rel is not None:
+            tracks = getattr(rel, "_relationship_tracks", None) or getattr(rel, "relationship_tracks", None)
+            if tracks:
+                track_iter = tracks.values() if hasattr(tracks, "values") else tracks
+                for track in track_iter:
+                    try:
+                        tn = type(track).__name__.lower()
+                        val = int(track.get_value())
+                        if "romance" in tn:
+                            romance = val
+                        elif "friendship" in tn or "friend" in tn or "acquaint" in tn:
+                            friendship = val
+                    except Exception:
+                        continue
     except Exception:
         pass
+
+    # Fallback to single-score API if the track iteration didn't fill anything
+    if friendship == 0 and romance == 0:
+        try:
+            fn = getattr(rt, "get_relationship_score", None)
+            if fn:
+                try:
+                    val = fn(target_sim_id)
+                    if val is not None:
+                        friendship = int(val)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     # If any bit indicates the relationship is now platonic ("Just Friends" etc.),
     # treat the whole relationship as platonic and strip all romantic bits.

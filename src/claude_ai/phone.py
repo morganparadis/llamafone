@@ -668,6 +668,7 @@ def _clean_bit_label(bn):
             "Married", "Spouse", "Engaged", "Fiance",
             "Crush", "Lover", "Soulmate", "Sweetheart", "Dating",
             "Romantic", "Partner",
+            "Broken", "BrokenUp", "Ex", "Former", "Divorced",
             "Sibling", "Brother", "Sister",
             "Parent", "Mother", "Father", "Mom", "Dad",
             "Child", "Son", "Daughter",
@@ -1308,6 +1309,23 @@ def _describe_relationship(contact, recipient=None):
         r_label = _romance_label(romance)
         if r_label:
             parts.append(f"Romantic feelings: {r_label}")
+
+    # If the relationship has explicitly changed (breakup, divorce, etc.) OR romance
+    # has gone negative, surface that as a clear warning so Claude doesn't continue
+    # treating them like a current partner based on past chat history.
+    status = contact.get("status", "") or ""
+    status_low = status.lower().replace("_", "").replace(" ", "")
+    is_ex = ("broken" in status_low or "ex" in status_low.split() or
+             "former" in status_low or "divorced" in status_low)
+    if is_ex or (romance is not None and romance < 0):
+        parts.append(
+            "RELATIONSHIP STATUS NOTE: This is a former romantic relationship — "
+            "they are NOT currently dating/together. Any past affectionate or flirty "
+            "journal history is from BEFORE the breakup and should NOT shape the "
+            "current tone. Treat the current dynamic as awkward, tense, or distant "
+            "depending on the romance score."
+        )
+
     if contact.get("in_household") is True:
         parts.append("Lives in the same household as the player")
 
@@ -1338,7 +1356,11 @@ def _friendship_label(score):
 
 
 def _romance_label(score):
-    """Convert a Sims 4 romance score to a closeness label (positive only)."""
+    """Convert a Sims 4 romance score to a label.
+    Positive = degrees of attraction. Negative = degrees of romantic friction
+    (post-breakup tension, bitterness, etc.) — important to surface so Claude
+    doesn't treat an ex like a current crush.
+    """
     if score is None or score == 0:
         return None
     if score >= 75:
@@ -1349,7 +1371,12 @@ def _romance_label(score):
         return "growing romantic interest"
     if score >= 1:
         return "mild attraction"
-    return None
+    # Negative romance — they were once romantic, now there's friction
+    if score >= -19:
+        return "lingering awkwardness from past romance"
+    if score >= -49:
+        return "post-breakup friction — recent or unresolved"
+    return "bitter breakup / hostile former romance"
 
 
 def _format_conversation_history(history, main_name, other_name):

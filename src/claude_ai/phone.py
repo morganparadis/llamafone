@@ -174,6 +174,9 @@ Look at the caller's world vs the player's world (both listed in the context).
 - Adults don't treat children/toddlers as peers — only as kids in their own/family/friends' lives.
 - Sims with the same last name are NOT automatically related or in the same household.
 - Stay in character. Never acknowledge being an AI or claim missing information. Improvise.
+- DECEASED sims (marked [DECEASED]) are GHOSTS. Never reference them as if alive. If they
+  come up, talk about them in past tense, as memories, or as ghosts who appear sometimes.
+  Don't suggest visiting them, calling them, hanging out with them, etc.
 - PLAY ALONG with the player. If the player references things you don't have data for \
   (companies, hobbies, events, side businesses, mods, etc.), treat them as canon and \
   respond as if you know them. NEVER push back, correct, or say "I think you have me \
@@ -272,6 +275,9 @@ Look at the sender's world vs the player's world (both listed in the context).
 - Adults don't treat children/toddlers as peers — only as kids in their own/family/friends' lives.
 - Sims with the same last name are NOT automatically related or in the same household.
 - Stay in character. Never acknowledge being an AI or claim missing information. Improvise.
+- DECEASED sims (marked [DECEASED]) are GHOSTS. Never reference them as if alive. If they
+  come up, talk about them in past tense, as memories, or as ghosts who appear sometimes.
+  Don't suggest visiting them, calling them, hanging out with them, etc.
 - PLAY ALONG with the player. If the player references things you don't have data for \
   (companies, hobbies, events, side businesses, mods, etc.), treat them as canon and \
   respond as if you know them. NEVER push back, correct, or say "I think you have me \
@@ -311,6 +317,8 @@ character (curious, confused, gossipy) — never refuse or ask for details.
 - Family relationships are NEVER romantic, regardless of romance score.
 - No profanity or explicit content.
 - Don't assume same last name = related or in same household.
+- DECEASED sims (marked [DECEASED]) are GHOSTS. Never reference them as if alive. \
+  Talk about them in past tense or as memories.
 - Stay in character. Never acknowledge being an AI or claim missing information.
 - PLAY ALONG with the player. If {main_name} references things you don't have data for \
   (companies, hobbies, events, side businesses, etc.), treat them as canon. \
@@ -641,7 +649,8 @@ def _describe_recipient(recipient_sim, contact=None):
                     if rel_to_contact:
                         pieces.append(f"your {rel_to_contact}")
                     pieces.append(mage)
-                    household_lines.append(f"  - {mname} ({', '.join(pieces)})")
+                    ghost_tag = " [DECEASED — only reference in past tense]" if _is_ghost(si) else ""
+                    household_lines.append(f"  - {mname} ({', '.join(pieces)}){ghost_tag}")
                 except Exception:
                     continue
     except Exception:
@@ -698,7 +707,12 @@ def _clean_bit_label(bn):
 def _get_mutual_contacts(contact, recipient=None):
     """
     Find sims that both the recipient and the contact have relationships with.
-    Falls back to protagonist if no recipient supplied.
+    Returns a randomised subset of up to 4 — so different mutuals surface across
+    calls rather than always the same fixed list.
+
+    Labels prefer family-relationship detection (which knows about
+    grandparents/in-laws/etc.) and only fall back to bit-name extraction.
+    Marks ghosts explicitly so they're never written about as if alive.
     """
     mutuals = []
     try:
@@ -707,17 +721,14 @@ def _get_mutual_contacts(contact, recipient=None):
         if not main_si or not other_si:
             return mutuals
 
-        # Get the protagonist's relationship targets
         main_rt = main_si.relationship_tracker
         main_targets = set(main_rt.target_sim_gen())
         main_targets.discard(other_si.sim_id)
 
-        # Get the contact's relationship targets
         other_rt = other_si.relationship_tracker
         other_targets = set(other_rt.target_sim_gen())
         other_targets.discard(main_si.sim_id)
 
-        # Find overlap
         shared_ids = main_targets & other_targets
         if not shared_ids:
             return mutuals
@@ -725,59 +736,52 @@ def _get_mutual_contacts(contact, recipient=None):
         import services
         sm = services.sim_info_manager()
 
-        # Cap mutual contacts at 4 — more than that and Claude over-relies on the list
-        for sid in list(shared_ids)[:4]:
+        # Randomise so different mutuals surface across calls
+        shared_list = list(shared_ids)
+        random.shuffle(shared_list)
+
+        def _short_relationship_label(rt, sid):
+            """Best-effort relationship label from bits, used when family detection
+            returns nothing. Filters platonic-overrides-romantic and noise."""
+            try:
+                raw = list(rt.get_all_bits(sid))
+                is_platonic = _has_platonic_bit(raw)
+                labels = []
+                for bit in raw:
+                    bn = sim_context._get_trait_name(bit)
+                    bn_low = bn.lower().replace("_", "")
+                    is_romantic = any(kw in bn_low for kw in ("romantic", "crush", "lover"))
+                    if is_romantic and is_platonic:
+                        continue
+                    label = _clean_bit_label(bn)
+                    if label and label not in labels:
+                        labels.append(label)
+                return ", ".join(labels[:2]) if labels else None
+            except Exception:
+                return None
+
+        for sid in shared_list[:4]:
             try:
                 si = sm.get(sid)
                 if not si:
                     continue
                 name = f"{si.first_name} {si.last_name}".strip()
 
-                # Get relationship bits from protagonist's perspective
-                main_bits = []
-                try:
-                    raw_main_bits = list(main_rt.get_all_bits(sid))
-                    main_is_platonic = _has_platonic_bit(raw_main_bits)
-                    for bit in raw_main_bits:
-                        bn = sim_context._get_trait_name(bit)
-                        bn_low = bn.lower().replace("_", "")
-                        # Skip historical romantic bits when relationship is now platonic
-                        is_romantic = any(kw in bn_low for kw in ("romantic", "crush", "lover"))
-                        if is_romantic and main_is_platonic:
-                            continue
-                        for kw in ("Friend", "Enemy", "Romantic", "Married", "BFF",
-                                   "Crush", "Family", "Sibling", "Parent", "Child"):
-                            if kw in bn:
-                                label = _clean_bit_label(bn)
-                                if label and label not in main_bits:
-                                    main_bits.append(label)
-                                break
-                except Exception:
-                    pass
+                # Prefer family detection — covers grandparent, great-grandparent,
+                # in-laws, etc. that bit names don't surface cleanly.
+                main_label = _get_family_relationship(si, {}, recipient=main_si)
+                if not main_label:
+                    main_label = _short_relationship_label(main_rt, sid)
+                if not main_label:
+                    main_label = "acquaintance"
 
-                # Get relationship bits from contact's perspective
-                other_bits = []
-                try:
-                    raw_other_bits = list(other_rt.get_all_bits(sid))
-                    other_is_platonic = _has_platonic_bit(raw_other_bits)
-                    for bit in raw_other_bits:
-                        bn = sim_context._get_trait_name(bit)
-                        bn_low = bn.lower().replace("_", "")
-                        is_romantic = any(kw in bn_low for kw in ("romantic", "crush", "lover"))
-                        if is_romantic and other_is_platonic:
-                            continue
-                        for kw in ("Friend", "Enemy", "Romantic", "Married", "BFF",
-                                   "Crush", "Family", "Sibling", "Parent", "Child"):
-                            if kw in bn:
-                                label = _clean_bit_label(bn)
-                                if label and label not in other_bits:
-                                    other_bits.append(label)
-                                break
-                except Exception:
-                    pass
+                other_label = _get_family_relationship(si, {}, recipient=other_si)
+                if not other_label:
+                    other_label = _short_relationship_label(other_rt, sid)
+                if not other_label:
+                    other_label = "acquaintance"
 
-                # Include their age and world so Claude knows context
-                world = _get_sim_home_world(si)
+                # Age and world context
                 age = ""
                 try:
                     age_str = str(getattr(si, "age", "")).replace("Age.", "")
@@ -785,14 +789,17 @@ def _get_mutual_contacts(contact, recipient=None):
                         age = f", {age_str}"
                 except Exception:
                     pass
+                world = _get_sim_home_world(si)
                 world_part = f", lives in {world}" if world else ", world unknown — treat as long-distance only"
 
-                if main_bits or other_bits:
-                    main_label = ", ".join(main_bits[:2]) if main_bits else "acquaintance"
-                    other_label = ", ".join(other_bits[:2]) if other_bits else "acquaintance"
-                    mutuals.append(f"{name} (your {main_label}, their {other_label}{age}{world_part})")
-                else:
-                    mutuals.append(f"{name} (mutual acquaintance{age}{world_part})")
+                # Ghost marker — Claude must NEVER write about ghosts as if alive
+                ghost_tag = ""
+                if _is_ghost(si):
+                    ghost_tag = " [DECEASED — only reference in past tense or as a memory]"
+
+                mutuals.append(
+                    f"{name} (your {main_label}, their {other_label}{age}{world_part}){ghost_tag}"
+                )
             except Exception:
                 continue
     except Exception:
@@ -1108,6 +1115,24 @@ def _get_family_relationship(other_si, contact, recipient=None):
                     their_grandparent_ids |= _parent_ids(psi.genealogy)
             if main_si.sim_id in their_grandparent_ids and other_can_be_child_of_main:
                 return male_or("Grandson", "Granddaughter")
+
+            # 5b. Great-grandparent: other is a parent of one of my grandparents
+            great_grandparent_ids = set()
+            for gpid in grandparent_ids:
+                gpsi = sm.get(gpid)
+                if gpsi:
+                    great_grandparent_ids |= _parent_ids(gpsi.genealogy)
+            if other_si.sim_id in great_grandparent_ids and other_can_be_parent_of_main:
+                return male_or("Great-Grandfather", "Great-Grandmother")
+
+            # 5c. Great-grandchild: I am a parent of one of other's grandparents
+            their_great_grandparent_ids = set()
+            for gpid in their_grandparent_ids:
+                gpsi = sm.get(gpid)
+                if gpsi:
+                    their_great_grandparent_ids |= _parent_ids(gpsi.genealogy)
+            if main_si.sim_id in their_great_grandparent_ids and other_can_be_child_of_main:
+                return male_or("Great-Grandson", "Great-Granddaughter")
 
             # 6. Aunt/Uncle: other is a sibling of one of my parents
             for pid in my_parents:

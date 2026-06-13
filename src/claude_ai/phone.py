@@ -104,20 +104,39 @@ they cannot assume the player shares them.
 # Voice
 The caller's family role to the player, age stage, and traits define how they speak.
 
-If the sender info explicitly lists a family role (Father, Mother, Sibling, etc.), THAT \
-is the relationship. Speak accordingly — Father = dad voice, Sibling teases, Spouse is \
-intimate, Grandparent dotes. If NO family role is listed, the sender is a friend, \
-coworker, or acquaintance — NEVER assume any family relationship and NEVER use family \
-terms like "mom", "dad", "son", "daughter". Modify warmth by friendship score: high = \
-warm, low = stilted, negative = hostile.
+FAMILY ROLE OVERRIDES TRAITS. If the sender info lists a family role (Father, Mother, \
+Son, Daughter, Brother, Sister, Spouse, Grandparent, Grandchild, etc.), the family \
+dynamic dominates the voice. Traits only flavor it — they do not turn a parent into \
+the player's drinking buddy.
 
-Age (match the caller's age stage):
+Parent → child (you are the player's Father/Mother): you are calling your OWN KID. \
+Warm parental tone, even if your traits are Outgoing/Adventurous/Cheerful. Open with \
+"hey kiddo", "hey son/honey", or just the topic. NEVER open with "hey man", "what's up \
+bro", "yo", "dude" — parents don't talk to their own children like peers.
+
+Child → parent: respectful, familiar. "hey mom", "hey dad", "hi". Asking advice, \
+checking in, sharing news.
+
+Sibling → sibling: teasing, candid, casual, no formality.
+
+Spouse → spouse: intimate, shorthand, may use pet names.
+
+Grandparent → grandchild: dotes, fuller sentences, may ramble warmly.
+
+If NO family role is listed the caller is a friend/coworker/acquaintance — peer-style \
+openers are fine and family terms like "mom"/"dad"/"son"/"daughter" are FORBIDDEN.
+
+Modify warmth across all of these by friendship score: high = warm, low = stilted, \
+negative = hostile.
+
+Age (match the caller's age stage, but family role wins where they conflict):
 - Teen: dramatic, slang
 - Young Adult: casual but articulate
 - Adult: measured sentences, no youth slang ("yo", "bro", "dude")
 - Elder: nostalgic, formal, long-winded
 
-Traits add flavor on top (Hot-Headed rants, Goofball jokes, Snob condescends, Loner is terse).
+Traits add flavor on top (Hot-Headed rants, Goofball jokes, Snob condescends, Loner is terse). \
+Traits do NOT override the family-role register above.
 
 # What to write
 2-3 SHORT lines of dialogue, no speaker prefix or label. Plain dialogue lines only. \
@@ -213,18 +232,43 @@ they cannot assume the player shares them.
 # Voice
 The sender's family role to the player, age stage, and traits define how they text.
 
-Family roles (when listed) lock the voice — a Father texts like a dad, a Sibling teases, \
-a Spouse is intimate, a Grandparent dotes. Modify warmth by friendship score: high = warm, \
-low = stilted, negative = hostile.
+FAMILY ROLE OVERRIDES TRAITS. If the sender info lists a family role (Father, Mother, \
+Son, Daughter, Brother, Sister, Spouse, Grandparent, Grandchild, etc.), the family \
+dynamic is the dominant voice — traits only flavor it, they do NOT make a parent text \
+like a peer.
 
-Age (match the sender's age stage):
+Parent → child (you are the player's Father/Mother): you are texting your OWN KID. \
+Warm and parental, even if you have outgoing/adventurous/cheerful traits. Openers: \
+"hey kiddo", "hey son", "hey honey", or just the topic. NEVER use peer-style openers \
+like "hey man", "hey bro", "dude", "yo" — that is how friends text, not how a parent \
+texts their own child. You may invite your kid on activities, share news from your \
+life, give light advice, ask how they're doing. Don't be cringe-formal — just dad/mom.
+
+Child → parent (you are the player's Son/Daughter): respectful, familiar. Openers: \
+"hey mom", "hey dad", or "hi". Adults asking parents for advice or just checking in.
+
+Sibling → sibling: teasing, candid, no formality. Inside jokes welcome.
+
+Spouse → spouse: intimate, casual, shorthand. Pet names if traits fit.
+
+Grandparent → grandchild: dotes, asks how they're doing, maybe references the old days \
+or sends an embarrassingly long message. Older sims text in fuller sentences.
+
+If NO family role is listed, the sender is a friend/coworker/acquaintance — and the \
+peer-style "hey man" / "what's up" register is fine.
+
+Modify warmth across all of these by friendship score: high = warm, low = stilted, \
+negative = hostile.
+
+Age (match the sender's age stage, but family role wins where they conflict):
 - Teen: lowercase, abbreviations, lots of emoji. "omggg no way 😭"
 - Young Adult: casual but articulate. "hey are you free tonight?"
 - Adult: complete sentences, minimal emoji, no youth slang. "Hi! Are you free this weekend?"
 - Elder: formal, warm, sometimes long-winded. "Hello dear, I hope you're well."
 
 Traits add flavor on top (Hot-Headed = caps, Gloomy = ellipses, Snob = condescending grammar, \
-Goofball = playful, Romantic = hearts, Loner = terse, Evil = passive aggressive).
+Goofball = playful, Romantic = hearts, Loner = terse, Evil = passive aggressive). Traits \
+do NOT override the family-role register above.
 
 # What to write
 1-2 SHORT messages, max 2 sentences each. One topic. Your FIRST message must contain a \
@@ -337,17 +381,34 @@ Emotion is one of: happy, confident, flirty, inspired, focused, energized, playf
 angry, tense, embarrassed, bored, uncomfortable, dazed. This is the emotion {main_name} feels."""
 
 
-def _apply_mood_from_text(text, reason=None, recipient=None):
-    """Extract MOOD tag from text, apply the moodlet to the recipient, return cleaned text."""
+# Moods that are emotionally strong enough to warrant a moodlet even when
+# the message was solicited (a reply to the player's text/call). Bland moods
+# like "happy" or "focused" only apply on UNSOLICITED incoming calls/texts,
+# to avoid stacking weak buffs every time the player has a back-and-forth.
+_CHARGED_MOODS = {
+    "sad", "angry", "flirty", "embarrassed",
+    "tense", "uncomfortable", "dazed",
+}
+
+
+def _apply_mood_from_text(text, reason=None, recipient=None, is_incoming=False):
+    """Extract MOOD tag from text, apply the moodlet to the recipient, return cleaned text.
+
+    is_incoming=True for unsolicited calls/texts (auto-events) — always applies the
+    moodlet. is_incoming=False for replies and the contact's response to a call/text
+    the player initiated — only applies if the mood is emotionally charged.
+    """
     clean_text, mood_tag = moodlets.extract_mood_tag(text)
     if mood_tag:
-        target = recipient or sim_context.get_main_sim_info()
-        if not target:
-            active = sim_context.get_active_sim()
-            if active:
-                target = active.sim_info
-        if target:
-            moodlets.apply_mood(target, mood_tag, reason=reason)
+        should_apply = is_incoming or mood_tag.strip().lower() in _CHARGED_MOODS
+        if should_apply:
+            target = recipient or sim_context.get_main_sim_info()
+            if not target:
+                active = sim_context.get_active_sim()
+                if active:
+                    target = active.sim_info
+            if target:
+                moodlets.apply_mood(target, mood_tag, reason=reason)
     return clean_text
 
 
@@ -704,6 +765,101 @@ def _clean_bit_label(bn):
     return ""
 
 
+_FAMILY_CATEGORY = {
+    # Map a printed family label to a gender-neutral kinship category, for transitive inference.
+    "father": "parent", "mother": "parent",
+    "son": "child", "daughter": "child",
+    "brother": "sibling", "sister": "sibling",
+    "husband": "spouse", "wife": "spouse",
+    "grandfather": "grandparent", "grandmother": "grandparent",
+    "great-grandfather": "great-grandparent", "great-grandmother": "great-grandparent",
+    "grandson": "grandchild", "granddaughter": "grandchild",
+    "great-grandson": "great-grandchild", "great-granddaughter": "great-grandchild",
+    "uncle": "auntuncle", "aunt": "auntuncle",
+    "nephew": "niecenephew", "niece": "niecenephew",
+    "cousin": "cousin",
+    "father-in-law": "parentinlaw", "mother-in-law": "parentinlaw",
+    "son-in-law": "childinlaw", "daughter-in-law": "childinlaw",
+    "brother-in-law": "siblinginlaw", "sister-in-law": "siblinginlaw",
+}
+
+# Given (contact-to-player, mutual-to-player), what is mutual-to-contact?
+# Keys and values are gender-neutral kinship categories from _FAMILY_CATEGORY.
+_TRANSITIVE_KIN = {
+    ("parent", "parent"): "spouse",
+    ("parent", "sibling"): "child",       # Apollo (player's father) + Francesca (player's sister) -> Apollo's child
+    ("parent", "child"): "grandchild",
+    ("parent", "grandparent"): "parent",
+    ("parent", "spouse"): "child",        # contact is player's parent, mutual is player's spouse -> mutual is contact's child-in-law (treat as child for warmth)
+    ("child", "parent"): "spouse",
+    ("child", "child"): "sibling",        # both are player's kids -> siblings to each other
+    ("child", "sibling"): "auntuncle",
+    ("child", "spouse"): "parent",        # contact is player's kid, mutual is player's spouse -> mutual is contact's other parent
+    ("sibling", "parent"): "parent",
+    ("sibling", "sibling"): "sibling",
+    ("sibling", "child"): "niecenephew",
+    ("sibling", "spouse"): "siblinginlaw",
+    ("spouse", "child"): "child",
+    ("spouse", "parent"): "parentinlaw",
+    ("spouse", "sibling"): "siblinginlaw",
+    ("grandparent", "parent"): "child",
+    ("grandparent", "sibling"): "grandchild",
+    ("grandparent", "grandparent"): "spouse",
+    ("grandchild", "child"): "child",     # contact is player's grandkid, mutual is player's kid -> mutual is contact's parent (printed as "child" of the grandparent generation? actually parent)
+    ("auntuncle", "parent"): "sibling",
+    ("auntuncle", "sibling"): "niecenephew",
+    ("niecenephew", "parent"): "siblinginlaw",  # contact is player's niece, mutual is player's parent -> mutual is contact's grandparent really, but skip
+}
+# Override: the (grandchild, child) case above is wrong -- correct is "parent of contact"
+_TRANSITIVE_KIN[("grandchild", "child")] = "parent"
+
+_KIN_TO_GENDERED = {
+    "parent":          ("Father", "Mother"),
+    "child":           ("Son", "Daughter"),
+    "sibling":         ("Brother", "Sister"),
+    "spouse":          ("Husband", "Wife"),
+    "grandparent":     ("Grandfather", "Grandmother"),
+    "grandchild":      ("Grandson", "Granddaughter"),
+    "great-grandparent": ("Great-Grandfather", "Great-Grandmother"),
+    "great-grandchild":  ("Great-Grandson", "Great-Granddaughter"),
+    "auntuncle":       ("Uncle", "Aunt"),
+    "niecenephew":     ("Nephew", "Niece"),
+    "cousin":          ("Cousin", "Cousin"),
+    "parentinlaw":     ("Father-in-law", "Mother-in-law"),
+    "childinlaw":      ("Son-in-law", "Daughter-in-law"),
+    "siblinginlaw":    ("Brother-in-law", "Sister-in-law"),
+}
+
+
+def _infer_kin_via_player(contact_role, mutual_role, mutual_si):
+    """
+    When direct genealogy lookup between contact and mutual fails (common when
+    one sim's genealogy is incomplete), we can still derive their relationship
+    if we know BOTH sims' relationships to the player.
+
+    Example: contact is player's Father, mutual is player's Sister. Then mutual
+    must be contact's Daughter.
+    """
+    if not contact_role or not mutual_role:
+        return None
+    c_cat = _FAMILY_CATEGORY.get(contact_role.lower())
+    m_cat = _FAMILY_CATEGORY.get(mutual_role.lower())
+    if not c_cat or not m_cat:
+        return None
+    out_cat = _TRANSITIVE_KIN.get((c_cat, m_cat))
+    if not out_cat:
+        return None
+    gendered = _KIN_TO_GENDERED.get(out_cat)
+    if not gendered:
+        return None
+    try:
+        gender = str(getattr(mutual_si, "gender", "")).replace("Gender.", "")
+    except Exception:
+        gender = ""
+    male_lbl, female_lbl = gendered
+    return male_lbl if gender == "MALE" else female_lbl
+
+
 def _get_mutual_contacts(contact, recipient=None):
     """
     Find sims that both the recipient and the contact have relationships with.
@@ -720,6 +876,10 @@ def _get_mutual_contacts(contact, recipient=None):
         other_si = contact.get("sim_info")
         if not main_si or not other_si:
             return mutuals
+
+        # Pre-compute contact's family role to the recipient -- used for transitive
+        # inference when direct genealogy between contact and a mutual is broken.
+        contact_role_to_main = _get_family_relationship(other_si, contact, recipient=main_si)
 
         main_rt = main_si.relationship_tracker
         main_targets = set(main_rt.target_sim_gen())
@@ -776,6 +936,13 @@ def _get_mutual_contacts(contact, recipient=None):
                     main_label = "acquaintance"
 
                 other_label = _get_family_relationship(si, {}, recipient=other_si)
+                # Transitive inference: if direct genealogy contact<->mutual is
+                # broken but we know both sides' relation to the player, derive
+                # the missing edge. Catches cases like Apollo (player's Father)
+                # being mislabeled as "Friendly" with Francesca (player's Sister)
+                # when only the player's genealogy lists Apollo as parent.
+                if not other_label and contact_role_to_main and main_label and main_label != "acquaintance":
+                    other_label = _infer_kin_via_player(contact_role_to_main, main_label, si)
                 if not other_label:
                     other_label = _short_relationship_label(other_rt, sid)
                 if not other_label:
@@ -797,8 +964,12 @@ def _get_mutual_contacts(contact, recipient=None):
                 if _is_ghost(si):
                     ghost_tag = " [DECEASED — only reference in past tense or as a memory]"
 
+                # "your" in this block refers to the SENDER/CALLER (the one writing),
+                # since the prompt addresses the model AS the sender. The recipient's
+                # side is named explicitly to avoid pronoun confusion.
+                recipient_first = main_si.first_name if main_si else "the recipient"
                 mutuals.append(
-                    f"{name} (your {main_label}, their {other_label}{age}{world_part}){ghost_tag}"
+                    f"{name} (your {other_label}, {recipient_first}'s {main_label}{age}{world_part}){ghost_tag}"
                 )
             except Exception:
                 continue
@@ -1541,7 +1712,7 @@ use a generic reference like 'a coworker', 'my neighbor', 'this friend of mine' 
     def _on_result(text, error):
         title = f"Call from {contact['name']}"
         if text:
-            text = _apply_mood_from_text(text, reason="Call from " + contact["name"], recipient=recipient)
+            text = _apply_mood_from_text(text, reason="Call from " + contact["name"], recipient=recipient, is_incoming=True)
             _start_conversation(contact, text, recipient_sim=recipient)
             journal.add_entry("call", f"Call from {contact['name']} (to {recipient_name}):\n{text}", sim_name=contact["name"], recipient_name=recipient_name)
             caller_si = contact.get("sim_info")
@@ -1613,7 +1784,7 @@ use a generic reference like 'a coworker', 'my neighbor', 'this friend of mine' 
     def _on_result(text, error):
         title = f"Text from {contact['name']}"
         if text:
-            text = _apply_mood_from_text(text, reason="Text from " + contact["name"], recipient=recipient)
+            text = _apply_mood_from_text(text, reason="Text from " + contact["name"], recipient=recipient, is_incoming=True)
             _start_conversation(contact, text, recipient_sim=recipient)
             journal.add_entry("text", f"Text from {contact['name']} (to {recipient_name}):\n{text}", sim_name=contact["name"], recipient_name=recipient_name)
             sender_si = contact.get("sim_info")

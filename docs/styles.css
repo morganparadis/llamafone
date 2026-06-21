@@ -329,6 +329,23 @@ section > .container > h2 {
   margin-top: 1.75rem;
 }
 
+/* The two sections that follow visually-dense card grids (features + screenshots)
+   already feel weighty on their own — trim the section padding-top so the gap
+   doesn't look exaggerated. */
+main > section.screenshot-strip {
+  padding-top: 3rem;
+}
+
+/* The screenshot-strip's bottom padding stacks with the commands' top padding,
+   producing a huge gap above the Commands header. Trim both. */
+main > section.screenshot-strip { padding-bottom: 2.5rem; }
+main > section.commands         { padding-top: 1rem; }
+
+.screenshot-strip > .container > h2,
+.commands > h2 {
+  margin-top: 0.25rem;
+}
+
 /* Decorative accent under section headers (but NOT under headers
    that live inside a card — bugreport-card, support-card, etc.) */
 section > h2::after,

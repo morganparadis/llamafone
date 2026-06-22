@@ -196,8 +196,8 @@
       </figure>
 
       <figure class="screenshot">
-        <img src="img/elderexample.jpg" alt="Text message from an elder sim in formal tone">
-        <figcaption><strong>From an elder</strong><br><span class="muted small">Formal, careful, no slang.</span></figcaption>
+        <img src="img/contextexample.PNG" alt="Call referencing a real in-game event the player's sim just did">
+        <figcaption><strong>Knows what just happened</strong><br><span class="muted small">References real in-game events — quit jobs, promotions, breakups.</span></figcaption>
       </figure>
 
       <figure class="screenshot">
@@ -465,6 +465,50 @@
     </li>
 
     <li class="changelog-entry">
+      <div class="changelog-date">June 22, 2026</div>
+      <div class="changelog-body">
+        <h3>Sims remember what just happened</h3>
+        <ul>
+          <li>When something big happens to a sim in your game — they quit a job, get promoted, have a baby, get married, age up — the mod picks it up automatically and references it in calls and texts. Your friend won't congratulate you on a promotion that hasn't happened, but they will if it did yesterday.</li>
+          <li>Tracks 7 days of recent events per sim, max 4 surfaced per prompt.</li>
+        </ul>
+      </div>
+    </li>
+
+    <li class="changelog-entry">
+      <div class="changelog-date">June 22, 2026</div>
+      <div class="changelog-body">
+        <h3>Realistic reply delays</h3>
+        <ul>
+          <li>Sims now "think" before texting back instead of replying instantly. Delay scales by friendship (best friends fast, enemies slow) and traits (Lazy/Loner slow, Active/Outgoing fast). Defaults to 15–90 seconds.</li>
+          <li>Configurable in <code>claude_config.cfg</code> — set <code>reply_delay_enabled = false</code> for the old instant behavior.</li>
+        </ul>
+      </div>
+    </li>
+
+    <li class="changelog-entry">
+      <div class="changelog-date">June 22, 2026</div>
+      <div class="changelog-body">
+        <h3>Moodlets are back (the right way)</h3>
+        <ul>
+          <li>Calls and texts now apply a clean "Feeling X" moodlet to your sim — happy, sad, angry, confident, flirty, playful, energized, focused, inspired. No more rogue "New Baby!" or "Workout!" buffs.</li>
+          <li>Auto-fired incoming calls/texts always apply. Replies only apply if the mood is emotionally charged (sad, angry, flirty, etc.) so benign chats don't stack buffs.</li>
+        </ul>
+      </div>
+    </li>
+
+    <li class="changelog-entry">
+      <div class="changelog-date">June 21, 2026</div>
+      <div class="changelog-body">
+        <h3>Update notifications + Mac support</h3>
+        <ul>
+          <li>On startup the mod now checks GitHub for a newer release and tells you in the welcome popup if one's available.</li>
+          <li>The compiled mod now works on macOS — same install path, same commands.</li>
+        </ul>
+      </div>
+    </li>
+
+    <li class="changelog-entry">
       <div class="changelog-date">June 14, 2026</div>
       <div class="changelog-body">
         <h3>Voice fidelity overhaul</h3>
@@ -507,26 +551,14 @@
 
 <section class="roadmap container">
   <h2>What's next</h2>
-  <p class="muted">Where the mod is heading. Not a contract — priorities shift based on what you all report and ask for.</p>
+  <p class="muted">The last batch shipped — cooking up the next one. Got an idea or a wish?</p>
 
   <ul class="roadmap-list">
 
     <li class="roadmap-card">
-      <div class="roadmap-status status-planned">Planned</div>
-      <h3>Realistic reply delays</h3>
-      <p>Sims should think before replying. Instant responses feel uncanny — especially for someone who's at work, asleep, or just an unhurried personality.</p>
-    </li>
-
-    <li class="roadmap-card">
-      <div class="roadmap-status status-investigating">Investigating</div>
-      <h3>Custom AI moodlets, take two</h3>
-      <p>The previous attempt was scrapped because Sims 4 buffs all carry narrative content (a "Happy" buff might say "New Baby"). Exploring whether a small custom <code>.package</code> with neutral mood buffs could let AI emotion actually affect gameplay.</p>
-    </li>
-
-    <li class="roadmap-card">
-      <div class="roadmap-status status-planned">Planned</div>
-      <h3>Recent life milestones in prompts</h3>
-      <p>Pipe births, deaths, promotions, breakups, marriages, and other big events into the prompt so calls and texts can reference what just happened in your save.</p>
+      <div class="roadmap-status status-investigating">Open</div>
+      <h3>Tell me what you want</h3>
+      <p>The next three roadmap items aren't picked yet. If something would make your save more fun — a feature, a fix, a tweak — open a GitHub issue or ping me on Patreon and it'll get on the list.</p>
     </li>
 
   </ul>

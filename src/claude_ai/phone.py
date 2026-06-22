@@ -775,29 +775,42 @@ def find_contact_by_name(full_name):
     return None
 
 
+# Age stages that all freely text each other -- they're adult peers.
+_ADULT_AGE_STAGES = frozenset({"YOUNGADULT", "YOUNG_ADULT", "ADULT", "ELDER"})
+
+
 def _is_age_appropriate_contact(contact, recipient):
     """
-    Filter out implausible cross-generational acquaintance pairings.
-    Teens don't randomly chat-text their friend's adult parents, and adults
-    don't randomly chat-text their kid's teen friends. Such pairs exist in
-    the relationship tracker (they've met) but they're not natural texters
-    unless they're family OR have a genuinely close friendship.
+    Block only the genuinely weird cross-gen acquaintance pairings:
+      - Teen <-> Adult/Elder when not family and not closely befriended
+      - Child <-> any non-family when not closely befriended
+    Anyone Young Adult or older can freely text any other YA/Adult/Elder
+    regardless of friendship score -- those are normal social peers
+    (coworkers, neighbors, book club, etc.). The weighting elsewhere
+    will still bias picks toward closer relationships.
     """
     contact_si = contact.get("sim_info")
     if not contact_si or not recipient:
         return True
-    c_rank = _age_rank(contact_si)
-    r_rank = _age_rank(recipient)
-    if c_rank is None or r_rank is None:
+
+    def _stage(si):
+        try:
+            return str(getattr(si, "age", "")).replace("Age.", "").upper().replace(" ", "")
+        except Exception:
+            return ""
+
+    c_age = _stage(contact_si)
+    r_age = _stage(recipient)
+
+    # Both are adult peers -> always allowed.
+    if c_age in _ADULT_AGE_STAGES and r_age in _ADULT_AGE_STAGES:
         return True
-    # Same or adjacent age stage — always plausible
-    if abs(c_rank - r_rank) <= 1:
-        return True
-    # Family — always allowed (parent calling child, grandparent calling grandkid, etc.)
+
+    # One or both is a minor (Teen / Child / Toddler / Infant / Baby).
+    # Allow if family, allow if genuinely close.
     family_label = _get_family_relationship(contact_si, contact, recipient=recipient)
     if family_label:
         return True
-    # Cross-generational non-family — only allow if they're genuinely close
     friendship = abs(contact.get("friendship") or 0)
     romance = abs(contact.get("romance") or 0)
     if friendship >= 50 or romance >= 50:
@@ -805,9 +818,27 @@ def _is_age_appropriate_contact(contact, recipient):
     return False
 
 
+def _log_picker(message):
+    """Diagnostic logger for the contact picker. Goes to the main log file."""
+    try:
+        import os, datetime
+        path = os.path.join(os.path.expanduser("~"), "Documents", "ClaudeAI_Log.txt")
+        with open(path, "a", encoding="utf-8") as f:
+            ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"[{ts}] [picker] {message}\n")
+    except Exception:
+        pass
+
+
 def _pick_random_relationship_sim(recipient=None):
     """Pick a random non-household sim from the recipient's relationship network.
-    If no recipient passed, falls back to protagonist."""
+    Pets and ghosts (when disabled in config) are hard-filtered. Same-lot
+    sims are dropped if possible, but allowed as a last resort -- better
+    to have a slightly weird "calling from the next room" scenario than
+    no call at all. The LLM handles plausibility when an acquaintance
+    texts -- Sims naturally interact across age stages."""
+    recipient_name = recipient.first_name if recipient else "(no recipient)"
+
     base_si = recipient or sim_context.get_main_sim_info()
     if base_si:
         _household_members, relationships = sim_context.get_main_sim_network(base_si)
@@ -815,36 +846,58 @@ def _pick_random_relationship_sim(recipient=None):
     else:
         active = sim_context.get_active_sim()
         if not active or not active.sim_info:
+            _log_picker(f"No base sim or active sim found for {recipient_name}.")
             return None
         rels = sim_context.get_sim_relationships(active.sim_info)
         contacts = [r for r in rels if not r.get("in_household")]
 
-    # Filter out pets -- dogs, cats, horses, foxes don't text or call.
-    contacts = [c for c in contacts if _is_human_sim(c.get("sim_info"))]
+    initial_count = len(contacts)
 
-    # Filter out ghosts unless config allows them
+    # Hard filters: pets, and ghosts when disabled in config.
+    contacts = [c for c in contacts if _is_human_sim(c.get("sim_info"))]
     allow_ghosts = config.get_config().getboolean("claude_ai", "phone_allow_ghosts", fallback=True)
     if not allow_ghosts:
         contacts = [c for c in contacts if not _is_ghost(c.get("sim_info"))]
 
-    # Filter out sims currently on the same lot
+    # Soft filters in order of relaxation:
+    #   1. strict   = off-lot AND age-appropriate (no weird teen/adult acquaintance pairs)
+    #   2. relaxed1 = off-lot, allow any age pairing
+    #   3. relaxed2 = anything (last resort -- someone on the lot)
     on_lot = _get_sims_on_active_lot()
-    if on_lot:
-        contacts = [c for c in contacts if c.get("sim_id") not in on_lot]
+    contacts_off_lot = [c for c in contacts if not on_lot or c.get("sim_id") not in on_lot]
 
-    # Filter out implausible cross-generational acquaintance pairings
     if recipient is not None:
-        contacts = [c for c in contacts if _is_age_appropriate_contact(c, recipient)]
+        strict = [c for c in contacts_off_lot if _is_age_appropriate_contact(c, recipient)]
+    else:
+        strict = contacts_off_lot
 
-    if not contacts:
+    if strict:
+        chosen_pool = strict
+    elif contacts_off_lot:
+        _log_picker(
+            f"{recipient_name}: age filter would leave nothing -- relaxing it "
+            f"(pool: {len(contacts_off_lot)})."
+        )
+        chosen_pool = contacts_off_lot
+    elif contacts:
+        _log_picker(
+            f"{recipient_name}: all contacts are on the active lot ({len(contacts)} total). "
+            f"Falling back to on-lot pool."
+        )
+        chosen_pool = contacts
+    else:
+        _log_picker(
+            f"{recipient_name}: no eligible contacts (initial {initial_count}, "
+            f"all dropped by pet/ghost filters)."
+        )
         return None
 
     weights = []
-    for contact in contacts:
+    for contact in chosen_pool:
         score = abs(contact.get("friendship") or 0) + abs(contact.get("romance") or 0)
         weights.append(max(score, 10))
 
-    return random.choices(contacts, weights=weights, k=1)[0]
+    return random.choices(chosen_pool, weights=weights, k=1)[0]
 
 
 # Bits that signal a relationship is platonic (no longer romantic).

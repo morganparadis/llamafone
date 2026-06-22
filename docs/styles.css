@@ -889,6 +889,35 @@ section > p { max-width: 780px; margin-left: auto; margin-right: auto; }
   background: rgba(111, 207, 64, 0.18);
   color: var(--plumbob-dark);
 }
+.status-open {
+  background: rgba(224, 139, 89, 0.18);
+  color: var(--claude-deep);
+}
+
+/* Second roadmap row -- centered under the top three cards. Width tuned
+   so two cards sit side-by-side at roughly the same width as a single
+   card in the top row (so they read as a continuation, not stacked
+   tall blocks). */
+.roadmap-list-second-row {
+  margin-top: 1.25rem;
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+  grid-template-columns: repeat(2, 1fr);
+}
+@media (max-width: 600px) {
+  .roadmap-list-second-row {
+    grid-template-columns: 1fr;
+    max-width: 100%;
+  }
+}
+
+/* CTA card -- otherwise identical to a regular roadmap card, just with
+   a button at the bottom and slightly tighter inner spacing. */
+.roadmap-card-cta .btn {
+  margin-top: 1rem;
+  align-self: flex-start;
+}
 
 /* -------- Bug report -------- */
 

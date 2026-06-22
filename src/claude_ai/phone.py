@@ -670,6 +670,42 @@ def _pick_recipient_sim():
         return None
 
 
+def _eligible_recipients():
+    """Return the full list of teen+ human sims in the active household,
+    shuffled so iteration order is unbiased. Used by
+    _pick_recipient_and_contact when one recipient has no eligible contacts
+    and we want to try a different household member."""
+    try:
+        import services, random as _random
+        hh = services.active_household()
+        if not hh:
+            main = sim_context.get_main_sim_info()
+            return [main] if (main and _is_phone_eligible(main)) else []
+        eligible = [si for si in hh.sim_info_gen() if _is_phone_eligible(si)]
+        _random.shuffle(eligible)
+        return eligible
+    except Exception:
+        return []
+
+
+def _pick_recipient_and_contact():
+    """Find a (recipient, contact) pair where the contact passes the strict
+    filter. Tries each eligible recipient in random order; only fails if
+    nobody in the household has any plausible caller. This lets us hold
+    a higher bar on plausibility (no cross-gen acquaintances surfacing as
+    text senders) without the mod going silent when one recipient happens
+    to have only awkward contacts."""
+    recipients = _eligible_recipients()
+    if not recipients:
+        _log_household_inspection()
+        return None, None
+    for recipient in recipients:
+        contact = _pick_random_relationship_sim(recipient=recipient)
+        if contact:
+            return recipient, contact
+    return None, None
+
+
 def _get_sims_on_active_lot():
     """Return a set of sim_ids currently on the active lot."""
     sim_ids = set()
@@ -775,42 +811,32 @@ def find_contact_by_name(full_name):
     return None
 
 
-# Age stages that all freely text each other -- they're adult peers.
-_ADULT_AGE_STAGES = frozenset({"YOUNGADULT", "YOUNG_ADULT", "ADULT", "ELDER"})
-
-
 def _is_age_appropriate_contact(contact, recipient):
     """
-    Block only the genuinely weird cross-gen acquaintance pairings:
-      - Teen <-> Adult/Elder when not family and not closely befriended
-      - Child <-> any non-family when not closely befriended
-    Anyone Young Adult or older can freely text any other YA/Adult/Elder
-    regardless of friendship score -- those are normal social peers
-    (coworkers, neighbors, book club, etc.). The weighting elsewhere
-    will still bias picks toward closer relationships.
+    Filter out implausible cross-generational acquaintance pairings.
+    Teens don't randomly chat-text their friend's adult parents, and adults
+    don't randomly chat-text their kid's teen friends. Such pairs exist in
+    the relationship tracker (they've met) but they're not natural texters
+    unless they're family OR have a genuinely close friendship.
+
+    (The picker has a fallback tier that relaxes this filter when it would
+    otherwise leave the recipient with nothing.)
     """
     contact_si = contact.get("sim_info")
     if not contact_si or not recipient:
         return True
-
-    def _stage(si):
-        try:
-            return str(getattr(si, "age", "")).replace("Age.", "").upper().replace(" ", "")
-        except Exception:
-            return ""
-
-    c_age = _stage(contact_si)
-    r_age = _stage(recipient)
-
-    # Both are adult peers -> always allowed.
-    if c_age in _ADULT_AGE_STAGES and r_age in _ADULT_AGE_STAGES:
+    c_rank = _age_rank(contact_si)
+    r_rank = _age_rank(recipient)
+    if c_rank is None or r_rank is None:
         return True
-
-    # One or both is a minor (Teen / Child / Toddler / Infant / Baby).
-    # Allow if family, allow if genuinely close.
+    # Same or adjacent age stage — always plausible
+    if abs(c_rank - r_rank) <= 1:
+        return True
+    # Family — always allowed (parent calling child, grandparent calling grandkid, etc.)
     family_label = _get_family_relationship(contact_si, contact, recipient=recipient)
     if family_label:
         return True
+    # Cross-generational non-family — only allow if they're genuinely close
     friendship = abs(contact.get("friendship") or 0)
     romance = abs(contact.get("romance") or 0)
     if friendship >= 50 or romance >= 50:
@@ -832,11 +858,11 @@ def _log_picker(message):
 
 def _pick_random_relationship_sim(recipient=None):
     """Pick a random non-household sim from the recipient's relationship network.
-    Pets and ghosts (when disabled in config) are hard-filtered. Same-lot
-    sims are dropped if possible, but allowed as a last resort -- better
-    to have a slightly weird "calling from the next room" scenario than
-    no call at all. The LLM handles plausibility when an acquaintance
-    texts -- Sims naturally interact across age stages."""
+    Hard filters: pets, ghosts (when disabled in config), sims currently on
+    the active lot (no "calling from the next room"), and cross-generational
+    acquaintances who aren't family or close friends. If nothing passes, we
+    return None -- the caller (_pick_recipient_and_contact) will try a
+    different household member rather than relax these rules."""
     recipient_name = recipient.first_name if recipient else "(no recipient)"
 
     base_si = recipient or sim_context.get_main_sim_info()
@@ -859,36 +885,21 @@ def _pick_random_relationship_sim(recipient=None):
     if not allow_ghosts:
         contacts = [c for c in contacts if not _is_ghost(c.get("sim_info"))]
 
-    # Soft filters in order of relaxation:
-    #   1. strict   = off-lot AND age-appropriate (no weird teen/adult acquaintance pairs)
-    #   2. relaxed1 = off-lot, allow any age pairing
-    #   3. relaxed2 = anything (last resort -- someone on the lot)
+    # Strict filter: off-lot AND age-appropriate. Neither is relaxed --
+    # if the recipient's only options are on-lot or cross-gen acquaintances,
+    # _pick_recipient_and_contact tries a different household member instead.
     on_lot = _get_sims_on_active_lot()
     contacts_off_lot = [c for c in contacts if not on_lot or c.get("sim_id") not in on_lot]
 
     if recipient is not None:
-        strict = [c for c in contacts_off_lot if _is_age_appropriate_contact(c, recipient)]
+        chosen_pool = [c for c in contacts_off_lot if _is_age_appropriate_contact(c, recipient)]
     else:
-        strict = contacts_off_lot
-
-    if strict:
-        chosen_pool = strict
-    elif contacts_off_lot:
-        _log_picker(
-            f"{recipient_name}: age filter would leave nothing -- relaxing it "
-            f"(pool: {len(contacts_off_lot)})."
-        )
         chosen_pool = contacts_off_lot
-    elif contacts:
+
+    if not chosen_pool:
         _log_picker(
-            f"{recipient_name}: all contacts are on the active lot ({len(contacts)} total). "
-            f"Falling back to on-lot pool."
-        )
-        chosen_pool = contacts
-    else:
-        _log_picker(
-            f"{recipient_name}: no eligible contacts (initial {initial_count}, "
-            f"all dropped by pet/ghost filters)."
+            f"{recipient_name}: 0 strict contacts (initial {initial_count}). "
+            f"Caller should try a different recipient."
         )
         return None
 
@@ -917,6 +928,55 @@ def _has_platonic_bit(bits):
         except Exception:
             pass
     return False
+
+
+# Detection priority: highest commitment first. The first match wins so
+# we don't downgrade a Married sim to "in a relationship with" if both
+# bits happen to coexist.
+_ROMANTIC_STATUS_PATTERNS = (
+    # (canonical_status, [bit substring matches], [exclusion substrings])
+    ("married to",            ("spouse", "married"),          ("unmarried", "divorced", "ex_", "former")),
+    ("engaged to",            ("engaged",),                    ("dis", "broken")),
+    ("in a relationship with",("goingsteady", "boyfriend",
+                               "girlfriend", "significantother"), ("ex_", "former", "broke")),
+)
+
+
+def _get_romantic_partner_info(sim_info):
+    """Return (partner_sim_info, status_string) if this sim is in a committed
+    romantic relationship (married / engaged / going steady).
+    Returns (None, None) otherwise."""
+    if sim_info is None:
+        return None, None
+    try:
+        rt = sim_info.relationship_tracker
+        if rt is None:
+            return None, None
+    except Exception:
+        return None, None
+
+    try:
+        import services
+        sm = services.sim_info_manager()
+    except Exception:
+        sm = None
+
+    for tid in rt.target_sim_gen():
+        try:
+            bits = list(rt.get_all_bits(tid))
+            if not bits or _has_platonic_bit(bits):
+                continue
+            bit_names = [sim_context._get_trait_name(b).lower().replace("_", "") for b in bits]
+            for status, include, exclude in _ROMANTIC_STATUS_PATTERNS:
+                if not any(any(inc in bn for inc in include) for bn in bit_names):
+                    continue
+                if any(any(exc in bn for exc in exclude) for bn in bit_names):
+                    continue
+                partner_si = sm.get(tid) if sm else None
+                return (partner_si, status)
+        except Exception:
+            continue
+    return None, None
 
 
 def _describe_recipient(recipient_sim, contact=None):
@@ -948,6 +1008,16 @@ def _describe_recipient(recipient_sim, contact=None):
     clubs = sim_context.get_sim_clubs(recipient_sim)
     if clubs:
         parts.append(f"{recipient_sim.first_name}'s clubs: {', '.join(clubs)}")
+
+    # Recipient's romantic / marital status -- so a caller doesn't write
+    # the player's spouse a flirty "we should meet up" type message.
+    try:
+        partner_si, rstatus = _get_romantic_partner_info(recipient_sim)
+        if partner_si and rstatus:
+            pname = f"{partner_si.first_name} {partner_si.last_name}".strip()
+            parts.append(f"{recipient_sim.first_name} is {rstatus} {pname}")
+    except Exception:
+        pass
 
     # Household members the recipient lives with — so Claude knows about kids/spouses/etc
     # who might come up in conversation but aren't in the contact's relationship tracker.
@@ -1821,6 +1891,17 @@ def _describe_relationship(contact, recipient=None):
     if contact.get("in_household") is True:
         parts.append("Lives in the same household as the player")
 
+    # Romantic / marital status -- crucial context so the LLM doesn't
+    # write a married sim hitting dating apps, etc.
+    if si:
+        try:
+            partner_si, rstatus = _get_romantic_partner_info(si)
+            if partner_si and rstatus:
+                pname = f"{partner_si.first_name} {partner_si.last_name}".strip()
+                parts.append(f"{name} is {rstatus} {pname}")
+        except Exception:
+            pass
+
     # Recent life events the sim might want to talk about (or that the
     # player might bring up). Pulled from milestones tracker.
     if si:
@@ -1960,7 +2041,7 @@ def get_active_conversation():
 
 def generate_call(callback=None, output=None):
     """Generate an incoming phone call to a random teen+ household member."""
-    recipient = _pick_recipient_sim()
+    recipient, contact = _pick_recipient_and_contact()
     if not recipient:
         msg = "No eligible household members (teen or older) found to receive a call."
         if callback:
@@ -1968,10 +2049,8 @@ def generate_call(callback=None, output=None):
         elif output:
             notifications.show_error(msg, output=output)
         return
-
-    contact = _pick_random_relationship_sim(recipient=recipient)
     if not contact:
-        msg = f"{recipient.first_name} doesn't have any relationships to call from."
+        msg = "No household member has any plausible contacts to call them right now."
         if callback:
             callback(None, msg)
         elif output:
@@ -2034,7 +2113,7 @@ use a generic reference like 'a coworker', 'my neighbor', 'this friend of mine' 
 
 def generate_text(callback=None, output=None):
     """Generate an incoming text to a random teen+ household member."""
-    recipient = _pick_recipient_sim()
+    recipient, contact = _pick_recipient_and_contact()
     if not recipient:
         msg = "No eligible household members (teen or older) found to receive a text."
         if callback:
@@ -2042,10 +2121,8 @@ def generate_text(callback=None, output=None):
         elif output:
             notifications.show_error(msg, output=output)
         return
-
-    contact = _pick_random_relationship_sim(recipient=recipient)
     if not contact:
-        msg = f"{recipient.first_name} doesn't have any relationships to text from."
+        msg = "No household member has any plausible contacts to text them right now."
         if callback:
             callback(None, msg)
         elif output:

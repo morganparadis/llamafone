@@ -455,16 +455,6 @@
   <ol class="changelog-list">
 
     <li class="changelog-entry">
-      <div class="changelog-date">June 21, 2026</div>
-      <div class="changelog-body">
-        <h3>Mac support</h3>
-        <ul>
-          <li>The compiled mod now works on macOS — same install path, same commands. Drop it into <code>Documents/Electronic Arts/The Sims 4/Mods/</code> and you're done.</li>
-        </ul>
-      </div>
-    </li>
-
-    <li class="changelog-entry">
       <div class="changelog-date">June 22, 2026</div>
       <div class="changelog-body">
         <h3>Sims remember what just happened</h3>
@@ -500,44 +490,9 @@
     <li class="changelog-entry">
       <div class="changelog-date">June 21, 2026</div>
       <div class="changelog-body">
-        <h3>Update notifications + Mac support</h3>
+        <h3>Update notifications</h3>
         <ul>
-          <li>On startup the mod now checks GitHub for a newer release and tells you in the welcome popup if one's available.</li>
-          <li>The compiled mod now works on macOS — same install path, same commands.</li>
-        </ul>
-      </div>
-    </li>
-
-    <li class="changelog-entry">
-      <div class="changelog-date">June 14, 2026</div>
-      <div class="changelog-body">
-        <h3>Voice fidelity overhaul</h3>
-        <ul>
-          <li>Enemies and sims who actively dislike you now actually <em>sound</em> like it — cutting, dismissive, no fake warmth. Past warm chat history no longer overrides current relationship status.</li>
-          <li>Friendship tiers (best friends → enemies) have explicit voice rules baked into the prompt for consistency across calls, texts, and replies.</li>
-        </ul>
-      </div>
-    </li>
-
-    <li class="changelog-entry">
-      <div class="changelog-date">June 13, 2026</div>
-      <div class="changelog-body">
-        <h3>No more pets in your contacts</h3>
-        <ul>
-          <li>Dogs, cats, horses, and other non-human sims are now filtered out of the call/text picker. Your cat will never text you again.</li>
-          <li>Moodlet feature removed — Sims 4 buffs always carry baked-in narrative (a "Happy" buff might say "New Baby!" when you don't have one). It was misleading more than helpful.</li>
-        </ul>
-      </div>
-    </li>
-
-    <li class="changelog-entry">
-      <div class="changelog-date">June 6, 2026</div>
-      <div class="changelog-body">
-        <h3>Startup and auto-events hardening</h3>
-        <ul>
-          <li>The first auto-call/text fires within ~10 seconds of landing in a household instead of the previous 2-minute stagger.</li>
-          <li>Startup notification no longer spams the log when the game is still loading.</li>
-          <li>New <code>claude.fire_auto</code> cheat command to manually trigger the auto-event picker for testing.</li>
+          <li>On startup the mod now checks GitHub for a newer release and tells you in the welcome popup if one's available — no more missing updates because you forgot to check.</li>
         </ul>
       </div>
     </li>
@@ -551,14 +506,26 @@
 
 <section class="roadmap container">
   <h2>What's next</h2>
-  <p class="muted">The last batch shipped — cooking up the next one. Got an idea or a wish?</p>
+  <p class="muted">Where the mod is heading. Not a contract — priorities shift based on what you all report and ask for.</p>
 
   <ul class="roadmap-list">
 
     <li class="roadmap-card">
-      <div class="roadmap-status status-investigating">Open</div>
-      <h3>Tell me what you want</h3>
-      <p>The next three roadmap items aren't picked yet. If something would make your save more fun — a feature, a fix, a tweak — open a GitHub issue or ping me on Patreon and it'll get on the list.</p>
+      <div class="roadmap-status status-planned">Planned</div>
+      <h3>In-game event triggers</h3>
+      <p>Calls and texts that fire when something happens in your save. Get dumped → your best friend texts to check in. Get a promotion → mom calls to congratulate. Reactive rather than random.</p>
+    </li>
+
+    <li class="roadmap-card">
+      <div class="roadmap-status status-planned">Planned</div>
+      <h3>Per-contact preferences</h3>
+      <p>Block a specific sim from ever calling. Mark someone as "texts only, no calls." Set frequency per contact. Give your protagonist control over who can reach them.</p>
+    </li>
+
+    <li class="roadmap-card">
+      <div class="roadmap-status status-investigating">Investigating</div>
+      <h3>In-game settings UI</h3>
+      <p>Configure the mod without leaving the game — click your sim's phone for mod settings, click another sim to set per-contact preferences. Investigating whether the Sims 4 dialog system supports a clean settings menu.</p>
     </li>
 
   </ul>

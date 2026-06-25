@@ -89,21 +89,63 @@ def _clean_event_name(raw):
 def _resolve_holiday_name(event):
     """For a HolidayDramaNode, prefer the holiday_service display name
     (the player's chosen name for custom holidays, or the localized
-    label for built-in ones). Returns "" if anything fails."""
+    label for built-in ones). Falls back to the holiday data's raw
+    `_name` attribute if the localized lookup returns nothing usable.
+    Returns "" if everything fails. Logs each step for diagnostics."""
     try:
         import services
         hs = services.holiday_service()
         if hs is None:
+            _log("holiday_name: holiday_service is None")
             return ""
         hid = getattr(event, "holiday_id", None)
         if hid is None:
+            _log("holiday_name: event.holiday_id is None")
             return ""
-        loc = hs.get_holiday_display_name(hid)
-        if loc is None:
-            return ""
-        resolved = sim_context._resolve_localized_string(loc)
-        return _clean_event_name(resolved or "")
-    except Exception:
+
+        # Try the service's display_name (LocalizedString)
+        try:
+            loc = hs.get_holiday_display_name(hid)
+        except Exception as e:
+            _log(f"holiday_name: get_holiday_display_name({hid}) raised: {e}")
+            loc = None
+        resolved = None
+        if loc is not None:
+            try:
+                resolved = sim_context._resolve_localized_string(loc)
+            except Exception as e:
+                _log(f"holiday_name: resolve_localized_string failed: {e}")
+        cleaned = _clean_event_name(resolved or "")
+        if cleaned and cleaned.lower() not in ("custom holiday", "holiday"):
+            _log(f"holiday_name: hid={hid} -> '{cleaned}' via display_name")
+            return cleaned
+
+        # Fallback: dig into the holiday data object directly.
+        try:
+            data = hs._get_holiday_data(hid)
+        except Exception as e:
+            _log(f"holiday_name: _get_holiday_data({hid}) raised: {e}")
+            data = None
+        if data is None:
+            _log(f"holiday_name: no holiday data for hid={hid}")
+            return cleaned  # whatever the localized lookup gave us, even if generic
+
+        # CustomHoliday stores the player's raw text in ._name
+        raw = getattr(data, "_name", None)
+        if raw:
+            try:
+                raw_resolved = sim_context._resolve_localized_string(raw)
+            except Exception:
+                raw_resolved = raw if isinstance(raw, str) else None
+            fallback_clean = _clean_event_name(raw_resolved or "") if raw_resolved else ""
+            if fallback_clean:
+                _log(f"holiday_name: hid={hid} -> '{fallback_clean}' via data._name")
+                return fallback_clean
+
+        _log(f"holiday_name: hid={hid} fell through; cleaned='{cleaned}', data type={type(data).__name__}")
+        return cleaned
+    except Exception as e:
+        _log(f"holiday_name: unexpected error: {type(e).__name__}: {e}")
         return ""
 
 

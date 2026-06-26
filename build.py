@@ -20,6 +20,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.join(SCRIPT_DIR, "src")
 OUTPUT_FILE = os.path.join(SCRIPT_DIR, f"{MOD_NAME}.ts4script")
 CONFIG_FILE = os.path.join(SCRIPT_DIR, "claude_config.cfg")
+PACKAGE_FILE = os.path.join(SCRIPT_DIR, f"{MOD_NAME}.package")
 PYTHON37 = os.path.join(SCRIPT_DIR, "tools", "python37", "python.exe")
 
 
@@ -46,6 +47,22 @@ def compile_py_to_pyc(py_path, pyc_path):
         print(f"  COMPILE ERROR: {py_path}")
         print(f"    {result.stderr.strip()}")
         sys.exit(1)
+
+
+def build_package():
+    """Build ClaudeAI.package from XML sources in package_src/.
+    Uses our own DBPF writer (tools/package_builder.py) -- no S4S required."""
+    builder_path = os.path.join(SCRIPT_DIR, "tools", "package_builder.py")
+    if not os.path.isfile(builder_path):
+        print(f"  WARN: {builder_path} not found, skipping package build")
+        return
+    print()  # blank line between script and package output
+    result = subprocess.run(
+        [sys.executable, builder_path],
+        cwd=SCRIPT_DIR,
+    )
+    if result.returncode != 0:
+        print("  WARN: package build failed -- shipping .ts4script only")
 
 
 def build():
@@ -110,8 +127,23 @@ def install(script_file):
     print(f"\nInstalling to: {mods_folder}")
 
     dest_script = os.path.join(mods_folder, os.path.basename(script_file))
-    shutil.copy2(script_file, dest_script)
-    print(f"  Installed: {os.path.basename(dest_script)}")
+    try:
+        shutil.copy2(script_file, dest_script)
+        print(f"  Installed: {os.path.basename(dest_script)}")
+    except PermissionError:
+        print(f"  ERROR: could not write {dest_script} -- close The Sims 4 and try again")
+
+    # Companion .package -- tuning resources for the pie-menu interactions.
+    # Built from package_src/ by tools/package_builder.py.
+    if os.path.exists(PACKAGE_FILE):
+        dest_package = os.path.join(mods_folder, os.path.basename(PACKAGE_FILE))
+        try:
+            shutil.copy2(PACKAGE_FILE, dest_package)
+            print(f"  Installed: {os.path.basename(dest_package)}")
+        except PermissionError:
+            print(f"  ERROR: could not write {dest_package} -- close The Sims 4 and try again")
+    else:
+        print(f"  Skipped package (no ClaudeAI.package at repo root)")
 
     dest_config = os.path.join(mods_folder, "claude_config.cfg")
     if not os.path.exists(dest_config):
@@ -141,5 +173,6 @@ def install(script_file):
 if __name__ == "__main__":
     build_only = "--build" in sys.argv
     script = build()
+    build_package()
     if not build_only:
         install(script)

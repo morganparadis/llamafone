@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<I c="ClaudePhoneMenuInteraction" i="interaction" m="claude_ai.phone_ui_interactions" n="Claude_PhoneMenu" s="13371000001">
+  <V n="_affordance_key_override_for_autonomy" t="enabled">
+    <T n="enabled">Phone_Fun</T>
+  </V>
+  <L n="_constraints">
+    <U>
+      <L n="constraints">
+        <U>
+          <V n="value" t="water_depth">
+            <U n="water_depth">
+              <V n="max_water_depth" t="enabled">
+                <T n="enabled">0.5</T>
+              </V>
+            </U>
+          </V>
+        </U>
+      </L>
+    </U>
+    <U>
+      <L n="constraints">
+        <U>
+          <V n="value" t="current_position">
+            <U n="current_position">
+              <T n="remain_in_carried">True</T>
+            </U>
+          </V>
+        </U>
+      </L>
+    </U>
+  </L>
+  <V n="_icon" t="resource_key">
+    <U n="resource_key">
+      <T n="key" p="InGame\UI\Icons\InteractionQueue\IconQueueCellPhone.png">2f7d0004:00000000:6189ced9570b8609</T>
+    </U>
+  </V>
+  <V n="_saveable" t="disabled" />
+  <T n="allow_autonomous">False</T>
+  <T n="allow_user_directed">True</T>
+  <L n="appropriateness_tags">
+    <E>Appropriateness_Phone</E>
+  </L>
+  <T n="attention_cost">1.24</T>
+  <V n="basic_content" t="flexible_length">
+    <U n="flexible_length">
+      <L n="conditional_actions">
+        <V t="list_reference">
+          <T n="list_reference">40705</T>
+        </V>
+        <V t="literal">
+          <U n="literal">
+            <L n="conditions">
+              <V t="time_based">
+                <U n="time_based">
+                  <T n="max_time">5</T>
+                  <T n="min_time">3</T>
+                </U>
+              </V>
+            </L>
+            <E n="interaction_action">EXIT_NATURALLY</E>
+          </U>
+        </V>
+      </L>
+      <V n="content" t="looping_content">
+        <U n="looping_content">
+          <U n="animation_ref">
+            <T n="factory">11704</T>
+            <U n="overrides">
+              <V n="balloons" t="disabled" />
+              <L n="props">
+                <U>
+                  <T n="key">cellphone</T>
+                  <U n="value">
+                    <T n="definition">145433</T>
+                    <T n="from_actor">x</T>
+                    <L n="states_to_override">
+                      <T>149289</T>
+                      <T>149290</T>
+                    </L>
+                  </U>
+                </U>
+              </L>
+            </U>
+          </U>
+        </U>
+      </V>
+      <V n="periodic_stat_change" t="enabled">
+        <U n="enabled">
+          <L n="operations">
+            <V t="statistic_change">
+              <U n="statistic_change">
+                <T n="amount">0.9</T>
+                <T n="stat">16658</T>
+              </U>
+            </V>
+          </L>
+        </U>
+      </V>
+      <T n="start_autonomous_inertial">False</T>
+    </U>
+  </V>
+  <L n="basic_extras">
+    <V t="loot">
+      <U n="loot">
+        <L n="loot_list">
+          <T>149368</T>
+        </L>
+        <V n="timing" t="at_beginning" />
+      </U>
+    </V>
+  </L>
+  <T n="category">13371000099</T>
+  <V n="content_score" t="disabled" />
+  <T n="display_name">0x00000002</T>
+  <V n="display_tooltip" t="enabled">
+    <T n="enabled">0x00000000</T>
+  </V>
+  <L n="interaction_category_tags">
+    <E>Interaction_Super</E>
+    <E>Interaction_All</E>
+    <E>Interaction_Phone_Social</E>
+    <E>Interaction_Lifestyles_Sedentary_FlexibleLength</E>
+  </L>
+  <V n="outcome" t="single">
+    <U n="single">
+      <U n="actions">
+        <L n="basic_extras" />
+      </U>
+    </U>
+  </V>
+  <U n="posture_preferences">
+    <T n="apply_posture_costs">False</T>
+  </U>
+  <U n="progress_bar_enabled">
+    <T n="bar_enabled">False</T>
+  </U>
+  <E n="scoring_priority">NORMAL</E>
+  <T n="subaction_selection_weight">1</T>
+  <V n="super_affordance_compatibility" t="reference">
+    <T n="reference">76447</T>
+  </V>
+  <E n="target_type">ACTOR</E>
+  <L n="test_globals">
+    <V t="test_set_reference">
+      <T n="test_set_reference">237832</T>
+    </V>
+    <V t="sim_info">
+      <U n="sim_info">
+        <V n="ages" t="specified">
+          <L n="specified">
+            <E>TEEN</E>
+            <E>YOUNGADULT</E>
+            <E>ADULT</E>
+            <E>ELDER</E>
+          </L>
+        </V>
+        <V n="species" t="specified">
+          <U n="specified">
+            <L n="species">
+              <E />
+            </L>
+          </U>
+        </V>
+        <E n="who">Actor</E>
+      </U>
+    </V>
+  </L>
+  <L n="tests" />
+  <T n="time_overhead">10</T>
+</I>

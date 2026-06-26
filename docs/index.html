@@ -45,7 +45,7 @@
     "description": "A free script mod that brings Claude AI to The Sims 4 — generating in-character phone calls, text conversations, story updates, random events, and 3-act storylines live from your household data.",
     "url": "https://morganparadis.github.io/claude-for-sims-4/",
     "downloadUrl": "https://github.com/morganparadis/claude-for-sims-4/releases/latest",
-    "softwareVersion": "1.2.0",
+    "softwareVersion": "1.2.1",
     "author": { "@type": "Person", "name": "morganparadis" },
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
     "license": "Open source"
@@ -511,6 +511,17 @@
   <ol class="changelog-list">
 
     <li class="changelog-entry">
+      <div class="changelog-date">June 26, 2026</div>
+      <div class="changelog-body">
+        <h3>Knows that a Sims week is a season (v1.2.1)</h3>
+        <ul>
+          <li>Sims 4 time runs faster than real life: 1 in-game week = 1 season by default. The mod was telling Claude "Christmas Vacation in 2 weeks" — which reads like a casual fortnight away in human terms but is actually 2 seasons away in sim terms.</li>
+          <li>Now each upcoming-event line includes the season it falls in (<code>Christmas Vacation (in 2 weeks, Winter)</code>), and the system prompt explains the calendar rule so the AI paces references naturally — "next season", "a while away", "soon" — instead of counting weeks.</li>
+        </ul>
+      </div>
+    </li>
+
+    <li class="changelog-entry">
       <div class="changelog-date">June 25, 2026</div>
       <div class="changelog-body">
         <h3>Aware of your calendar and family tree (v1.2)</h3>
@@ -542,17 +553,6 @@
           <li>Text a sim you barely know (friendship close to zero, slightly positive or slightly negative) and they'll reply confused instead of warmly — "sorry, is this the right number?", "do I know you?", "how'd you get my number?". The script remembers that you've met once, but the receiving sim is allowed to be foggy on the details.</li>
           <li>Family always remembers family — a parent or sibling with low friendship still texts like family, not a stranger.</li>
           <li>Same change applies to plausible-contact filtering: on-lot sims and weird cross-generational acquaintances no longer call you out of nowhere.</li>
-        </ul>
-      </div>
-    </li>
-
-    <li class="changelog-entry">
-      <div class="changelog-date">June 22, 2026</div>
-      <div class="changelog-body">
-        <h3>Sims remember what just happened</h3>
-        <ul>
-          <li>When something big happens to a sim in your game — they quit a job, get promoted, have a baby, get married, age up — the mod picks it up automatically and references it in calls and texts. Your friend won't congratulate you on a promotion that hasn't happened, but they will if it did yesterday.</li>
-          <li>Tracks 7 days of recent events per sim, max 4 surfaced per prompt.</li>
         </ul>
       </div>
     </li>

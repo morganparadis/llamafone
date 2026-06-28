@@ -6,7 +6,7 @@ AI-powered phone calls, texts, dialogue, storylines, and random events for The S
 
 ## Installation
 
-1. **Download the latest release** from [Releases](https://github.com/morganparadis/claude-for-sims-4/releases) — grab `Llamafone.ts4script`, `Llamafone.package`, and `llamafone.cfg`.
+1. **Download the latest release** from [Releases](https://github.com/morganparadis/llamafone/releases) — grab `Llamafone.ts4script`, `Llamafone.package`, and `llamafone.cfg`.
 2. **Drop all three into your Mods folder:**
    - **Windows:** `Documents\Electronic Arts\The Sims 4\Mods\`
    - **macOS:** `~/Documents/Electronic Arts/The Sims 4/Mods/`

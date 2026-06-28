@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://morganparadis.github.io/claude-for-sims-4/sitemap.xml
+Sitemap: https://morganparadis.github.io/llamafone/sitemap.xml

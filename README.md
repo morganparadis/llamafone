@@ -1,28 +1,44 @@
-# Claude AI for The Sims 4
+# Llamafone
 
-Brings AI-generated dialogue, storylines, random events, phone calls, and challenges to your game using the Claude API. Results show as in-game notification popups and phone dialogs.
+AI-powered phone calls, texts, dialogue, storylines, and random events for The Sims 4. Bring your own AI — Claude, OpenAI, Gemini, or a local Ollama model — and your sims get distinct voices, persistent memory, and a real phone UI under Social.
 
 ---
 
 ## Installation
 
-1. **Download the latest release** from [Releases](https://github.com/morganparadis/claude-for-sims-4/releases) — grab `ClaudeAI.ts4script`, `ClaudeAI.package`, and `claude_config.cfg`.
+1. **Download the latest release** from [Releases](https://github.com/morganparadis/claude-for-sims-4/releases) — grab `Llamafone.ts4script`, `Llamafone.package`, and `llamafone.cfg`.
 2. **Drop all three into your Mods folder:**
    - **Windows:** `Documents\Electronic Arts\The Sims 4\Mods\`
    - **macOS:** `~/Documents/Electronic Arts/The Sims 4/Mods/`
    - **Linux (Steam Proton):** `~/.steam/steam/steamapps/compatdata/<sims-4-app-id>/pfx/drive_c/users/steamuser/Documents/Electronic Arts/The Sims 4/Mods/`
-3. **Open `claude_config.cfg`** in any text editor and replace `YOUR_API_KEY_HERE` with your Anthropic API key.
-   - Get a key at [console.anthropic.com](https://console.anthropic.com/) (free to sign up, pay per use)
+3. **Open `llamafone.cfg`** in any text editor, pick your `provider`, and paste your API key in `api_key`.
 4. **In The Sims 4:** **Game Options > Other > enable Custom Content and Script Mods**, then restart the game.
-5. You'll see a notification popup when the mod loads. Type `claude.status` in the cheat console to confirm setup and see all commands.
+5. You'll see a notification popup when the mod loads. Type `llama.status` in the cheat console to confirm setup and see all commands. Or tap your sim's phone → Social → Settings.
 
-No Python install required for end users — the release zips ship the compiled `.pyc` bytecode already.
+No Python install required for end users — the release ships compiled `.pyc` bytecode.
+
+**Upgrading from v2.x (Claude AI for The Sims 4)?** Drop the v3 files in alongside your existing `claude_config.cfg` and you're done — Llamafone reads your v2 config and saved settings automatically (the lookup checks both `llamafone.cfg` and `claude_config.cfg`, and both the `[llamafone]` and `[claude_ai]` section headers). Rename the file to `llamafone.cfg` whenever you feel like it.
 
 ---
 
-## How does Claude know about your Sims?
+## Choose your AI provider
 
-Every time you run a command, the mod reads live data from the game and sends it to Claude as context.
+`provider` in `llamafone.cfg` picks where the messages come from:
+
+| Provider | API key needed | Model examples | Where to get a key |
+|---|---|---|---|
+| `claude` | Yes | `claude-haiku-4-5`, `claude-sonnet-4-6`, `claude-opus-4-8` | [console.anthropic.com](https://console.anthropic.com/) |
+| `openai` | Yes | `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo` | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| `gemini` | Yes | `gemini-1.5-pro`, `gemini-1.5-flash` | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| `ollama` | **No** — runs locally | whatever you've `ollama pull`-ed (`llama3.1`, `mistral`, `qwen2.5`) | [ollama.com](https://ollama.com) |
+
+For Ollama, `ollama_endpoint` in the config points at your local server (default `http://localhost:11434`). No key, no cost, no internet required after the model download.
+
+---
+
+## How does Llamafone know about your Sims?
+
+Every time you run a command, the mod reads live data from the game and sends it to the AI as context.
 
 **What it reads:**
 | Data | Example |
@@ -40,7 +56,7 @@ Every time you run a command, the mod reads live data from the game and sends it
 | Installed packs | used to keep suggestions relevant to what you own |
 | Recent journal history | past events, storylines, and chats from previous sessions |
 
-The journal gives Claude memory across sessions — generated events, stories, and chat responses are saved automatically and included in future prompts so the AI can reference what happened before.
+The journal gives the AI memory across sessions — generated events, stories, and chat responses are saved automatically and included in future prompts so the model can reference what happened before.
 
 **Calendar awareness** — calls and texts reference real upcoming entries on your sim's calendar that BOTH sims are attending. "See you at the funeral later" / "can't wait for your wedding" instead of inventing meetups. The mod also reads the actual focal sims off each event so the AI knows the funeral is *in memory of Sawyer*, the wedding is *for Alex and Bailey*, the birthday is *for Apollo* — no more guessing whose event it is.
 
@@ -57,35 +73,35 @@ Open the cheat console with `Ctrl+Shift+C`, type a command, press Enter.
 ### Dialogue
 | Command | What it does |
 |---|---|
-| `claude.dialogue` | 4-5 in-character lines for your active sim |
-| `claude.dialogue_situation just got promoted` | Dialogue for a specific situation |
-| `claude.backstory` | A backstory and personality reveal for the active sim |
+| `llama.dialogue` | 4-5 in-character lines for your active sim |
+| `llama.dialogue_situation just got promoted` | Dialogue for a specific situation |
+| `llama.backstory` | A backstory and personality reveal for the active sim |
 
 ### Storytelling
 | Command | What it does |
 |---|---|
-| `claude.story` | 2-3 paragraph narrative update for the household |
-| `claude.storyline` | Full 3-act storyline with gameplay goals |
-| `claude.storyline_theme romance` | Storyline with a specific theme (try: rivalry, mystery, rags to riches, family drama, haunting) |
-| `claude.drama` | Relationship drama arc between two household members |
+| `llama.story` | 2-3 paragraph narrative update for the household |
+| `llama.storyline` | Full 3-act storyline with gameplay goals |
+| `llama.storyline_theme romance` | Storyline with a specific theme (try: rivalry, mystery, rags to riches, family drama, haunting) |
+| `llama.drama` | Relationship drama arc between two household members |
 
 ### Events & Challenges
 | Command | What it does |
 |---|---|
-| `claude.event` | A surprise random event to shake up your session |
-| `claude.goals` | 5 session goals (mixed easy/hard, with a stretch goal) |
-| `claude.challenge` | Medium difficulty gameplay challenge |
-| `claude.challenge_easy` | Easy challenge |
-| `claude.challenge_hard` | Hard challenge with strict rules |
+| `llama.event` | A surprise random event to shake up your session |
+| `llama.goals` | 5 session goals (mixed easy/hard, with a stretch goal) |
+| `llama.challenge` | Medium difficulty gameplay challenge |
+| `llama.challenge_easy` | Easy challenge |
+| `llama.challenge_hard` | Hard challenge with strict rules |
 
 ### Phone Calls & Texts
 | Command | What it does |
 |---|---|
-| `claude.call` | Incoming phone call from a random relationship sim |
-| `claude.text` | Text message from a random relationship sim |
-| `claude.sendtext Bella Goth hey!` | Text a specific sim — they'll reply in character |
-| `claude.sendcall Bella Goth I have news` | Call a specific sim about a topic |
-| `claude.reply <message>` | Continue any conversation — they'll respond back |
+| `llama.call` | Incoming phone call from a random relationship sim |
+| `llama.text` | Text message from a random relationship sim |
+| `llama.sendtext Bella Goth hey!` | Text a specific sim — they'll reply in character |
+| `llama.sendcall Bella Goth I have news` | Call a specific sim about a topic |
+| `llama.reply <message>` | Continue any conversation — they'll respond back |
 
 Calls and texts show as in-game phone dialogs with the sim's portrait. **Click Reply on the popup** to type a response directly in a text-input dialog (no need to drop to the cheat console). The full conversation history is tracked, so back-and-forth exchanges stay coherent.
 
@@ -99,29 +115,29 @@ Each sim has a unique voice based on their **age, traits, mood, career, and aspi
 
 ### Phone UI (Phone > Social)
 
-The phone itself has three Claude AI items under the Social tile — no cheat console needed for everyday use:
+The phone itself has three Llamafone items under the Social tile — no cheat console needed for everyday use:
 
 | Tile | What it does |
 |---|---|
 | **Call Someone** | Opens a sim picker scoped to your contacts → pick a recipient → type a topic → Claude crafts and delivers the call |
 | **Send Text** | Same flow as Call, but for texts |
-| **Settings** | Opens an in-game settings panel with toggles for auto-events, reply delays, ghost contacts, etc. Picking a row flips a bool or opens a numeric input. Changes save instantly to `claude_config.cfg` (preserving your comments) and apply without reloading the save. |
+| **Settings** | Opens an in-game settings panel with toggles for auto-events, reply delays, ghost contacts, etc. Picking a row flips a bool or opens a numeric input. Changes save instantly to `llamafone.cfg` (preserving your comments) and apply without reloading the save. |
 
-The cheat commands (`claude.call`, `claude.sendtext`, etc.) still work the same way alongside the UI.
+The cheat commands (`llama.call`, `llama.sendtext`, etc.) still work the same way alongside the UI.
 
 ### General
 | Command | What it does |
 |---|---|
-| `claude.chat <message>` | Freeform — ask anything about your game |
-| `claude.journal` | View recent journal entries |
-| `claude.journal_sim First Last` | View journal entries for a specific sim |
-| `claude.journal_clear` | Clear the journal (no undo) |
-| `claude.auto_events on` / `off` | Toggle random auto-events for this session |
-| `claude.fire_auto <type>` | Fire one auto-event immediately for testing |
-| `claude.status` | Show config, auto-event status, and all commands |
-| `claude.reload` | Reload config file (after editing claude_config.cfg by hand) |
-| `claude.debug` / `claude.debugsim` | Game API debug info |
-| `claude.dumpphone` / `claude.dumpprompt` | Dump the most recent prompt or phone-affordance state for inspection |
+| `llama.chat <message>` | Freeform — ask anything about your game |
+| `llama.journal` | View recent journal entries |
+| `llama.journal_sim First Last` | View journal entries for a specific sim |
+| `llama.journal_clear` | Clear the journal (no undo) |
+| `llama.auto_events on` / `off` | Toggle random auto-events for this session |
+| `llama.fire_auto <type>` | Fire one auto-event immediately for testing |
+| `llama.status` | Show config, auto-event status, and all commands |
+| `llama.reload` | Reload config file (after editing llamafone.cfg by hand) |
+| `llama.debug` / `llama.debugsim` | Game API debug info |
+| `llama.dumpphone` / `llama.dumpprompt` | Dump the most recent prompt or phone-affordance state for inspection |
 
 ---
 
@@ -136,7 +152,7 @@ Auto-events fire randomly while you play without you having to ask. They use **r
 - It only fires when you're in an active household (not during loading screens, CAS, or build mode)
 - Silent failures — if there's a network error, nothing happens, no interruption
 
-**Turn on in `claude_config.cfg`:**
+**Turn on in `llamafone.cfg`:**
 ```ini
 auto_events_enabled = true
 auto_event_interval_minutes = 20   ; check every 20 real minutes
@@ -150,8 +166,8 @@ With the defaults (20 min interval, 40% chance), you get something roughly every
 
 **Or toggle mid-session** via the in-game Settings panel (Phone > Social > Settings) or via cheats:
 ```
-claude.auto_events on
-claude.auto_events off
+llama.auto_events on
+llama.auto_events off
 ```
 
 ---
@@ -160,8 +176,8 @@ claude.auto_events off
 
 Two paths to change settings:
 
-1. **In-game Settings panel** — Phone > Social > Settings. Toggles + numeric inputs for runtime-tunable values. Writes back to `claude_config.cfg`, preserving your comments, and applies immediately.
-2. **Edit `claude_config.cfg` by hand** — then run `claude.reload` to pick up changes without restarting.
+1. **In-game Settings panel** — Phone > Social > Settings. Toggles + numeric inputs for runtime-tunable values. Writes back to `llamafone.cfg`, preserving your comments, and applies immediately.
+2. **Edit `llamafone.cfg` by hand** — then run `llama.reload` to pick up changes without restarting.
 
 ### All settings
 
@@ -222,7 +238,7 @@ python build.py            # builds + auto-installs to Sims 4 Mods folder
 python build.py --build    # builds only, no install
 ```
 
-`build.py` does two things: compiles every `.py` in `src/` to Python-3.7 `.pyc` and zips them as `ClaudeAI.ts4script`, then runs `tools/package_builder.py` to bundle the XML tunings in `package_src/` into `ClaudeAI.package`. Both artifacts land at the repo root and (without `--build`) get copied into the Sims 4 Mods folder.
+`build.py` does two things: compiles every `.py` in `src/` to Python-3.7 `.pyc` and zips them as `Llamafone.ts4script`, then runs `tools/package_builder.py` to bundle the XML tunings in `package_src/` into `Llamafone.package`. Both artifacts land at the repo root and (without `--build`) get copied into the Sims 4 Mods folder.
 
 **Linux note:** the build script's auto-install step expects a Windows-style Mods folder path. On Linux you can use `--build` to skip install and copy the artifacts to your Proton/Lutris prefix manually:
 
@@ -234,10 +250,10 @@ The compiled bytecode itself is platform-agnostic — Python 3.7 `.pyc` runs the
 
 ```
 src/
-  claude_ai_loader.py        root-level entry point (game needs this)
-  claude_ai/
+  llamafone_loader.py        root-level entry point (game needs this)
+  llamafone/
     __init__.py              mod entry point, startup notification, auto-events
-    config.py                reads & writes claude_config.cfg, runtime settings layer
+    config.py                reads & writes llamafone.cfg, runtime settings layer
     api_client.py            Claude API calls via curl subprocess
     sim_context.py           reads sim data, protagonist system, relationship network
     dialogue.py              dialogue, conversation, backstory generation
@@ -254,10 +270,10 @@ src/
     commands.py              all claude.* cheat commands
     journal.py               persistent cross-session story memory
 
-package_src/                 XML tunings packed into ClaudeAI.package
-  Claude_Call.xml            SuperInteraction for Phone > Social > Call Someone
-  Claude_Text.xml            SuperInteraction for Phone > Social > Send Text
-  Claude_Settings.xml        SuperInteraction for Phone > Social > Settings
+package_src/                 XML tunings packed into Llamafone.package
+  Llamafone_Call.xml            SuperInteraction for Phone > Social > Call Someone
+  Llamafone_Text.xml            SuperInteraction for Phone > Social > Send Text
+  Llamafone_Settings.xml        SuperInteraction for Phone > Social > Settings
 
 tools/
   package_builder.py         DBPF v2.1 packer (no S4S dependency)

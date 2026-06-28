@@ -12,9 +12,9 @@ Tracked attributes per sim:
   - in_household (whether they live with the player)
   - aspiration
 
-Two files live alongside claude_config.cfg in the Mods folder:
-  - ClaudeAI_SimSnapshots.json — last known state per sim
-  - ClaudeAI_Milestones.json   — chronological list of detected events
+Two files live alongside llamafone.cfg in the Mods folder:
+  - Llamafone_SimSnapshots.json — last known state per sim
+  - Llamafone_Milestones.json   — chronological list of detected events
 """
 
 import datetime
@@ -24,12 +24,12 @@ import threading
 
 from . import config, sim_context
 
-_SNAPSHOTS_FILENAME = "ClaudeAI_SimSnapshots.json"
-_MILESTONES_FILENAME = "ClaudeAI_Milestones.json"
+_SNAPSHOTS_FILENAME = "Llamafone_SimSnapshots.json"
+_MILESTONES_FILENAME = "Llamafone_Milestones.json"
 # Per-contact tracker of which milestones each contact has already had
 # surfaced to them, so the same sim doesn't keep asking the player about
 # the same job-quit / promotion / breakup across multiple calls.
-_REFERENCES_FILENAME = "ClaudeAI_MilestoneRefs.json"
+_REFERENCES_FILENAME = "Llamafone_MilestoneRefs.json"
 
 # Cap the milestones log so it doesn't grow unbounded.
 _MAX_MILESTONES = 200
@@ -42,9 +42,9 @@ _PROMPT_RECENCY_DAYS = 7
 
 
 def _log(message):
-    """Best-effort log line into the main ClaudeAI_Log.txt."""
+    """Best-effort log line into the main Llamafone_Log.txt."""
     try:
-        path = os.path.join(os.path.expanduser("~"), "Documents", "ClaudeAI_Log.txt")
+        path = os.path.join(os.path.expanduser("~"), "Documents", "Llamafone_Log.txt")
         with open(path, "a", encoding="utf-8") as f:
             ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             f.write(f"[{ts}] [milestones] {message}\n")
@@ -466,7 +466,7 @@ def scan_and_record():
 
 def start_background_scan():
     """Fire scan_and_record on a daemon thread so startup isn't blocked."""
-    threading.Thread(target=scan_and_record, daemon=True, name="ClaudeAI-Milestones").start()
+    threading.Thread(target=scan_and_record, daemon=True, name="Llamafone-Milestones").start()
 
 
 def scan_sims(sim_infos):

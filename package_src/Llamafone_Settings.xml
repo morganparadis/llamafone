@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<I c="ClaudeSettingsInteraction" i="interaction" m="claude_ai.phone_ui_interactions" n="Claude_Settings" s="13371000003">
+<I c="LlamafoneSettingsInteraction" i="interaction" m="llamafone.phone_ui_interactions" n="Llamafone_Settings" s="13371000003">
   <V n="_affordance_key_override_for_autonomy" t="enabled">
     <T n="enabled">Phone_Fun</T>
   </V>

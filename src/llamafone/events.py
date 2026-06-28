@@ -21,9 +21,9 @@ from . import sim_context
 
 
 def _log(msg):
-    """Best-effort log line into Documents/ClaudeAI_Log.txt with an [events] tag."""
+    """Best-effort log line into Documents/Llamafone_Log.txt with an [events] tag."""
     try:
-        path = os.path.join(os.path.expanduser("~"), "Documents", "ClaudeAI_Log.txt")
+        path = os.path.join(os.path.expanduser("~"), "Documents", "Llamafone_Log.txt")
         ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(path, "a", encoding="utf-8") as f:
             f.write(f"[{ts}] [events] {msg}\n")

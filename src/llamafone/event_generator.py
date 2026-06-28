@@ -80,7 +80,7 @@ def generate_random_event(callback=None):
         if callback:
             callback(text, error)
 
-    return api_client.call_claude_async(
+    return api_client.call_ai_async(
         [{"role": "user", "content": prompt}],
         system=system,
         use_fast_model=True,
@@ -118,7 +118,7 @@ def generate_challenge(difficulty="medium", callback=None):
         "Win: [How to complete it]"
     )
 
-    return api_client.call_claude_async(
+    return api_client.call_ai_async(
         [{"role": "user", "content": prompt}],
         system=system,
         use_fast_model=True,
@@ -148,7 +148,7 @@ def generate_weekly_goals(callback=None):
         "3. [Stretch goal]"
     )
 
-    return api_client.call_claude_async(
+    return api_client.call_ai_async(
         [{"role": "user", "content": prompt}],
         system=system,
         use_fast_model=True,

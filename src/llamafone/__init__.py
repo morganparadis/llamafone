@@ -1,28 +1,28 @@
 """
-Claude AI for The Sims 4
+Llamafone for The Sims 4
 Brings AI-powered dialogue, storytelling, and dynamic events to your game.
 
 Commands (open cheat console with Ctrl+Shift+C):
-  claude.status     -- check setup and see all commands
-  claude.dialogue   -- generate sim dialogue
-  claude.story      -- household narrative update
-  claude.storyline  -- 3-act storyline
-  claude.event      -- surprise random event
-  claude.challenge  -- gameplay challenge
-  claude.call       -- incoming call from a relationship sim
-  claude.text       -- text message from a relationship sim
-  claude.chat <msg> -- chat about your game
+  llama.status     -- check setup and see all commands
+  llama.dialogue   -- generate sim dialogue
+  llama.story      -- household narrative update
+  llama.storyline  -- 3-act storyline
+  llama.event      -- surprise random event
+  llama.challenge  -- gameplay challenge
+  llama.call       -- incoming call from a relationship sim
+  llama.text       -- text message from a relationship sim
+  llama.chat <msg> -- chat about your game
 """
 
-MOD_NAME = "Claude AI for The Sims 4"
-MOD_VERSION = "2.0.1"
+MOD_NAME = "Llamafone"
+MOD_VERSION = "3.0.0"
 
 
 def _log(message):
     """Write to a log file in Documents -- the only reliable way to surface errors."""
     import os, datetime
     try:
-        path = os.path.join(os.path.expanduser("~"), "Documents", "ClaudeAI_Log.txt")
+        path = os.path.join(os.path.expanduser("~"), "Documents", "Llamafone_Log.txt")
         with open(path, "a", encoding="utf-8") as f:
             ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             f.write(f"[{ts}] {message}\n")
@@ -54,7 +54,7 @@ def _check_for_update():
             [
                 "curl", "-s", "-L",
                 "-H", "Accept: application/vnd.github+json",
-                "-H", "User-Agent: ClaudeAI-Sims4-Mod",
+                "-H", "User-Agent: Llamafone-Sims4-Mod",
                 "https://api.github.com/repos/morganparadis/claude-for-sims-4/releases/latest",
             ],
             capture_output=True,
@@ -106,7 +106,7 @@ try:
 
     # Console output fires immediately as a fallback
     sims4.commands.output(
-        f"[{MOD_NAME}] v{MOD_VERSION} loaded -- type 'claude.status' to get started.",
+        f"[{MOD_NAME}] v{MOD_VERSION} loaded -- type 'llama.status' to get started.",
         None,
     )
 
@@ -156,15 +156,15 @@ try:
                     body = (
                         f"v{MOD_VERSION} ready!\n"
                         f"Model: {config.get_default_model()}\n"
-                        f"Type 'claude.status' in the cheat console for all commands."
+                        f"Type 'llama.status' in the cheat console for all commands."
                         f"{update_line}"
                     )
                     notifications.show(MOD_NAME, body)
                 else:
                     body = (
                         f"v{MOD_VERSION} loaded but NOT configured.\n"
-                        f"Edit claude_config.cfg and add your API key,\n"
-                        f"then type 'claude.reload' in the cheat console."
+                        f"Edit llamafone.cfg and add your API key,\n"
+                        f"then type 'llama.reload' in the cheat console."
                         f"{update_line}"
                     )
                     notifications.show(MOD_NAME, body)
@@ -181,7 +181,7 @@ try:
     threading.Thread(
         target=_deferred_startup_notification,
         daemon=True,
-        name="ClaudeAI-Startup",
+        name="Llamafone-Startup",
     ).start()
 
 except Exception as e:

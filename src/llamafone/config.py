@@ -1,9 +1,9 @@
 """
-Configuration loader for Claude AI mod.
-Reads from claude_config.cfg in the Mods folder.
+Configuration loader for Llamafone mod.
+Reads from llamafone.cfg in the Mods folder.
 
 Runtime settings (set via in-game commands) are stored separately in
-ClaudeAI_Settings.json alongside the config file so that the config
+Llamafone_Settings.json alongside the config file so that the config
 file stays clean and user-edited. Settings in the JSON override config.
 """
 import json
@@ -11,14 +11,15 @@ import os
 import configparser
 
 _config = None
-_CONFIG_FILENAME = "claude_config.cfg"
-_SETTINGS_FILENAME = "ClaudeAI_Settings.json"
+_CONFIG_FILENAME = "llamafone.cfg"
+_SETTINGS_FILENAME = "Llamafone_Settings.json"
+_SECTION = "llamafone"
 
 
 def _find_config_file():
-    """Search for config file in the Mods folder and relative to this script."""
-    # Primary: check the known Mods folder location directly
-    # (walking up from __file__ doesn't work inside a .ts4script zip)
+    """Search for the config file in the Mods folder, then walk up from
+    the script location as a dev-mode fallback. Returns the first
+    existing file or None."""
     mods_folder = os.path.join(
         os.path.expanduser("~"), "Documents",
         "Electronic Arts", "The Sims 4", "Mods",
@@ -26,8 +27,6 @@ def _find_config_file():
     mods_path = os.path.join(mods_folder, _CONFIG_FILENAME)
     if os.path.isfile(mods_path):
         return os.path.abspath(mods_path)
-
-    # Fallback: walk up from script location (works during development)
     script_dir = os.path.dirname(os.path.abspath(__file__))
     for up in ("", "..", os.path.join("..", ".."), os.path.join("..", "..", "..")):
         path = os.path.join(script_dir, up, _CONFIG_FILENAME)
@@ -69,19 +68,19 @@ def _save_settings(data):
 def get_setting(key, fallback=None):
     """Read a runtime setting (set by in-game command). Falls back to config file.
 
-    Reads ClaudeAI_Settings.json for backward compatibility with older
+    Reads Llamafone_Settings.json for backward compatibility with older
     installs that wrote there; the in-game Settings UI now writes
-    changes back to claude_config.cfg directly so the JSON file ends up
+    changes back to llamafone.cfg directly so the JSON file ends up
     drained over time. Callers should still go through here because the
     JSON might hold values from older versions of the mod."""
     return _load_settings().get(key, fallback)
 
 
 def set_setting(key, value):
-    """Persist a setting change. Writes back to claude_config.cfg so the
+    """Persist a setting change. Writes back to llamafone.cfg so the
     .cfg stays the single source of truth -- the comments the player
     added are preserved (we replace just the value on the matching line).
-    Any leftover entry for this key in ClaudeAI_Settings.json is removed
+    Any leftover entry for this key in Llamafone_Settings.json is removed
     so the JSON layer doesn't shadow the new .cfg value."""
     cfg_ok = _set_cfg_value(key, value)
     # Drain any stale JSON value for this key so get_setting()'s JSON-
@@ -104,14 +103,21 @@ def _format_cfg_value(value):
     return str(value)
 
 
-def _set_cfg_value(key, value, section="claude_ai"):
-    """Update `key = value` in claude_config.cfg under [section],
-    preserving all comments and unrelated lines. Appends the key to the
-    end of the section if it isn't present. Returns True on success.
+def _set_cfg_value(key, value, section=None):
+    """Update `key = value` in the .cfg under [section], preserving all
+    comments and unrelated lines. Appends the key to the end of the
+    section if it isn't present. Returns True on success.
+
+    `section` defaults to whichever section actually exists in the .cfg
+    (`_SECTION`), so a v2 user with `[claude_ai]` gets writes
+    INTO that section -- we don't sprinkle a stray `[llamafone]` header
+    underneath their config. Fresh installs write to `[llamafone]`.
 
     We do this line-by-line instead of using configparser.write() so the
     player's comments / blank lines / inline notes survive untouched.
     """
+    if section is None:
+        section = _SECTION
     path = _find_config_file()
     if not path:
         return False
@@ -204,38 +210,62 @@ def reload_config():
 
 
 def get_api_key():
-    return get_config().get("claude_ai", "api_key", fallback="")
+    return get_config().get(_SECTION, "api_key", fallback="")
+
+
+def get_provider():
+    """Which AI provider the api_client should route to. One of:
+      claude (default) -- Anthropic Messages API
+      openai           -- OpenAI Chat Completions API
+      gemini           -- Google Gemini Generative Language API
+      ollama           -- Local Ollama server (no API key needed)
+    """
+    raw = get_config().get(_SECTION, "provider", fallback="claude")
+    return (raw or "claude").strip().lower()
+
+
+def get_ollama_endpoint():
+    """Base URL for a local Ollama server. Ignored unless provider=ollama."""
+    return get_config().get(
+        _SECTION, "ollama_endpoint",
+        fallback="http://localhost:11434",
+    )
 
 
 def get_default_model():
-    return get_config().get("claude_ai", "default_model", fallback="claude-haiku-4-5")
+    return get_config().get(_SECTION, "default_model", fallback="claude-haiku-4-5")
 
 
 def get_fast_model():
-    return get_config().get("claude_ai", "fast_model", fallback="claude-haiku-4-5")
+    return get_config().get(_SECTION, "fast_model", fallback="claude-haiku-4-5")
 
 
 def get_max_tokens():
-    return get_config().getint("claude_ai", "max_tokens", fallback=512)
+    return get_config().getint(_SECTION, "max_tokens", fallback=512)
 
 
 def get_language():
-    return get_config().get("claude_ai", "language", fallback="English")
+    return get_config().get(_SECTION, "language", fallback="English")
 
 
 def is_configured():
+    """A provider is configured if its credentials are present. Ollama
+    needs no key (just a reachable endpoint); the cloud providers need
+    a non-placeholder api_key."""
+    if get_provider() == "ollama":
+        return True
     key = get_api_key()
     return bool(key and key != "YOUR_API_KEY_HERE")
 
 
 def _bool_setting_with_config_fallback(key, cfg_key, cfg_default):
-    """Runtime override (ClaudeAI_Settings.json) takes precedence over the
+    """Runtime override (Llamafone_Settings.json) takes precedence over the
     static config file, so the in-game settings UI can toggle behavior
-    without the player having to edit and reload claude_config.cfg."""
+    without the player having to edit and reload llamafone.cfg."""
     val = get_setting(key)
     if val is not None:
         return bool(val)
-    return get_config().getboolean("claude_ai", cfg_key, fallback=cfg_default)
+    return get_config().getboolean(_SECTION, cfg_key, fallback=cfg_default)
 
 
 def _int_setting_with_config_fallback(key, cfg_key, cfg_default):
@@ -245,7 +275,7 @@ def _int_setting_with_config_fallback(key, cfg_key, cfg_default):
             return int(val)
         except Exception:
             pass
-    return get_config().getint("claude_ai", cfg_key, fallback=cfg_default)
+    return get_config().getint(_SECTION, cfg_key, fallback=cfg_default)
 
 
 def get_phone_allow_ghosts():

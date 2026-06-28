@@ -229,10 +229,96 @@ kbd {
   bottom: 10%; left: -40px;
 }
 
+/* Top nav -- sticky, semi-transparent over the hero. Lets visitors
+   jump to install / features / GitHub / Patreon without scrolling
+   the whole page first. */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(255, 253, 246, 0.92);
+  backdrop-filter: saturate(140%) blur(10px);
+  -webkit-backdrop-filter: saturate(140%) blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.topbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0;
+  gap: 1rem;
+}
+.topbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 700;
+  font-family: 'Fredoka', system-ui, sans-serif;
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: none;   /* defeat the global a-link underline */
+  font-size: 1.05rem;
+}
+.topbar-brand:hover { color: var(--claude-deep); border-bottom: none; }
+.topbar-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: block;
+}
+.topbar-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.topbar-links a {
+  color: var(--ink-soft);
+  text-decoration: none;
+  border-bottom: none;     /* defeat the global a-link underline */
+  font-weight: 600;
+  padding: 0.45rem 0.7rem;
+  border-radius: var(--r-sm);
+  transition: background-color 0.15s ease, color 0.15s ease;
+  font-size: 0.95rem;
+}
+.topbar-links a:hover {
+  background: var(--claude-soft);
+  color: var(--claude-deep);
+  border-bottom: none;
+}
+.topbar-patreon {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--pink);
+  color: #fff !important;
+  margin-left: 0.35rem;
+}
+.topbar-patreon:hover {
+  background: var(--pink-deep) !important;
+  color: #fff !important;
+}
+@media (max-width: 540px) {
+  .topbar-inner { padding: 0.4rem 0; }
+  .topbar-brand span { display: none; }      /* logo only on phones */
+  .topbar-links a { padding: 0.35rem 0.55rem; font-size: 0.88rem; }
+  .topbar-links a[href*="github.com"] { display: none; }  /* drop GitHub on small screens */
+}
+
 .hero-inner {
   position: relative;
   text-align: center;
   z-index: 1;
+}
+
+/* Hero H1 is now a descriptive subtitle rather than the brand name
+   (the logo image carries the wordmark). Dial the size down so the
+   longer line fits on one row on desktop and wraps cleanly on phones,
+   sitting visually below the logo without competing with it. */
+.hero h1 {
+  font-size: clamp(1.2rem, 2.8vw, 1.95rem);
+  margin-top: 0.2rem;
+  margin-bottom: 0.75rem;
 }
 
 .plumbob {
@@ -242,6 +328,42 @@ kbd {
   height: 84px;
   filter: drop-shadow(0 6px 10px rgba(58, 112, 18, 0.25));
   animation: plumbob-bob 2.4s ease-in-out infinite;
+}
+
+/* Hero logo treatment — square mascot image with the same sparkle ring
+   and gentle bob animation the SVG plumbob used to have, so the page
+   keeps its motion personality after rebranding from Claude AI -> Llamafone. */
+.hero-logo-wrap {
+  position: relative;
+  margin: 0 auto 1.25rem;
+  width: 200px;
+  height: 200px;
+  display: block;
+  animation: plumbob-bob 4s ease-in-out infinite;
+  filter: drop-shadow(0 10px 22px rgba(58, 112, 18, 0.22));
+}
+.hero-logo {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 50%;
+  object-fit: cover;
+}
+@media (min-width: 720px) {
+  .hero-logo-wrap { width: 240px; height: 240px; }
+}
+
+/* Visually-hidden text for screen readers / SEO. Used for the H1
+   that sits behind the logo image so we keep an accessible heading
+   without doubling the wordmark visually. */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .sparkle {
@@ -620,6 +742,61 @@ section > p { max-width: 780px; margin-left: auto; margin-right: auto; }
   font-size: 0.92rem;
   color: var(--ink-soft);
   font-style: italic;
+}
+
+/* Provider grid -- four cards (Claude / OpenAI / Gemini / Ollama)
+   the player chooses between in install step 2. */
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+.provider-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 1rem 1.1rem;
+  box-shadow: var(--shadow-sm);
+}
+.provider-card h4 {
+  margin: 0 0 0.5em;
+  font-size: 1.08rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  flex-wrap: wrap;
+}
+.provider-card p {
+  margin: 0 0 0.6em;
+  font-size: 0.93rem;
+  color: var(--ink-soft);
+}
+.provider-card .api-substeps {
+  margin: 0.4em 0 0.6em 1.2em;
+  padding: 0;
+  font-size: 0.9rem;
+}
+.provider-card .api-substeps li { margin-bottom: 0.3em; }
+.provider-card .muted.small {
+  display: block;
+  margin-top: 0.4em;
+  padding: 0.45em 0.65em;
+  background: var(--cream);
+  border-radius: var(--r-sm);
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+.provider-tag {
+  background: var(--claude);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.18em 0.55em;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .warning-box {

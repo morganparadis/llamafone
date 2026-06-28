@@ -57,7 +57,7 @@ def generate_sim_dialogue(sim=None, situation=None, callback=None):
         "Make each line feel distinct — vary the tone across the lines."
     )
 
-    return api_client.call_claude_async(
+    return api_client.call_ai_async(
         [{"role": "user", "content": prompt}],
         system=system,
         use_fast_model=True,
@@ -97,7 +97,7 @@ def generate_conversation(sim1, sim2, topic=None, callback=None):
         f"{name2}: [line]"
     )
 
-    return api_client.call_claude_async(
+    return api_client.call_ai_async(
         [{"role": "user", "content": prompt}],
         system=system,
         use_fast_model=True,
@@ -135,7 +135,7 @@ def generate_npc_backstory(sim=None, callback=None):
         "[line 2]"
     )
 
-    return api_client.call_claude_async(
+    return api_client.call_ai_async(
         [{"role": "user", "content": prompt}],
         system=system,
         callback=callback,

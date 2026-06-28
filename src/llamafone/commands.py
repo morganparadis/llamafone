@@ -1,31 +1,32 @@
 """
-Cheat console commands for the Claude AI mod.
+Cheat console commands for the Llamafone mod.
 Open the cheat console with Ctrl+Shift+C, then type a command.
 
 COMMANDS:
-  claude.status                     Check config and list all commands
-  claude.dialogue                   Generate dialogue for the active sim
-  claude.dialogue_situation <text>  Generate dialogue for a specific situation
-  claude.backstory                  Generate a backstory for the active sim
-  claude.story                      Narrative update for your household
-  claude.storyline                  Generate a 3-act storyline
-  claude.storyline_theme <theme>    Generate a storyline with a specific theme
-  claude.drama                      Generate relationship drama arc
-  claude.event                      Generate a surprise random event
-  claude.challenge                  Generate a medium challenge
-  claude.challenge_easy             Generate an easy challenge
-  claude.challenge_hard             Generate a hard challenge
-  claude.goals                      Generate weekly goals for this session
-  claude.chat <message>             Chat with Claude about your game
-  claude.reload                     Reload config (after editing claude_config.cfg)
-  claude.auto_events on|off         Enable/disable random auto-events mid-session
+  llama.status                     Check config and list all commands
+  llama.dialogue                   Generate dialogue for the active sim
+  llama.dialogue_situation <text>  Generate dialogue for a specific situation
+  llama.backstory                  Generate a backstory for the active sim
+  llama.story                      Narrative update for your household
+  llama.storyline                  Generate a 3-act storyline
+  llama.storyline_theme <theme>    Generate a storyline with a specific theme
+  llama.drama                      Generate relationship drama arc
+  llama.event                      Generate a surprise random event
+  llama.challenge                  Generate a medium challenge
+  llama.challenge_easy             Generate an easy challenge
+  llama.challenge_hard             Generate a hard challenge
+  llama.goals                      Generate weekly goals for this session
+  llama.chat <message>             Chat with the AI about your game
+  llama.reload                     Reload config (after editing llamafone.cfg)
+  llama.auto_events on|off         Enable/disable random auto-events mid-session
 """
 
 try:
     import sims4.commands
     import sims4.resources
     import services
-    from . import config, sim_context, dialogue, storyteller, event_generator, notifications, api_client, auto_events, journal, phone
+    from . import config
+    from . import sim_context, dialogue, storyteller, event_generator, notifications, api_client, auto_events, journal, phone
 
     # -------------------------------------------------------------------------
     # Helpers
@@ -33,8 +34,8 @@ try:
 
     def _require_config(output):
         if not config.is_configured():
-            output("[Claude AI] Not configured. Edit claude_config.cfg and add your API key.")
-            output("[Claude AI] Then run: claude.reload")
+            output("[Llamafone] Not configured. Edit llamafone.cfg and add your API key.")
+            output("[Llamafone] Then run: llama.reload")
             return False
         return True
 
@@ -51,265 +52,291 @@ try:
     # Status / config
     # -------------------------------------------------------------------------
 
-    @sims4.commands.Command("claude.status", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.status", command_type=sims4.commands.CommandType.Live)
     def cmd_status(_connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if config.is_configured():
-            output(f"[Claude AI] ✓ Configured")
-            output(f"[Claude AI]   Default model : {config.get_default_model()}")
-            output(f"[Claude AI]   Fast model    : {config.get_fast_model()}")
-            output(f"[Claude AI]   Max tokens    : {config.get_max_tokens()}")
-            output(f"[Claude AI]   Language      : {config.get_language()}")
+            output(f"[Llamafone] ✓ Configured")
+            output(f"[Llamafone]   Default model : {config.get_default_model()}")
+            output(f"[Llamafone]   Fast model    : {config.get_fast_model()}")
+            output(f"[Llamafone]   Max tokens    : {config.get_max_tokens()}")
+            output(f"[Llamafone]   Language      : {config.get_language()}")
         else:
-            output("[Claude AI] ✗ NOT configured — edit claude_config.cfg and add your API key")
+            output("[Llamafone] ✗ NOT configured — edit llamafone.cfg and add your API key")
 
-        output(f"[Claude AI] {auto_events.status()}")
-        output(f"[Claude AI] Journal: {journal.get_entry_count()} entries saved")
+        output(f"[Llamafone] {auto_events.status()}")
+        output(f"[Llamafone] Journal: {journal.get_entry_count()} entries saved")
         output("")
-        output("[Claude AI] Available commands:")
-        output("  claude.dialogue             — active sim's dialogue")
-        output("  claude.dialogue_situation   — dialogue for a specific situation")
-        output("  claude.backstory            — active sim's backstory")
-        output("  claude.story                — household narrative update")
-        output("  claude.storyline            — 3-act storyline")
-        output("  claude.storyline_theme X    — storyline with theme X")
-        output("  claude.drama                — relationship drama arc")
-        output("  claude.event                — surprise random event")
-        output("  claude.challenge            — medium gameplay challenge")
-        output("  claude.challenge_easy       — easy challenge")
-        output("  claude.challenge_hard       — hard challenge")
-        output("  claude.goals                — weekly session goals")
-        output("  claude.call                 — incoming call from a relationship sim")
-        output("  claude.text                 — text message from a relationship sim")
-        output("  claude.sendtext First Last msg — text a specific sim")
-        output("  claude.sendcall First Last msg — call a specific sim")
-        output("  claude.reply <message>      — reply to the last call or text")
-        output("  claude.chat <message>       — chat about your game")
-        output("  claude.journal              — view recent journal entries")
-        output("  claude.reload               — reload config file")
+        output("[Llamafone] Available commands:")
+        output("  llama.dialogue             — active sim's dialogue")
+        output("  llama.dialogue_situation   — dialogue for a specific situation")
+        output("  llama.backstory            — active sim's backstory")
+        output("  llama.story                — household narrative update")
+        output("  llama.storyline            — 3-act storyline")
+        output("  llama.storyline_theme X    — storyline with theme X")
+        output("  llama.drama                — relationship drama arc")
+        output("  llama.event                — surprise random event")
+        output("  llama.challenge            — medium gameplay challenge")
+        output("  llama.challenge_easy       — easy challenge")
+        output("  llama.challenge_hard       — hard challenge")
+        output("  llama.goals                — weekly session goals")
+        output("  llama.call                 — incoming call from a relationship sim")
+        output("  llama.text                 — text message from a relationship sim")
+        output("  llama.sendtext First Last msg — text a specific sim")
+        output("  llama.sendcall First Last msg — call a specific sim")
+        output("  llama.reply <message>      — reply to the last call or text")
+        output("  llama.chat <message>       — chat about your game")
+        output("  llama.journal              — view recent journal entries")
+        output("  llama.reload               — reload config file")
 
-    @sims4.commands.Command("claude.reload", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.reload", command_type=sims4.commands.CommandType.Live)
     def cmd_reload(_connection=None):
         output = sims4.commands.CheatOutput(_connection)
         config.reload_config()
         auto_events.restart()  # pick up any changes to auto-event settings
         if config.is_configured():
-            output("[Claude AI] Config reloaded. API key found — you're good to go!")
+            output("[Llamafone] Config reloaded. API key found — you're good to go!")
         else:
-            output("[Claude AI] Config reloaded. Still no API key found.")
-            output("[Claude AI] Make sure claude_config.cfg is in your Mods folder.")
+            output("[Llamafone] Config reloaded. Still no API key found.")
+            output("[Llamafone] Make sure llamafone.cfg is in your Mods folder.")
 
-    @sims4.commands.Command("claude.auto_events", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.testprovider", command_type=sims4.commands.CommandType.Live)
+    def cmd_test_provider(_connection=None):
+        """Fire a tiny round-trip against the configured AI provider so the
+        player can verify their key + model name + endpoint are working
+        without burning a full prompt's worth of tokens. Reports OK with
+        the response text, or the raw error verbatim if it fails."""
+        output = sims4.commands.CheatOutput(_connection)
+        provider = config.get_provider()
+        model = config.get_fast_model()
+        output(f"[Llamafone] Testing provider={provider} model={model}...")
+
+        def _done(text, error):
+            if error:
+                output(f"[Llamafone] FAILED: {error}")
+                output("[Llamafone] Check provider, api_key, and default_model/fast_model in llamafone.cfg.")
+            else:
+                preview = (text or "").strip().replace("\n", " ")[:120]
+                output(f"[Llamafone] OK -- response: {preview!r}")
+
+        api_client.call_ai_async(
+            messages=[{"role": "user", "content": "Reply with the single word: pong"}],
+            system="You are a test ping. Reply with exactly one word.",
+            use_fast_model=True,
+            callback=_done,
+        )
+
+    @sims4.commands.Command("llama.auto_events", command_type=sims4.commands.CommandType.Live)
     def cmd_auto_events(toggle: str = None, _connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if toggle is None:
-            output(f"[Claude AI] {auto_events.status()}")
-            output("[Claude AI] Usage: claude.auto_events on  OR  claude.auto_events off")
+            output(f"[Llamafone] {auto_events.status()}")
+            output("[Llamafone] Usage: llama.auto_events on  OR  llama.auto_events off")
             return
         if toggle.lower() in ("on", "true", "1", "yes"):
             auto_events.stop()
             # Temporarily force-enable regardless of config
-            config.get_config().set("claude_ai", "auto_events_enabled", "true")
+            config.get_config().set(config._SECTION, "auto_events_enabled", "true")
             auto_events.start()
-            output(f"[Claude AI] Auto-events turned ON for this session.")
-            output(f"[Claude AI] {auto_events.status()}")
-            output("[Claude AI] To make this permanent, set auto_events_enabled = true in claude_config.cfg")
+            output(f"[Llamafone] Auto-events turned ON for this session.")
+            output(f"[Llamafone] {auto_events.status()}")
+            output("[Llamafone] To make this permanent, set auto_events_enabled = true in llamafone.cfg")
         elif toggle.lower() in ("off", "false", "0", "no"):
             auto_events.stop()
-            output("[Claude AI] Auto-events turned OFF for this session.")
+            output("[Llamafone] Auto-events turned OFF for this session.")
 
-    @sims4.commands.Command("claude.fire_auto", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.fire_auto", command_type=sims4.commands.CommandType.Live)
     def cmd_fire_auto(_connection=None):
         """Manually trigger the auto-event picker right now -- for diagnosing why nothing's firing."""
         output = sims4.commands.CheatOutput(_connection)
         if not _require_config(output):
             return
-        output("[Claude AI] Firing auto-event now... check ClaudeAI_Log.txt for details.")
+        output("[Llamafone] Firing auto-event now... check Llamafone_Log.txt for details.")
         ok = auto_events.fire_now()
         if not ok:
-            output("[Claude AI] fire_now() raised an exception -- see log.")
+            output("[Llamafone] fire_now() raised an exception -- see log.")
 
     # -------------------------------------------------------------------------
     # Moodlet investigation (debug)
     # -------------------------------------------------------------------------
 
-    @sims4.commands.Command("claude.dumpbuffs", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.dumpbuffs", command_type=sims4.commands.CommandType.Live)
     def cmd_dump_buffs(keyword: str = None, _connection=None):
         """List every loaded buff class whose name contains <keyword> --
-        writes results to Documents/ClaudeAI_BuffList.txt for investigation."""
+        writes results to Documents/Llamafone_BuffList.txt for investigation."""
         from . import moodlets
         output = sims4.commands.CheatOutput(_connection)
         if not keyword:
-            output("[Claude AI] Usage: claude.dumpbuffs <keyword>")
-            output("[Claude AI] e.g. claude.dumpbuffs cheerful")
-            output("[Claude AI] e.g. claude.dumpbuffs feeling")
+            output("[Llamafone] Usage: llama.dumpbuffs <keyword>")
+            output("[Llamafone] e.g. llama.dumpbuffs cheerful")
+            output("[Llamafone] e.g. llama.dumpbuffs feeling")
             return
         count = moodlets.dump_buffs_matching(keyword)
-        output(f"[Claude AI] Found {count} buff(s) matching '{keyword}'. See Documents/ClaudeAI_BuffList.txt")
+        output(f"[Llamafone] Found {count} buff(s) matching '{keyword}'. See Documents/Llamafone_BuffList.txt")
 
-    @sims4.commands.Command("claude.testmoodlet", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.testmoodlet", command_type=sims4.commands.CommandType.Live)
     def cmd_test_moodlet(mood: str = None, _connection=None):
         """Try to apply a generic moodlet to the active sim for testing.
         Logs the outcome and reports success/failure in the console."""
         from . import moodlets
         output = sims4.commands.CheatOutput(_connection)
         if not mood:
-            output("[Claude AI] Usage: claude.testmoodlet <emotion>")
-            output("[Claude AI] Supported: happy, sad, angry, confident, playful, flirty")
+            output("[Llamafone] Usage: llama.testmoodlet <emotion>")
+            output("[Llamafone] Supported: happy, sad, angry, confident, playful, flirty")
             return
         active = sim_context.get_active_sim()
         sim_info = active.sim_info if active else None
         if not sim_info:
-            output("[Claude AI] No active sim -- enter live mode in a household first.")
+            output("[Llamafone] No active sim -- enter live mode in a household first.")
             return
-        ok = moodlets.apply_mood(sim_info, mood, reason="manual test via claude.testmoodlet")
+        ok = moodlets.apply_mood(sim_info, mood, reason="manual test via llama.testmoodlet")
         if ok:
-            output(f"[Claude AI] Applied a '{mood}' moodlet to {sim_info.first_name}. Check their moodlet panel.")
+            output(f"[Llamafone] Applied a '{mood}' moodlet to {sim_info.first_name}. Check their moodlet panel.")
         else:
-            output(f"[Claude AI] Could not apply '{mood}' -- see ClaudeAI_Log.txt.")
-            output(f"[Claude AI] Try: claude.dumpbuffs {mood}  -- then claude.dumpbuffs feeling")
+            output(f"[Llamafone] Could not apply '{mood}' -- see Llamafone_Log.txt.")
+            output(f"[Llamafone] Try: llama.dumpbuffs {mood}  -- then llama.dumpbuffs feeling")
 
     # -------------------------------------------------------------------------
     # Dialogue
     # -------------------------------------------------------------------------
 
-    @sims4.commands.Command("claude.dialogue", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.dialogue", command_type=sims4.commands.CommandType.Live)
     def cmd_dialogue(_connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if not _require_config(output):
             return
         sim = sim_context.get_active_sim()
         if not sim:
-            output("[Claude AI] No active sim found.")
+            output("[Llamafone] No active sim found.")
             return
         name = sim.sim_info.first_name
-        output(f"[Claude AI] Generating dialogue for {name}…")
+        output(f"[Llamafone] Generating dialogue for {name}…")
         dialogue.generate_sim_dialogue(sim=sim, callback=_on_result(f"{name}'s Dialogue", output))
 
-    @sims4.commands.Command("claude.dialogue_situation", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.dialogue_situation", command_type=sims4.commands.CommandType.Live)
     def cmd_dialogue_situation(situation: str = None, _connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if not _require_config(output):
             return
         if not situation:
-            output("[Claude AI] Usage: claude.dialogue_situation <situation description>")
-            output("[Claude AI] Example: claude.dialogue_situation just got promoted")
+            output("[Llamafone] Usage: llama.dialogue_situation <situation description>")
+            output("[Llamafone] Example: llama.dialogue_situation just got promoted")
             return
         sim = sim_context.get_active_sim()
         name = sim.sim_info.first_name if sim else "Your Sim"
-        output(f"[Claude AI] Generating dialogue for: {situation}…")
+        output(f"[Llamafone] Generating dialogue for: {situation}…")
         dialogue.generate_sim_dialogue(
             sim=sim,
             situation=situation,
             callback=_on_result(f"{name}'s Dialogue", output),
         )
 
-    @sims4.commands.Command("claude.backstory", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.backstory", command_type=sims4.commands.CommandType.Live)
     def cmd_backstory(_connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if not _require_config(output):
             return
         sim = sim_context.get_active_sim()
         name = sim.sim_info.first_name if sim else "Sim"
-        output(f"[Claude AI] Generating backstory for {name}…")
+        output(f"[Llamafone] Generating backstory for {name}…")
         dialogue.generate_npc_backstory(sim=sim, callback=_on_result(f"{name}'s Backstory", output))
 
     # -------------------------------------------------------------------------
     # Storytelling
     # -------------------------------------------------------------------------
 
-    @sims4.commands.Command("claude.story", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.story", command_type=sims4.commands.CommandType.Live)
     def cmd_story(_connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if not _require_config(output):
             return
-        output("[Claude AI] Generating household story update…")
+        output("[Llamafone] Generating household story update…")
         storyteller.generate_story_update(callback=_on_result("Household Story", output))
 
-    @sims4.commands.Command("claude.storyline", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.storyline", command_type=sims4.commands.CommandType.Live)
     def cmd_storyline(_connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if not _require_config(output):
             return
-        output("[Claude AI] Generating 3-act storyline…")
+        output("[Llamafone] Generating 3-act storyline…")
         storyteller.generate_storyline(callback=_on_result("Storyline", output))
 
-    @sims4.commands.Command("claude.storyline_theme", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.storyline_theme", command_type=sims4.commands.CommandType.Live)
     def cmd_storyline_theme(theme: str = None, _connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if not _require_config(output):
             return
         if not theme:
-            output("[Claude AI] Usage: claude.storyline_theme <theme>")
-            output("[Claude AI] Examples: romance  |  rivalry  |  rags to riches  |  ghost mystery")
+            output("[Llamafone] Usage: llama.storyline_theme <theme>")
+            output("[Llamafone] Examples: romance  |  rivalry  |  rags to riches  |  ghost mystery")
             return
-        output(f"[Claude AI] Generating storyline with theme: {theme}…")
+        output(f"[Llamafone] Generating storyline with theme: {theme}…")
         storyteller.generate_storyline(theme=theme, callback=_on_result("Storyline", output))
 
-    @sims4.commands.Command("claude.drama", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.drama", command_type=sims4.commands.CommandType.Live)
     def cmd_drama(_connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if not _require_config(output):
             return
-        output("[Claude AI] Generating relationship drama arc…")
+        output("[Llamafone] Generating relationship drama arc…")
         storyteller.generate_relationship_drama(callback=_on_result("Relationship Drama", output))
 
     # -------------------------------------------------------------------------
     # Events & challenges
     # -------------------------------------------------------------------------
 
-    @sims4.commands.Command("claude.event", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.event", command_type=sims4.commands.CommandType.Live)
     def cmd_event(_connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if not _require_config(output):
             return
-        output("[Claude AI] Rolling a random event…")
+        output("[Llamafone] Rolling a random event…")
         event_generator.generate_random_event(callback=_on_result("Random Event!", output))
 
-    @sims4.commands.Command("claude.challenge", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.challenge", command_type=sims4.commands.CommandType.Live)
     def cmd_challenge(_connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if not _require_config(output):
             return
-        output("[Claude AI] Generating medium challenge…")
+        output("[Llamafone] Generating medium challenge…")
         event_generator.generate_challenge(difficulty="medium", callback=_on_result("Challenge", output))
 
-    @sims4.commands.Command("claude.challenge_easy", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.challenge_easy", command_type=sims4.commands.CommandType.Live)
     def cmd_challenge_easy(_connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if not _require_config(output):
             return
-        output("[Claude AI] Generating easy challenge…")
+        output("[Llamafone] Generating easy challenge…")
         event_generator.generate_challenge(difficulty="easy", callback=_on_result("Easy Challenge", output))
 
-    @sims4.commands.Command("claude.challenge_hard", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.challenge_hard", command_type=sims4.commands.CommandType.Live)
     def cmd_challenge_hard(_connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if not _require_config(output):
             return
-        output("[Claude AI] Generating hard challenge…")
+        output("[Llamafone] Generating hard challenge…")
         event_generator.generate_challenge(difficulty="hard", callback=_on_result("Hard Challenge", output))
 
-    @sims4.commands.Command("claude.goals", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.goals", command_type=sims4.commands.CommandType.Live)
     def cmd_goals(_connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if not _require_config(output):
             return
-        output("[Claude AI] Generating weekly goals…")
+        output("[Llamafone] Generating weekly goals…")
         event_generator.generate_weekly_goals(callback=_on_result("Weekly Goals", output))
 
     # -------------------------------------------------------------------------
     # Freeform chat
     # -------------------------------------------------------------------------
 
-    @sims4.commands.Command("claude.chat", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.chat", command_type=sims4.commands.CommandType.Live)
     def cmd_chat(message: str = None, _connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if not _require_config(output):
             return
         if not message:
-            output("[Claude AI] Usage: claude.chat <your message>")
-            output("[Claude AI] Example: claude.chat what career should my sim pursue?")
+            output("[Llamafone] Usage: llama.chat <your message>")
+            output("[Llamafone] Example: llama.chat what career should my sim pursue?")
             return
 
         context = sim_context.build_context_string()
@@ -323,14 +350,14 @@ try:
         )
         prompt = f"Current game state:\n{context}\n\nPlayer: {message}"
 
-        output("[Claude AI] Thinking…")
+        output("[Llamafone] Thinking…")
 
         def on_chat_result(text, error):
             if text:
                 journal.add_entry("chat", f"Q: {message}\nA: {text}")
-            _on_result("Claude AI", output)(text, error)
+            _on_result("Llamafone", output)(text, error)
 
-        api_client.call_claude_async(
+        api_client.call_ai_async(
             [{"role": "user", "content": prompt}],
             system=system,
             callback=on_chat_result,
@@ -340,32 +367,32 @@ try:
     # Phone calls & texts
     # -------------------------------------------------------------------------
 
-    @sims4.commands.Command("claude.call", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.call", command_type=sims4.commands.CommandType.Live)
     def cmd_call(_connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if not _require_config(output):
             return
-        output("[Claude AI] Incoming call...")
+        output("[Llamafone] Incoming call...")
         phone.generate_call(output=output)
 
-    @sims4.commands.Command("claude.text", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.text", command_type=sims4.commands.CommandType.Live)
     def cmd_text(_connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if not _require_config(output):
             return
-        output("[Claude AI] Checking messages...")
+        output("[Llamafone] Checking messages...")
         phone.generate_text(output=output)
 
-    @sims4.commands.Command("claude.sendtext", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.sendtext", command_type=sims4.commands.CommandType.Live)
     def cmd_sendtext(*args, _connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if not _require_config(output):
             return
-        # Parse: claude.sendtext FirstName LastName your message here
+        # Parse: llama.sendtext FirstName LastName your message here
         # Need at least a name and a message
         if len(args) < 2:
-            output("[Claude AI] Usage: claude.sendtext <First> <Last> <message>")
-            output("[Claude AI] Example: claude.sendtext Bella Goth hey want to hang out?")
+            output("[Llamafone] Usage: llama.sendtext <First> <Last> <message>")
+            output("[Llamafone] Example: llama.sendtext Bella Goth hey want to hang out?")
             return
         # Try two-word name first, then one-word
         two_word_name = f"{args[0]} {args[1]}"
@@ -378,22 +405,22 @@ try:
             if contact:
                 message = " ".join(args[1:])
             else:
-                output(f"[Claude AI] Could not find '{two_word_name}' or '{one_word_name}'.")
+                output(f"[Llamafone] Could not find '{two_word_name}' or '{one_word_name}'.")
                 return
         if not message:
-            output("[Claude AI] You need to include a message.")
+            output("[Llamafone] You need to include a message.")
             return
-        output(f"[Claude AI] Texting {contact['name']}...")
+        output(f"[Llamafone] Texting {contact['name']}...")
         phone.send_text(contact, message, output=output)
 
-    @sims4.commands.Command("claude.sendcall", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.sendcall", command_type=sims4.commands.CommandType.Live)
     def cmd_sendcall(*args, _connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if not _require_config(output):
             return
         if len(args) < 2:
-            output("[Claude AI] Usage: claude.sendcall <First> <Last> <topic>")
-            output("[Claude AI] Example: claude.sendcall Bella Goth I need to tell you something")
+            output("[Llamafone] Usage: llama.sendcall <First> <Last> <topic>")
+            output("[Llamafone] Example: llama.sendcall Bella Goth I need to tell you something")
             return
         two_word_name = f"{args[0]} {args[1]}"
         contact = phone.find_contact_by_name(two_word_name)
@@ -405,15 +432,15 @@ try:
             if contact:
                 message = " ".join(args[1:])
             else:
-                output(f"[Claude AI] Could not find '{two_word_name}' or '{one_word_name}'.")
+                output(f"[Llamafone] Could not find '{two_word_name}' or '{one_word_name}'.")
                 return
         if not message:
-            output("[Claude AI] You need to include what you want to say.")
+            output("[Llamafone] You need to include what you want to say.")
             return
-        output(f"[Claude AI] Calling {contact['name']}...")
+        output(f"[Llamafone] Calling {contact['name']}...")
         phone.send_call(contact, message, output=output)
 
-    @sims4.commands.Command("claude.reply", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.reply", command_type=sims4.commands.CommandType.Live)
     def cmd_reply(*args, _connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if not _require_config(output):
@@ -422,28 +449,28 @@ try:
         if not message:
             convo = phone.get_active_conversation()
             if convo:
-                output(f"[Claude AI] Active conversation with {convo['contact']['name']}")
-                output("[Claude AI] Usage: claude.reply <your message>")
+                output(f"[Llamafone] Active conversation with {convo['contact']['name']}")
+                output("[Llamafone] Usage: llama.reply <your message>")
             else:
-                output("[Claude AI] No active conversation. Use claude.call or claude.text first.")
+                output("[Llamafone] No active conversation. Use llama.call or llama.text first.")
             return
         convo = phone.get_active_conversation()
         if convo:
-            output(f"[Claude AI] Replying to {convo['contact']['name']}...")
+            output(f"[Llamafone] Replying to {convo['contact']['name']}...")
         phone.generate_reply(message, output=output)
 
     # -------------------------------------------------------------------------
     # Debug
     # -------------------------------------------------------------------------
 
-    @sims4.commands.Command("claude.dumpphone", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.dumpphone", command_type=sims4.commands.CommandType.Live)
     def cmd_dumpphone(_connection=None):
         """Diagnostic: dump what the game thinks the active sim's
         phone affordances are right now. Writes to BOTH the cheat
-        console and Documents/ClaudeAI_Log.txt under [dumpphone]."""
+        console and Documents/Llamafone_Log.txt under [dumpphone]."""
         out_console = sims4.commands.CheatOutput(_connection)
         import os, datetime
-        log_path = os.path.join(os.path.expanduser("~"), "Documents", "ClaudeAI_Log.txt")
+        log_path = os.path.join(os.path.expanduser("~"), "Documents", "Llamafone_Log.txt")
 
         def out(msg):
             try:
@@ -497,7 +524,7 @@ try:
         except Exception as e:
             out(f"failed: {type(e).__name__}: {e}")
 
-    @sims4.commands.Command("claude.debug", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.debug", command_type=sims4.commands.CommandType.Live)
     def cmd_debug(_connection=None):
         output = sims4.commands.CheatOutput(_connection)
         main_si = sim_context.get_main_sim_info()
@@ -505,7 +532,7 @@ try:
             active = sim_context.get_active_sim()
             main_si = active.sim_info if active else None
         if not main_si:
-            output("[Claude AI] No sim found to debug.")
+            output("[Llamafone] No sim found to debug.")
             return
 
         output(f"[Debug] Sim: {main_si.first_name} {main_si.last_name}")
@@ -569,42 +596,42 @@ try:
 
         # Test notification
         output("[Debug] Testing notification popup...")
-        result = notifications._show_game_notification("Claude AI Test", "If you see this popup, notifications work!")
+        result = notifications._show_game_notification("Llamafone Test", "If you see this popup, notifications work!")
         output(f"[Debug] Notification result: {result}")
 
-        output("[Debug] Use claude.debugsim <First> <Last> to see a sim's prompt context")
-        output("[Debug] Use claude.testbuffs to test the moodlet system")
+        output("[Debug] Use llama.debugsim <First> <Last> to see a sim's prompt context")
+        output("[Debug] Use llama.testbuffs to test the moodlet system")
 
-    @sims4.commands.Command("claude.debugsim", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.debugsim", command_type=sims4.commands.CommandType.Live)
     def cmd_debug_sim(first_name: str = None, last_name: str = None, _connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if not first_name:
-            output("[Claude AI] Usage: claude.debugsim <First> <Last>")
+            output("[Llamafone] Usage: llama.debugsim <First> <Last>")
             return
         full_name = f"{first_name} {last_name}".strip() if last_name else first_name
         contact = phone.find_contact_by_name(full_name)
         if not contact:
-            output(f"[Claude AI] Could not find '{full_name}'.")
+            output(f"[Llamafone] Could not find '{full_name}'.")
             return
         desc = phone._describe_relationship(contact)
         output(f"=== Prompt context for {contact['name']} ===")
         output(desc)
 
-    @sims4.commands.Command("claude.dumpprompt", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.dumpprompt", command_type=sims4.commands.CommandType.Live)
     def cmd_dump_prompt(first_name: str = None, last_name: str = None, _connection=None):
         """Build a text prompt as if the named sim were texting the active sim,
         but DON'T send it. Just write it to a file so we can inspect what
         Claude would see."""
         output = sims4.commands.CheatOutput(_connection)
         if not first_name:
-            output("[Claude AI] Usage: claude.dumpprompt <First> <Last>")
-            output("[Claude AI] Builds a text prompt as if that sim was texting you,")
-            output("[Claude AI] writes it to ClaudeAI_LastPrompt.txt in your Mods folder.")
+            output("[Llamafone] Usage: llama.dumpprompt <First> <Last>")
+            output("[Llamafone] Builds a text prompt as if that sim was texting you,")
+            output("[Llamafone] writes it to Llamafone_LastPrompt.txt in your Mods folder.")
             return
         full_name = f"{first_name} {last_name}".strip() if last_name else first_name
         contact = phone.find_contact_by_name(full_name)
         if not contact:
-            output(f"[Claude AI] Could not find '{full_name}'.")
+            output(f"[Llamafone] Could not find '{full_name}'.")
             return
 
         # Use the currently active sim as the "recipient" so we see exactly
@@ -614,7 +641,7 @@ try:
         if active:
             recipient = active.sim_info
         if not recipient:
-            output("[Claude AI] No active sim to use as recipient.")
+            output("[Llamafone] No active sim to use as recipient.")
             return
 
         recipient_name = recipient.first_name
@@ -638,17 +665,17 @@ try:
             import datetime
             path = api_client._last_prompt_path()
             with open(path, "w", encoding="utf-8") as f:
-                f.write("=== Claude AI — Simulated Prompt (NOT SENT) ===\n")
+                f.write("=== Llamafone — Simulated Prompt (NOT SENT) ===\n")
                 f.write(f"Timestamp: {datetime.datetime.now().isoformat()}\n")
                 f.write(f"Recipient (active sim): {recipient.first_name} {recipient.last_name}\n")
                 f.write(f"Sender: {contact['name']}\n\n")
                 f.write("=== USER PROMPT ===\n")
                 f.write(prompt + "\n")
-            output(f"[Claude AI] Prompt written to: {path}")
+            output(f"[Llamafone] Prompt written to: {path}")
         except Exception as e:
-            output(f"[Claude AI] Error writing file: {e}")
+            output(f"[Llamafone] Error writing file: {e}")
 
-    @sims4.commands.Command("claude.testbuffs", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.testbuffs", command_type=sims4.commands.CommandType.Live)
     def cmd_testbuffs(_connection=None):
         output = sims4.commands.CheatOutput(_connection)
         buff_mgr = services.get_instance_manager(sims4.resources.Types.BUFF)
@@ -694,22 +721,22 @@ try:
     # Journal
     # -------------------------------------------------------------------------
 
-    @sims4.commands.Command("claude.journal", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.journal", command_type=sims4.commands.CommandType.Live)
     def cmd_journal(_connection=None):
         output = sims4.commands.CheatOutput(_connection)
         text = journal.format_recent_for_display(n=10)
         output(text)
 
-    @sims4.commands.Command("claude.journal_sim", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.journal_sim", command_type=sims4.commands.CommandType.Live)
     def cmd_journal_sim(first_name: str = None, last_name: str = None, _connection=None):
         output = sims4.commands.CheatOutput(_connection)
         if not first_name:
-            output("[Claude AI] Usage: claude.journal_sim <FirstName> <LastName>")
+            output("[Llamafone] Usage: llama.journal_sim <FirstName> <LastName>")
             return
         full_name = f"{first_name} {last_name}".strip() if last_name else first_name
         entries = journal.get_sim_history(full_name, n=10)
         if not entries:
-            output(f"[Claude AI] No journal entries for {full_name}.")
+            output(f"[Llamafone] No journal entries for {full_name}.")
             return
         output(f"=== Journal entries for {full_name} ({len(entries)} shown) ===")
         for e in reversed(entries):
@@ -724,17 +751,17 @@ try:
             output(f"\n[{date_str}] {label}")
             output(preview)
 
-    @sims4.commands.Command("claude.journal_clear", command_type=sims4.commands.CommandType.Live)
+    @sims4.commands.Command("llama.journal_clear", command_type=sims4.commands.CommandType.Live)
     def cmd_journal_clear(_connection=None):
         output = sims4.commands.CheatOutput(_connection)
         count = journal.get_entry_count()
         journal.clear()
-        output(f"[Claude AI] Journal cleared ({count} entries deleted).")
+        output(f"[Llamafone] Journal cleared ({count} entries deleted).")
 
 except Exception as e:
     # Running outside the Sims 4 game environment, or an error during load
     try:
         import sims4.commands
-        sims4.commands.output(f"[Claude AI] Commands failed to register: {type(e).__name__}: {e}", None)
+        sims4.commands.output(f"[Llamafone] Commands failed to register: {type(e).__name__}: {e}", None)
     except Exception:
         pass

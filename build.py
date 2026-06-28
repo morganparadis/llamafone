@@ -15,11 +15,11 @@ import zipfile
 import shutil
 import tempfile
 
-MOD_NAME = "ClaudeAI"
+MOD_NAME = "Llamafone"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.join(SCRIPT_DIR, "src")
 OUTPUT_FILE = os.path.join(SCRIPT_DIR, f"{MOD_NAME}.ts4script")
-CONFIG_FILE = os.path.join(SCRIPT_DIR, "claude_config.cfg")
+CONFIG_FILE = os.path.join(SCRIPT_DIR, "llamafone.cfg")
 PACKAGE_FILE = os.path.join(SCRIPT_DIR, f"{MOD_NAME}.package")
 
 
@@ -94,7 +94,7 @@ def compile_py_to_pyc(py_path, pyc_path):
 
 
 def build_package():
-    """Build ClaudeAI.package from XML sources in package_src/.
+    """Build Llamafone.package from XML sources in package_src/.
     Uses our own DBPF writer (tools/package_builder.py) -- no S4S required."""
     builder_path = os.path.join(SCRIPT_DIR, "tools", "package_builder.py")
     if not os.path.isfile(builder_path):
@@ -187,31 +187,48 @@ def install(script_file):
         except PermissionError:
             print(f"  ERROR: could not write {dest_package} -- close The Sims 4 and try again")
     else:
-        print(f"  Skipped package (no ClaudeAI.package at repo root)")
+        print(f"  Skipped package (no Llamafone.package at repo root)")
 
-    dest_config = os.path.join(mods_folder, "claude_config.cfg")
+    dest_config = os.path.join(mods_folder, "llamafone.cfg")
     if not os.path.exists(dest_config):
         if os.path.exists(CONFIG_FILE):
             shutil.copy2(CONFIG_FILE, dest_config)
-            print(f"  Installed: claude_config.cfg")
+            print(f"  Installed: llamafone.cfg")
             print()
             print("=" * 60)
-            print("  NEXT STEP: Edit claude_config.cfg in your Mods folder")
+            print("  NEXT STEP: Edit llamafone.cfg in your Mods folder")
             print("  and replace YOUR_API_KEY_HERE with your real API key.")
-            print("  Get a key at: https://console.anthropic.com/")
             print("=" * 60)
     else:
         print(f"  Skipped config (already exists -- your API key is safe)")
 
-    # Clean up old test file if present
-    test_file = os.path.join(mods_folder, "ClaudeAI_Test.ts4script")
-    if os.path.exists(test_file):
-        os.remove(test_file)
-        print(f"  Cleaned up: ClaudeAI_Test.ts4script")
+    # Clean up the previous-build leftover and any pre-rename ClaudeAI
+    # files so nothing stale survives in the Mods folder.
+    for stale in (
+        "ClaudeAI_Test.ts4script",
+        "ClaudeAI.ts4script",
+        "ClaudeAI.package",
+        "ClaudeAI_Journal.json",
+        "ClaudeAI_Settings.json",
+        "ClaudeAI_SimSnapshots.json",
+        "ClaudeAI_Milestones.json",
+        "ClaudeAI_MilestoneRefs.json",
+        "ClaudeAI_LastPrompt.txt",
+        "ClaudeAI_BuffList.txt",
+        "ClaudeAI_Log.txt",
+        "claude_config.cfg",
+    ):
+        stale_path = os.path.join(mods_folder, stale)
+        if os.path.exists(stale_path):
+            try:
+                os.remove(stale_path)
+                print(f"  Cleaned up: {stale}")
+            except OSError:
+                pass
 
     print()
     print("Installation complete! Restart The Sims 4 to load the mod.")
-    print("Then open the cheat console (Ctrl+Shift+C) and type: claude.status")
+    print("Then open the cheat console (Ctrl+Shift+C) and type: llama.status")
 
 
 if __name__ == "__main__":

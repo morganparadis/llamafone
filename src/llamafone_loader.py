@@ -1,11 +1,11 @@
 """
-Root-level loader for the Claude AI mod.
+Root-level loader for the Llamafone mod.
 """
 import os
 import datetime
 import sys
 
-_LOG = os.path.join(os.path.expanduser("~"), "Documents", "ClaudeAI_Log.txt")
+_LOG = os.path.join(os.path.expanduser("~"), "Documents", "Llamafone_Log.txt")
 
 
 def _log(msg):
@@ -16,13 +16,13 @@ def _log(msg):
         pass
 
 
-_log("=== claude_ai_loader.py executed ===")
+_log("=== llamafone_loader.py executed ===")
 _log(f"Python version: {sys.version}")
 _log(f"sys.path: {sys.path[:5]}")
 _log(f"__file__: {__file__}")
 
 try:
-    import claude_ai
+    import llamafone
     _log("claude_ai package imported successfully")
 except Exception as e:
     _log(f"claude_ai import FAILED: {type(e).__name__}: {e}")

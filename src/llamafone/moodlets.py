@@ -12,10 +12,10 @@ This module currently exports:
   - apply_mood(sim_info, mood_tag, ...): tries an exact-name whitelist
     of generic-emotion buff classes. Returns True on success, False
     otherwise. NOT yet wired into the main flow — used only by the
-    claude.testmoodlet debug command for now.
+    llama.testmoodlet debug command for now.
   - dump_buffs_matching(keyword, mood_type=None): writes every loaded
     buff class whose name contains `keyword` (case-insensitive) to
-    ClaudeAI_BuffList.txt for offline review.
+    Llamafone_BuffList.txt for offline review.
 """
 
 import os
@@ -25,7 +25,7 @@ import re
 
 def _log(message):
     try:
-        path = os.path.join(os.path.expanduser("~"), "Documents", "ClaudeAI_Log.txt")
+        path = os.path.join(os.path.expanduser("~"), "Documents", "Llamafone_Log.txt")
         with open(path, "a", encoding="utf-8") as f:
             ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             f.write(f"[{ts}] [moodlets] {message}\n")
@@ -83,7 +83,7 @@ def clean_response(text):
 # Moodlet investigation
 # ---------------------------------------------------------------------------
 
-# Confirmed via `claude.dumpbuffs feeling` in a real Sims 4 install.
+# Confirmed via `llama.dumpbuffs feeling` in a real Sims 4 install.
 # Each entry maps an emotion -> the exact Buff_Trait_Feeling<X> class
 # that provides a clean +1 mood with neutral "Feeling X" display text.
 # These don't carry narrative content like "New Baby" / "Workout" / etc.,
@@ -162,7 +162,7 @@ def apply_mood(sim_info, mood_tag, reason=None):
 
     buff_type = _find_buff_by_exact_name(buff_manager, candidates)
     if not buff_type:
-        _log(f"apply_mood: no generic buff found for '{mood}' (tried {len(candidates)} candidates). Run claude.dumpbuffs {mood} to investigate.")
+        _log(f"apply_mood: no generic buff found for '{mood}' (tried {len(candidates)} candidates). Run llama.dumpbuffs {mood} to investigate.")
         return False
 
     try:
@@ -183,9 +183,9 @@ def apply_mood(sim_info, mood_tag, reason=None):
 
 def dump_buffs_matching(keyword, limit=200):
     """Write every loaded buff class whose name contains `keyword`
-    (case-insensitive) to ClaudeAI_BuffList.txt. Used by the
-    claude.dumpbuffs cheat command. Returns the number of matches."""
-    out_path = os.path.join(os.path.expanduser("~"), "Documents", "ClaudeAI_BuffList.txt")
+    (case-insensitive) to Llamafone_BuffList.txt. Used by the
+    llama.dumpbuffs cheat command. Returns the number of matches."""
+    out_path = os.path.join(os.path.expanduser("~"), "Documents", "Llamafone_BuffList.txt")
     try:
         import services
         import sims4.resources

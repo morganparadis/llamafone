@@ -7,7 +7,7 @@ Uses a real-time background thread (not Sims game-time) so "every 20 minutes" me
 The thread checks whether you're actually in an active household before firing anything,
 so it won't trigger during loading screens, CAS, or build mode.
 
-Config options (in claude_config.cfg):
+Config options (in llamafone.cfg):
   auto_events_enabled        = true / false
   auto_event_interval_minutes = 20        (real-world minutes between checks)
   auto_event_chance           = 40        (percent chance each check fires something)
@@ -20,7 +20,8 @@ import random
 import threading
 import time
 
-from . import config, event_generator, storyteller, notifications, phone
+from . import config
+from . import event_generator, storyteller, notifications, phone
 
 _thread = None
 _running = False
@@ -28,9 +29,9 @@ _lock = threading.Lock()
 
 
 def _log(message):
-    """Write to ClaudeAI_Log.txt so we can diagnose silent failures."""
+    """Write to Llamafone_Log.txt so we can diagnose silent failures."""
     try:
-        path = os.path.join(os.path.expanduser("~"), "Documents", "ClaudeAI_Log.txt")
+        path = os.path.join(os.path.expanduser("~"), "Documents", "Llamafone_Log.txt")
         with open(path, "a", encoding="utf-8") as f:
             ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             f.write(f"[{ts}] [auto_events] {message}\n")
@@ -45,11 +46,11 @@ def _log(message):
 def is_enabled():
     # Runtime override (set via the in-game Settings UI) wins over the
     # static config file, so the player can toggle this from the phone
-    # without editing claude_config.cfg and reloading the save.
+    # without editing llamafone.cfg and reloading the save.
     val = config.get_setting("auto_events_enabled")
     if val is not None:
         return bool(val)
-    return config.get_config().getboolean("claude_ai", "auto_events_enabled", fallback=False)
+    return config.get_config().getboolean(config._SECTION, "auto_events_enabled", fallback=False)
 
 def get_interval_seconds():
     val = config.get_setting("auto_event_interval_minutes")
@@ -59,7 +60,7 @@ def get_interval_seconds():
         except Exception:
             minutes = 20.0
     else:
-        minutes = config.get_config().getfloat("claude_ai", "auto_event_interval_minutes", fallback=20.0)
+        minutes = config.get_config().getfloat(config._SECTION, "auto_event_interval_minutes", fallback=20.0)
     return max(5.0, minutes) * 60  # minimum 5 minutes
 
 def get_chance():
@@ -69,10 +70,10 @@ def get_chance():
             return max(0, min(100, int(val)))
         except Exception:
             pass
-    return config.get_config().getint("claude_ai", "auto_event_chance", fallback=40)
+    return config.get_config().getint(config._SECTION, "auto_event_chance", fallback=40)
 
 def get_event_types():
-    raw = config.get_config().get("claude_ai", "auto_event_types", fallback="event,goals")
+    raw = config.get_config().get(config._SECTION, "auto_event_types", fallback="event,goals")
     return [t.strip().lower() for t in raw.split(",") if t.strip()]
 
 def get_event_weights():
@@ -80,7 +81,7 @@ def get_event_weights():
     Read per-type weights from config. Format: event:30, call:40, text:20, goals:10
     If no weights are configured, all types get equal weight.
     """
-    raw = config.get_config().get("claude_ai", "auto_event_weights", fallback="")
+    raw = config.get_config().get(config._SECTION, "auto_event_weights", fallback="")
     weights = {}
     if raw.strip():
         for part in raw.split(","):
@@ -168,7 +169,7 @@ def _pick_and_fire():
             "goals": "Today's Goals",
             "story": "Story Update",
             "drama": "Household Drama",
-        }.get(chosen, "Claude AI")
+        }.get(chosen, "Llamafone")
         notifications.show_result(label, text)
 
     def phone_done(text, error):
@@ -249,7 +250,7 @@ def start():
         if _thread and _thread.is_alive():
             return  # already running
         _running = True
-        _thread = threading.Thread(target=_worker, daemon=True, name="ClaudeAI-AutoEvents")
+        _thread = threading.Thread(target=_worker, daemon=True, name="Llamafone-AutoEvents")
         _thread.start()
 
 
@@ -267,7 +268,7 @@ def restart():
 
 
 def fire_now():
-    """Manually trigger the auto-event picker right now. Used by claude.fire_auto."""
+    """Manually trigger the auto-event picker right now. Used by llama.fire_auto."""
     _log("fire_now() called manually.")
     try:
         _pick_and_fire()
@@ -278,7 +279,7 @@ def fire_now():
 
 
 def status():
-    """Return a status string for claude.status output."""
+    """Return a status string for llama.status output."""
     if not is_enabled():
         return "Auto-events: OFF  (set auto_events_enabled = true to turn on)"
     active = _thread is not None and _thread.is_alive()

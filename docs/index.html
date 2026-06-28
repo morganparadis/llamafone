@@ -13,39 +13,42 @@
     gtag('config', 'G-QMPCP5RVPD');
   </script>
 
-  <title>Claude AI for The Sims 4 — AI mod for phone calls, texts, stories</title>
-  <meta name="description" content="A free script mod that brings Claude AI to The Sims 4. In-character phone calls, text conversations, story updates, random events, and 3-act storylines — generated live based on your household.">
-  <meta name="keywords" content="sims 4, sims 4 mod, ai mod, claude ai, anthropic, sims 4 ai, sims 4 phone mod, sims 4 dialogue mod, sims 4 storytelling, scriptmod">
+  <title>Llamafone — AI mod for The Sims 4 (Claude, OpenAI, Gemini, or local Ollama)</title>
+  <meta name="description" content="A free script mod that brings AI calls, texts, and storytelling to The Sims 4 (bring your own AI -- Claude, OpenAI, Gemini, or local Ollama). In-character phone calls, text conversations, story updates, random events, and 3-act storylines — generated live based on your household.">
+  <meta name="keywords" content="sims 4, sims 4 mod, ai mod, llamafone, claude, openai, gemini, ollama, sims 4 ai, sims 4 phone mod, sims 4 dialogue mod, sims 4 storytelling, scriptmod">
   <meta name="author" content="morganparadis">
   <link rel="canonical" href="https://morganparadis.github.io/claude-for-sims-4/">
 
   <!-- Open Graph (for Discord, Reddit, Facebook link previews) -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://morganparadis.github.io/claude-for-sims-4/">
-  <meta property="og:title" content="Claude AI for The Sims 4">
-  <meta property="og:description" content="A free script mod that brings Claude AI to The Sims 4 — in-character phone calls, texts, and stories generated live from your household.">
-  <meta property="og:image" content="https://morganparadis.github.io/claude-for-sims-4/img/friendexample.jpg">
-  <meta property="og:site_name" content="Claude AI for The Sims 4">
+  <meta property="og:title" content="Llamafone — AI mod for The Sims 4">
+  <meta property="og:description" content="A free script mod that brings AI calls, texts, and storytelling to The Sims 4 (bring your own AI -- Claude, OpenAI, Gemini, or local Ollama) — in-character phone calls, texts, and stories generated live from your household.">
+  <meta property="og:image" content="https://morganparadis.github.io/claude-for-sims-4/img/llamafone-logo.jpg">
+  <meta property="og:image:alt" content="Llamafone logo — a cartoon llama wearing a flower crown and holding a phone, with the title 'Llamafone — Sims 4 Mod'">
+  <meta property="og:site_name" content="Llamafone — AI for The Sims 4">
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Claude AI for The Sims 4">
-  <meta name="twitter:description" content="A free script mod that brings Claude AI to The Sims 4 — in-character phone calls, texts, and stories generated live from your household.">
-  <meta name="twitter:image" content="https://morganparadis.github.io/claude-for-sims-4/img/friendexample.jpg">
+  <meta name="twitter:title" content="Llamafone — AI mod for The Sims 4">
+  <meta name="twitter:description" content="A free script mod that brings AI calls, texts, and storytelling to The Sims 4 (bring your own AI -- Claude, OpenAI, Gemini, or local Ollama) — in-character phone calls, texts, and stories generated live from your household.">
+  <meta name="twitter:image" content="https://morganparadis.github.io/claude-for-sims-4/img/llamafone-logo.jpg">
+  <meta name="twitter:image:alt" content="Llamafone logo — a cartoon llama holding a phone, with the title 'Llamafone — Sims 4 Mod'">
 
   <!-- Structured data: tells Google this is a downloadable mod -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    "name": "Claude AI for The Sims 4",
+    "name": "Llamafone — AI for The Sims 4",
     "operatingSystem": "Windows, macOS",
     "applicationCategory": "GameApplication",
     "applicationSubCategory": "Game Mod",
-    "description": "A free script mod that brings Claude AI to The Sims 4 — generating in-character phone calls, text conversations, story updates, random events, and 3-act storylines live from your household data.",
+    "description": "A free script mod that brings AI calls, texts, and storytelling to The Sims 4 (bring your own AI -- Claude, OpenAI, Gemini, or local Ollama) — generating in-character phone calls, text conversations, story updates, random events, and 3-act storylines live from your household data.",
     "url": "https://morganparadis.github.io/claude-for-sims-4/",
     "downloadUrl": "https://github.com/morganparadis/claude-for-sims-4/releases/latest",
-    "softwareVersion": "1.2.1",
+    "softwareVersion": "3.0.0",
+    "image": "https://morganparadis.github.io/claude-for-sims-4/img/llamafonelogo-square.PNG",
     "author": { "@type": "Person", "name": "morganparadis" },
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
     "license": "Open source"
@@ -53,7 +56,8 @@
   </script>
 
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="apple-touch-icon" href="favicon.svg">
+  <link rel="icon" type="image/png" href="img/llamafonelogo-square.PNG">
+  <link rel="apple-touch-icon" href="img/llamafonelogo-square.PNG">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
@@ -61,9 +65,29 @@
 </head>
 <body>
 
+<nav class="topbar" aria-label="Primary">
+  <div class="container topbar-inner">
+    <a class="topbar-brand" href="#">
+      <img src="img/llamafonelogo-square.PNG" alt="" class="topbar-logo">
+      <span>Llamafone</span>
+    </a>
+    <div class="topbar-links">
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/morganparadis/claude-for-sims-4" target="_blank" rel="noopener" aria-label="GitHub">GitHub</a>
+      <a class="topbar-patreon" href="https://www.patreon.com/c/morgkorg" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+          <path d="M14.82 2.41c-3.96 0-7.18 3.23-7.18 7.21 0 3.96 3.22 7.18 7.18 7.18 3.97 0 7.18-3.22 7.18-7.18 0-3.98-3.21-7.21-7.18-7.21M2 21.6h3.51V2.41H2"/>
+        </svg>
+        Patreon
+      </a>
+    </div>
+  </div>
+</nav>
+
 <header class="hero">
   <div class="container hero-inner">
-    <div class="plumbob" aria-hidden="true">
+    <div class="hero-logo-wrap" aria-hidden="true">
       <span class="sparkle s1"></span>
       <span class="sparkle s2"></span>
       <span class="sparkle s3"></span>
@@ -73,21 +97,7 @@
       <span class="sparkle s7"></span>
       <span class="sparkle s8"></span>
       <span class="sparkle s9"></span>
-      <svg viewBox="0 0 60 80" width="64" height="84">
-        <defs>
-          <linearGradient id="plumbobGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#d6f896"/>
-            <stop offset="55%" stop-color="#86d33b"/>
-            <stop offset="100%" stop-color="#4d931a"/>
-          </linearGradient>
-          <linearGradient id="plumbobShine" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="rgba(255,255,255,0.85)"/>
-            <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
-          </linearGradient>
-        </defs>
-        <polygon points="30,2 58,40 30,78 2,40" fill="url(#plumbobGrad)" stroke="#3a7012" stroke-width="2"/>
-        <polygon points="30,10 50,40 30,52 10,40" fill="url(#plumbobShine)"/>
-      </svg>
+      <img src="img/llamafonelogo-square.PNG" alt="" class="hero-logo">
     </div>
     <h1><span class="brand-claude">
       <span class="text-sparkle ts1"></span>
@@ -95,8 +105,8 @@
       <span class="text-sparkle ts3"></span>
       <span class="text-sparkle ts4"></span>
       <span class="text-sparkle ts5"></span>
-      <span class="text-sparkle ts6"></span>Claude AI</span> for The Sims 4</h1>
-    <p class="tagline">Phone calls, texts, stories, and drama — generated live for your Sims by Claude AI.</p>
+      <span class="text-sparkle ts6"></span>AI Calls, Texts, and Stories for The Sims 4</span></h1>
+    <p class="tagline">Your sims have things to say. Hand them a phone.</p>
     <div class="cta-row">
       <a class="btn btn-primary" href="https://github.com/morganparadis/claude-for-sims-4/releases/latest">Download the mod</a>
       <a class="btn btn-ghost" href="#features">See what it does</a>
@@ -114,7 +124,7 @@
   <h2>It's like having a writer for your save file.</h2>
   <p>
     Every command reads what's actually happening in your game — who lives in the household,
-    their traits, their relationships, their mood, where they are — and sends it to Claude as
+    their traits, their relationships, their mood, where they are — and sends it to the AI as
     context. The AI doesn't make up sims that don't exist or invent jobs they don't have. It
     writes for the people in front of it.
   </p>
@@ -165,7 +175,7 @@
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
       </div>
       <h3>Storylines</h3>
-      <p>Multi-session 3-act arcs with concrete gameplay goals — raise a skill, hit a career level, complete an aspiration. Pick a theme or let Claude pick one.</p>
+      <p>Multi-session 3-act arcs with concrete gameplay goals — raise a skill, hit a career level, complete an aspiration. Pick a theme or let the AI pick one.</p>
     </article>
 
     <article class="feature-card">
@@ -182,7 +192,7 @@
 <section class="screenshot-strip">
   <div class="container">
     <h2>One mod, every voice.</h2>
-    <p class="muted">Same code, totally different writing — Claude adapts to each sim's age, traits, and how they feel about you. Here are real texts from the same save:</p>
+    <p class="muted">Same code, totally different writing — the AI adapts to each sim's age, traits, and how they feel about you. Here are real texts from the same save:</p>
     <div class="screenshot-grid">
 
       <figure class="screenshot">
@@ -226,7 +236,7 @@
     <div class="screenshot-grid">
 
       <figure class="screenshot">
-        <img src="img/phoneuiexample.PNG" alt="Phone Social menu showing Settings, Send Text, and other Claude AI options alongside base game items">
+        <img src="img/phoneuiexample.PNG" alt="Phone Social menu showing Settings, Send Text, and other Llamafone options alongside base game items">
         <figcaption><strong>Phone &gt; Social</strong><br><span class="muted small">Call Someone, Send Text, and Settings live next to the base game's phone options.</span></figcaption>
       </figure>
 
@@ -247,12 +257,12 @@
 
       <figure class="screenshot">
         <img src="img/textuiexample.PNG" alt="Text dialog with the contact's portrait and a multi-line text area for composing the message">
-        <figcaption><strong>Type what you want to say</strong><br><span class="muted small">Multi-line text area with the recipient's portrait. Claude crafts the message in their voice from what you wrote.</span></figcaption>
+        <figcaption><strong>Type what you want to say</strong><br><span class="muted small">Multi-line text area with the recipient's portrait. the AI crafts the message in their voice from what you wrote.</span></figcaption>
       </figure>
 
       <figure class="screenshot">
-        <img src="img/uiexample.PNG" alt="Claude AI Settings panel showing toggles for auto events, reply delay, ghost contacts, and numeric inputs for chance and interval">
-        <figcaption><strong>Settings, in-game</strong><br><span class="muted small">Toggle auto-events, reply delays, ghost contacts; adjust chance and interval. Writes back to <code>claude_config.cfg</code>, preserving your comments.</span></figcaption>
+        <img src="img/uiexample.PNG" alt="Llamafone Settings panel showing toggles for auto events, reply delay, ghost contacts, and numeric inputs for chance and interval">
+        <figcaption><strong>Settings, in-game</strong><br><span class="muted small">Toggle auto-events, reply delays, ghost contacts; adjust chance and interval. Writes back to <code>llamafone.cfg</code>, preserving your comments.</span></figcaption>
       </figure>
 
     </div>
@@ -322,92 +332,118 @@
     <div class="cmd-group">
       <h3>Phone</h3>
       <ul>
-        <li><code>claude.call</code> &mdash; incoming call</li>
-        <li><code>claude.text</code> &mdash; incoming text</li>
-        <li><code>claude.sendtext Bella Goth hey!</code></li>
-        <li><code>claude.sendcall Bella Goth I have news</code></li>
-        <li><code>claude.reply &lt;message&gt;</code></li>
+        <li><code>llama.call</code> &mdash; incoming call</li>
+        <li><code>llama.text</code> &mdash; incoming text</li>
+        <li><code>llama.sendtext Bella Goth hey!</code></li>
+        <li><code>llama.sendcall Bella Goth I have news</code></li>
+        <li><code>llama.reply &lt;message&gt;</code></li>
       </ul>
     </div>
     <div class="cmd-group">
       <h3>Storytelling</h3>
       <ul>
-        <li><code>claude.story</code> &mdash; narrative update</li>
-        <li><code>claude.storyline</code> &mdash; 3-act arc</li>
-        <li><code>claude.storyline_theme romance</code></li>
-        <li><code>claude.drama</code> &mdash; household drama</li>
-        <li><code>claude.dialogue</code> &mdash; in-character lines</li>
+        <li><code>llama.story</code> &mdash; narrative update</li>
+        <li><code>llama.storyline</code> &mdash; 3-act arc</li>
+        <li><code>llama.storyline_theme romance</code></li>
+        <li><code>llama.drama</code> &mdash; household drama</li>
+        <li><code>llama.dialogue</code> &mdash; in-character lines</li>
       </ul>
     </div>
     <div class="cmd-group">
       <h3>Events &amp; goals</h3>
       <ul>
-        <li><code>claude.event</code> &mdash; random event</li>
-        <li><code>claude.goals</code> &mdash; session goals</li>
-        <li><code>claude.challenge</code> &mdash; gameplay challenge</li>
-        <li><code>claude.auto_events on</code></li>
+        <li><code>llama.event</code> &mdash; random event</li>
+        <li><code>llama.goals</code> &mdash; session goals</li>
+        <li><code>llama.challenge</code> &mdash; gameplay challenge</li>
+        <li><code>llama.auto_events on</code></li>
       </ul>
     </div>
     <div class="cmd-group">
       <h3>System</h3>
       <ul>
-        <li><code>claude.status</code> &mdash; setup &amp; all commands</li>
-        <li><code>claude.chat &lt;message&gt;</code> &mdash; freeform</li>
-        <li><code>claude.journal</code> &mdash; recent history</li>
-        <li><code>claude.reload</code> &mdash; after editing config</li>
+        <li><code>llama.status</code> &mdash; setup &amp; all commands</li>
+        <li><code>llama.chat &lt;message&gt;</code> &mdash; freeform</li>
+        <li><code>llama.journal</code> &mdash; recent history</li>
+        <li><code>llama.reload</code> &mdash; after editing config</li>
       </ul>
     </div>
   </div>
 </section>
 
-<section class="install container">
+<section id="install" class="install container">
   <h2>Get started</h2>
   <ol class="install-steps">
     <li>
       <div class="step-num">1</div>
       <div class="step-body">
         <h3>Download the mod</h3>
-        <p>Grab the latest release from the <a href="https://github.com/morganparadis/claude-for-sims-4/releases/latest">downloads page</a>. You need two files: <code>ClaudeAI.ts4script</code> and <code>claude_config.cfg</code>.</p>
+        <p>Grab the latest release from the <a href="https://github.com/morganparadis/claude-for-sims-4/releases/latest">downloads page</a>. You need three files: <code>Llamafone.ts4script</code> (the script), <code>Llamafone.package</code> (the phone UI tunings), and <code>llamafone.cfg</code> (the settings file).</p>
       </div>
     </li>
 
     <li>
       <div class="step-num">2</div>
       <div class="step-body">
-        <h3>Get your Claude API key</h3>
-        <p>The mod uses Claude (made by Anthropic) to write the dialogue and stories. You need your own API key — it's free to sign up, and you only pay for what you use. <strong>A typical session runs about 25 cents to a dollar</strong>, depending on how often you generate long stories.</p>
+        <h3>Pick an AI provider and get a key</h3>
+        <p>Llamafone works with four different AI providers — pick whichever fits your budget, preferences, or paranoia. You only need credentials for the one you pick. <strong>Costs run about 25 cents to a dollar per typical session</strong> on the cloud providers; <strong>Ollama is free</strong> because it runs entirely on your computer.</p>
 
-        <div class="callout">
-          <h4>Step-by-step: getting your API key</h4>
-          <ol class="api-substeps">
-            <li>
-              <strong>Go to <a href="https://console.anthropic.com/" target="_blank" rel="noopener">console.anthropic.com</a></strong> and click <em>Sign up</em>. Use Google or your email — both work fine.
-            </li>
-            <li>
-              <strong>Verify your email and phone number</strong> if Anthropic asks. This is a one-time anti-spam check.
-            </li>
-            <li>
-              <strong>Add a credit card and buy a little credit.</strong> Anthropic needs a card on file before they'll let you use the API. Go to <em>Settings &rarr; Billing</em> and add <strong>$5</strong> (the minimum). That's roughly 1,000 in-game calls and texts at the typical cost &mdash; usually a few weeks of casual play.
-            </li>
-            <li>
-              <strong>Create the key.</strong> In the left sidebar click <em>API Keys</em> (or go to <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com/settings/keys</a>), then click the <em>Create Key</em> button.
-            </li>
-            <li>
-              <strong>Name it something memorable</strong> like "Sims 4 mod" and click <em>Create</em>.
-            </li>
-            <li>
-              <strong>Copy the key immediately and keep it private.</strong> It looks like <code>sk-ant-api03-…</code> followed by a long string. <strong>You only see it once</strong> &mdash; if you close the dialog without copying, you'll need to make a new one.
-              <div class="warning-box">
-                <strong>Treat this key like a password.</strong> Anyone who has it can spend money on your Anthropic account.
-                <ul>
-                  <li>Save it in a <strong>password manager</strong> (1Password, Bitwarden, your browser's saved passwords) — not in a plain text file on your desktop.</li>
-                  <li><strong>Never paste it in Discord, Reddit, GitHub, screenshots, or any chat</strong> — even private DMs aren't safe long-term.</li>
-                  <li>If it ever leaks, go to <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">the API keys page</a>, revoke the old key, and make a new one.</li>
-                </ul>
-              </div>
-            </li>
-          </ol>
-          <p class="callout-note">That's it for the Anthropic side &mdash; the key is yours. Keep it safe.</p>
+        <div class="provider-grid">
+          <div class="provider-card">
+            <h4>🧡 Anthropic Claude <span class="provider-tag">recommended</span></h4>
+            <p>What the mod was built and tuned against. Best writing quality at the price.</p>
+            <ol class="api-substeps">
+              <li>Go to <a href="https://console.anthropic.com/" target="_blank" rel="noopener">console.anthropic.com</a> and sign up</li>
+              <li>Verify email/phone if asked</li>
+              <li>Add a credit card under <em>Settings → Billing</em> and load <strong>$5</strong> minimum (~1,000 in-game calls)</li>
+              <li>Go to <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">API Keys</a>, click <em>Create Key</em>, name it "Sims 4 mod"</li>
+              <li>Copy the <code>sk-ant-api03-…</code> key immediately — you only see it once</li>
+            </ol>
+            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = claude</code></p>
+          </div>
+
+          <div class="provider-card">
+            <h4>💚 OpenAI (GPT)</h4>
+            <p>Works with any GPT model — <code>gpt-4o</code>, <code>gpt-4o-mini</code>, <code>gpt-4-turbo</code>.</p>
+            <ol class="api-substeps">
+              <li>Go to <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com/api-keys</a> and sign in (or sign up)</li>
+              <li>Add billing under <em>Settings → Billing</em>; load credit ($5 minimum)</li>
+              <li>On the API Keys page, click <em>Create new secret key</em></li>
+              <li>Copy the <code>sk-…</code> key — only shown once</li>
+            </ol>
+            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = openai</code> + set <code>default_model = gpt-4o-mini</code></p>
+          </div>
+
+          <div class="provider-card">
+            <h4>🔷 Google Gemini</h4>
+            <p>Has a generous free tier — you can play for a while without a card on file.</p>
+            <ol class="api-substeps">
+              <li>Go to <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> and sign in with a Google account</li>
+              <li>Click <em>Create API key</em> (free tier requires no billing setup)</li>
+              <li>Copy the <code>AIza…</code> key</li>
+            </ol>
+            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = gemini</code> + <code>default_model = gemini-1.5-flash</code> (free tier) or <code>gemini-1.5-pro</code></p>
+          </div>
+
+          <div class="provider-card">
+            <h4>🦙 Ollama (local — no API key)</h4>
+            <p>Runs the AI on your own computer. <strong>No API key. No internet. No cost.</strong> Slower than cloud providers and quality depends on what model your hardware can run.</p>
+            <ol class="api-substeps">
+              <li>Install <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a> for your OS</li>
+              <li>In a terminal: <code>ollama pull llama3.1</code> (or <code>mistral</code>, <code>qwen2.5</code>, <code>gemma2</code>, etc.)</li>
+              <li>Make sure the Ollama app is running (it serves on <code>http://localhost:11434</code> by default)</li>
+              <li>No key — leave <code>api_key</code> blank in the config</li>
+            </ol>
+            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = ollama</code> + <code>default_model = llama3.1</code> (whatever you pulled)</p>
+          </div>
+        </div>
+
+        <div class="warning-box" style="margin-top:1.25rem">
+          <strong>Treat your API key like a password.</strong> Anyone who has it can spend money on your account.
+          <ul>
+            <li>Save it in a <strong>password manager</strong> (1Password, Bitwarden, your browser) — not in a plain text file on your desktop.</li>
+            <li><strong>Never paste it in Discord, Reddit, GitHub, screenshots, or any chat</strong> — even private DMs aren't safe long-term.</li>
+            <li>If it ever leaks, revoke it on the provider's dashboard and make a new one.</li>
+          </ul>
         </div>
       </div>
     </li>
@@ -425,12 +461,29 @@
     <li>
       <div class="step-num">4</div>
       <div class="step-body">
-        <h3>Paste your API key into the config</h3>
-        <p>Open <code>claude_config.cfg</code> with any plain text editor (TextEdit, Notepad, VS Code &mdash; anything that saves plain text). Find this line near the top:</p>
-        <pre><code>api_key = YOUR_API_KEY_HERE</code></pre>
-        <p>Replace <code>YOUR_API_KEY_HERE</code> with the key you copied. It should look like:</p>
-        <pre><code>api_key = sk-ant-api03-Xy7…(your full key)…</code></pre>
-        <p>Save the file.</p>
+        <h3>Set your provider + API key in the config</h3>
+        <p>Open <code>llamafone.cfg</code> with any plain text editor (TextEdit, Notepad, VS Code — anything that saves plain text). Two lines to update near the top:</p>
+        <pre><code>provider = claude          # or: openai, gemini, ollama
+api_key  = YOUR_API_KEY_HERE</code></pre>
+        <p>Replace <code>YOUR_API_KEY_HERE</code> with the key you copied. Examples per provider:</p>
+        <pre><code>provider = claude
+api_key  = sk-ant-api03-Xy7…
+
+# or
+
+provider = openai
+api_key  = sk-proj-…
+
+# or
+
+provider = gemini
+api_key  = AIza…
+
+# or (no key needed)
+
+provider = ollama
+api_key  = </code></pre>
+        <p>Save the file. If you're on Ollama, also confirm <code>ollama_endpoint = http://localhost:11434</code> matches wherever your server runs.</p>
       </div>
     </li>
 
@@ -444,7 +497,7 @@
           <li>Script Mods Allowed</li>
         </ul>
         <p>Restart the game. When the main menu loads, you'll see a notification popup confirming the mod is active.</p>
-        <p>Inside any household, open the cheat console with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> and type <code>claude.status</code> to see all the commands and confirm everything's wired up.</p>
+        <p>Inside any household, open the cheat console with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> and type <code>llama.status</code> to see all the commands and confirm everything's wired up.</p>
       </div>
     </li>
   </ol>
@@ -457,7 +510,7 @@
     <details class="faq-item">
       <summary>Why use AI in The Sims 4?</summary>
       <div class="faq-body">
-        <p>For storytelling. The base game's phone calls and texts are limited dropdown options — useful for gameplay, repetitive for narrative. This mod replaces them with text written specifically for your household by Claude, a large language model by Anthropic.</p>
+        <p>For storytelling. The base game's phone calls and texts are limited dropdown options — useful for gameplay, repetitive for narrative. This mod replaces them with text written specifically for your household by the AI provider you configure (Claude, OpenAI, Gemini, or local Ollama).</p>
         <p>If you're a storytelling-focused player who's tired of the same scripted lines and wants your sims' relationships to feel alive, this is for you.</p>
       </div>
     </details>
@@ -466,30 +519,30 @@
       <summary>Does this affect my saved game?</summary>
       <div class="faq-body">
         <p>No. The mod doesn't modify your saves, sims, or world. It only <em>reads</em> game data (who lives in the household, their traits, mood, and relationships) and shows generated text in notification popups and phone dialogs.</p>
-        <p>Generated content is saved separately in <code>ClaudeAI_Journal.json</code> inside your Mods folder, so the AI can reference past interactions across sessions. Uninstalling the mod removes everything cleanly — delete the <code>.ts4script</code>, config, and journal files.</p>
+        <p>Generated content is saved separately in <code>Llamafone_Journal.json</code> inside your Mods folder, so the AI can reference past interactions across sessions. Uninstalling the mod removes everything cleanly — delete the <code>.ts4script</code>, config, and journal files.</p>
       </div>
     </details>
 
     <details class="faq-item">
-      <summary>What does Claude know about my sims?</summary>
+      <summary>What does the AI know about my sims?</summary>
       <div class="faq-body">
         <p>Just what's needed for the current command — names, ages, traits, mood, careers, aspirations, household members, and relationship history. Nothing personal about you, no real names beyond what your sims are named, no save file contents.</p>
-        <p>Per Anthropic's API terms, your prompts are not used to train models. The data goes from your computer directly to Anthropic's API and back — there's no middleman server.</p>
+        <p>Your prompts go from your computer directly to whichever AI provider you configured — there's no middleman server. Each provider has its own data-retention policy: <a href="https://www.anthropic.com/legal/commercial-terms" target="_blank" rel="noopener">Anthropic</a>, <a href="https://openai.com/policies/api-data-usage-policies" target="_blank" rel="noopener">OpenAI</a>, and <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener">Google</a> all state that paid API traffic is not used to train models. If you really don't want any data to leave your machine, use <strong>Ollama</strong> — it runs entirely locally.</p>
       </div>
     </details>
 
     <details class="faq-item">
-      <summary>Is my Anthropic API key safe?</summary>
+      <summary>Is my API key safe?</summary>
       <div class="faq-body">
-        <p>Yes. The key lives only in <code>claude_config.cfg</code> on your computer. It's never uploaded anywhere except to make the API call to Anthropic. The mod doesn't have a server, doesn't phone home, and isn't open to anyone else.</p>
-        <p>That said, treat the key like a password — don't paste it in screenshots, Discord, or screen-shares. If you ever suspect it leaked, revoke it at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com/settings/keys</a> and make a new one.</p>
+        <p>Yes. The key lives only in <code>llamafone.cfg</code> on your computer. It's never uploaded anywhere except to make the API call to whichever provider you chose. The mod doesn't have a server, doesn't phone home, and isn't open to anyone else.</p>
+        <p>That said, treat the key like a password — don't paste it in screenshots, Discord, or screen-shares. If you ever suspect it leaked, revoke it on your provider's dashboard and make a new one. (Or just switch to Ollama — no key, no exposure.)</p>
       </div>
     </details>
 
     <details class="faq-item">
       <summary>Can I disable specific features?</summary>
       <div class="faq-body">
-        <p>Yes. Everything is opt-in. Auto-events (random calls/texts/stories while you play) can be toggled with <code>claude.auto_events off</code> in the cheat console. You can also edit <code>claude_config.cfg</code> to disable specific auto-event types, change interval/chance, or restrict which sims can call you.</p>
+        <p>Yes. Everything is opt-in. Auto-events (random calls/texts/stories while you play) can be toggled with <code>llama.auto_events off</code> in the cheat console. You can also edit <code>llamafone.cfg</code> to disable specific auto-event types, change interval/chance, or restrict which sims can call you.</p>
         <p>If you don't run a command, nothing happens. The mod is dormant until you trigger it.</p>
       </div>
     </details>
@@ -504,19 +557,22 @@
     <details class="faq-item">
       <summary>How much does it cost?</summary>
       <div class="faq-body">
-        <p>You pay Anthropic directly for what the mod actually uses — there's no subscription to me or anyone else. Per-command estimates based on typical sim context size:</p>
+        <p>You pay your AI provider directly for what the mod actually uses — there's no subscription to me or anyone else. Cost depends on which provider you pick:</p>
         <table class="cost-table">
           <thead>
-            <tr><th>What</th><th>Model</th><th>Per call</th></tr>
+            <tr><th>Provider</th><th>Model</th><th>Per call</th></tr>
           </thead>
           <tbody>
-            <tr><td>Calls, texts, events, dialogue, goals</td><td>Haiku</td><td>~$0.005</td></tr>
-            <tr><td>Story, storyline, drama</td><td>Opus</td><td>~$0.05&ndash;0.15</td></tr>
-            <tr><td>Freeform chat</td><td>Opus</td><td>~$0.02&ndash;0.05</td></tr>
+            <tr><td>Anthropic Claude</td><td>claude-haiku-4-5</td><td>~$0.005</td></tr>
+            <tr><td>Anthropic Claude</td><td>claude-opus-4-8</td><td>~$0.05–0.15</td></tr>
+            <tr><td>OpenAI</td><td>gpt-4o-mini</td><td>~$0.003</td></tr>
+            <tr><td>OpenAI</td><td>gpt-4o</td><td>~$0.03</td></tr>
+            <tr><td>Google Gemini</td><td>gemini-1.5-flash</td><td><strong>free</strong> (rate limited)</td></tr>
+            <tr><td>Google Gemini</td><td>gemini-1.5-pro</td><td>~$0.01</td></tr>
+            <tr><td>Ollama (local)</td><td>any model</td><td><strong>free</strong> (uses your GPU)</td></tr>
           </tbody>
         </table>
-        <p>A typical session of ~30 Haiku commands costs around $0.15. A heavier session with multiple Opus story/storyline generations usually lands between $0.50 and $1.50. Most casual players spend a few dollars a month at most.</p>
-        <p>You can set every command to use Haiku in the config to cut costs by roughly 20× if you don't need long-form narration.</p>
+        <p>A typical session of ~30 calls on Claude Haiku or GPT-4o-mini lands around 15-25 cents. Heavier sessions with long-form storyline generation run a dollar or two on the premium models. Gemini's free tier covers most casual play. Ollama is fully free if you've got the hardware.</p>
       </div>
     </details>
 
@@ -530,7 +586,7 @@
     <details class="faq-item">
       <summary>What if I'm offline?</summary>
       <div class="faq-body">
-        <p>The mod needs an internet connection to call Claude's API. If you're offline, commands silently fail without interrupting your game — no crashes, no popups. Your sims still play normally; you just won't get AI-generated content during offline sessions.</p>
+        <p>The mod needs an internet connection to call the AI provider. If you're offline, commands silently fail without interrupting your game — no crashes, no popups. Your sims still play normally; you just won't get AI-generated content during offline sessions.</p>
       </div>
     </details>
 
@@ -553,21 +609,11 @@
     <li class="changelog-entry">
       <div class="changelog-date">June 27, 2026</div>
       <div class="changelog-body">
-        <h3>Recipient's world on the prompt (v2.0.1)</h3>
-        <ul>
-          <li>The sender always had a <code>lives in: &lt;world&gt;</code> line; the recipient didn't. Now they do. Without it, the model couldn't reliably tell whether a call/text was same-world or cross-world, which produced phrases like "ran into your mom at the store" when the two sims live in different worlds.</li>
-        </ul>
-      </div>
-    </li>
-
-    <li class="changelog-entry">
-      <div class="changelog-date">June 27, 2026</div>
-      <div class="changelog-body">
         <h3>The mod is in your sim's phone now (v2.0.0)</h3>
         <ul>
-          <li><strong>Three new items under Phone &gt; Social</strong> — <em>Call Someone</em>, <em>Send Text</em>, <em>Settings</em>. No cheat console for daily use. Picking Call or Text opens a sim picker scoped to your contacts, then a multi-line text area where you type what you want to say; Claude crafts the message in the recipient's voice. Cheat commands still work alongside.</li>
-          <li><strong>Reply button on incoming dialogs opens a text input</strong> instead of dumping a "type <code>claude.reply</code> in the console" hint. You type your reply right there in the popup and the conversation continues.</li>
-          <li><strong>In-game Settings panel</strong> — toggles for auto-events, reply delays, ghost contacts on phone, plus numeric inputs for chance and interval. Changes save instantly to <code>claude_config.cfg</code> (preserving your comments) and apply without reloading the save. Static settings (API key, models, language) still live in the .cfg file.</li>
+          <li><strong>Three new items under Phone &gt; Social</strong> — <em>Call Someone</em>, <em>Send Text</em>, <em>Settings</em>. No cheat console for daily use. Picking Call or Text opens a sim picker scoped to your contacts, then a multi-line text area where you type what you want to say; the AI crafts the message in the recipient's voice. Cheat commands still work alongside.</li>
+          <li><strong>Reply button on incoming dialogs opens a text input</strong> instead of dumping a "type <code>llama.reply</code> in the console" hint. You type your reply right there in the popup and the conversation continues.</li>
+          <li><strong>In-game Settings panel</strong> — toggles for auto-events, reply delays, ghost contacts on phone, plus numeric inputs for chance and interval. Changes save instantly to <code>llamafone.cfg</code> (preserving your comments) and apply without reloading the save. Static settings (API key, models, language) still live in the .cfg file.</li>
           <li><strong>Compositions get more room</strong> — the Call/Text/Reply text inputs are now multi-line text areas instead of single-line boxes, so you can write a paragraph if you want.</li>
           <li><strong>Cross-platform build script</strong> — auto-install now finds your Mods folder under Steam Proton, Lutris, Heroic, and generic Wine prefixes. End users don't need any of this — releases ship the compiled artifacts.</li>
         </ul>
@@ -609,30 +655,6 @@
       </div>
     </li>
 
-    <li class="changelog-entry">
-      <div class="changelog-date">June 24, 2026</div>
-      <div class="changelog-body">
-        <h3>Enemies actually act like enemies (v1.1.1)</h3>
-        <ul>
-          <li>When the current friendship label disagrees with past entries (e.g. "enemies" now but the journal is full of friendly exchanges), the prompt annotates the journal block with a note that the warmth is obsolete — predates the falling-out.</li>
-          <li>Specifically fixes the case where an enemy sim still texts "congrats!" or "rooting for you" because the journal contained older friendly exchanges.</li>
-          <li>Doesn't touch storyline continuity — the model still sees the full recent history, just told to read it through the lens of the current relationship.</li>
-        </ul>
-      </div>
-    </li>
-
-    <li class="changelog-entry">
-      <div class="changelog-date">June 22, 2026</div>
-      <div class="changelog-body">
-        <h3>"Wait, who is this?"</h3>
-        <ul>
-          <li>Text a sim you barely know (friendship close to zero, slightly positive or slightly negative) and they'll reply confused instead of warmly — "sorry, is this the right number?", "do I know you?", "how'd you get my number?". The script remembers that you've met once, but the receiving sim is allowed to be foggy on the details.</li>
-          <li>Family always remembers family — a parent or sibling with low friendship still texts like family, not a stranger.</li>
-          <li>Same change applies to plausible-contact filtering: on-lot sims and weird cross-generational acquaintances no longer call you out of nowhere.</li>
-        </ul>
-      </div>
-    </li>
-
   </ol>
 
   <p class="changelog-footer">
@@ -662,6 +684,12 @@
       <div class="roadmap-status status-planned">Planned</div>
       <h3>Custom relationship overrides</h3>
       <p>Tell the mod about dynamics the game doesn't natively label. Mark a sim as your mentor, your daughter's older boyfriend, your estranged half-sibling, your childhood best friend, your work nemesis — and the AI will write calls and texts that reflect that, even when the in-game relationship data is just "acquaintance."</p>
+    </li>
+
+    <li class="roadmap-card">
+      <div class="roadmap-status status-planned">Planned</div>
+      <h3>Group texts</h3>
+      <p>Multi-sim chats where everyone replies in their own voice. Pick two or three sims, type the message, and watch the group chat unfold — siblings ribbing each other, the friend group planning a night out, parents coordinating around the kids. Each reply lands in character based on their relationship to you AND to each other.</p>
     </li>
 
     <li class="roadmap-card roadmap-card-cta">
@@ -710,8 +738,8 @@
 <footer class="site-footer">
   <div class="container footer-inner">
     <div>
-      <strong>Claude AI for The Sims 4</strong>
-      <p class="muted">An open-source script mod. Not affiliated with EA, Maxis, or Anthropic.</p>
+      <strong>Llamafone — AI for The Sims 4</strong>
+      <p class="muted">An open-source script mod. Not affiliated with EA, Maxis, Anthropic, OpenAI, Google, or Ollama.</p>
     </div>
     <div class="footer-links">
       <a href="https://github.com/morganparadis/claude-for-sims-4">GitHub</a>

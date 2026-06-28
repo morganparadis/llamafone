@@ -321,7 +321,7 @@ STBL_INSTANCE = 0x0080000000000001
 def main():
     repo = Path(__file__).resolve().parent.parent
     package_src = repo / "package_src"
-    out_path = repo / "ClaudeAI.package"
+    out_path = repo / "Llamafone.package"
 
     if not package_src.is_dir():
         print(f"ERROR: {package_src} not found")

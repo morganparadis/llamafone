@@ -4,7 +4,7 @@ Uses the fast model for quick generation.
 
 Calls show as modal phone dialogs with the caller's portrait (ring).
 Texts show as phone dialogs with buzz.
-Players can reply with claude.reply <message> to continue the conversation.
+Players can reply with llama.reply <message> to continue the conversation.
 """
 import random
 import threading
@@ -19,7 +19,7 @@ _conversations = {}
 # Most recent recipient that received a message (fallback if no specific signal)
 _last_active_recipient_id = None
 # Set when the player clicks the Reply button on a phone dialog — tells the next
-# claude.reply which conversation to continue.
+# llama.reply which conversation to continue.
 _pending_reply_recipient_id = None
 
 
@@ -47,7 +47,7 @@ def _show_reply_input_dialog(caller_sim_info, anchor_sim):
             f"Reply to {other_name}" if other_name else "Reply"
         )
         loc_text = LocalizationHelperTuning.get_raw_text(
-            "Type what you want to say. Claude will turn it into a message."
+            "Type what you want to say. Llamafone will craft a reply."
         )
         loc_send = LocalizationHelperTuning.get_raw_text("Send")
         loc_cancel = LocalizationHelperTuning.get_raw_text("Cancel")
@@ -160,10 +160,10 @@ def _show_phone_dialog(caller_sim_info, title, message, ring=True, recipient_sim
                     except Exception:
                         pass
                     sims4.commands.output(
-                        f"[Claude AI] Reply to {other_name} (as {anchor_sim.first_name}):", None
+                        f"[Llamafone] Reply to {other_name} (as {anchor_sim.first_name}):", None
                     )
                     sims4.commands.output(
-                        "[Claude AI]   claude.reply <your message>", None
+                        "[Llamafone]   llama.reply <your message>", None
                     )
             except Exception:
                 pass
@@ -285,6 +285,7 @@ a season label like "(in 2 weeks, Winter)", frame timing by the season rather th
 the week count.
 
 # Hard rules
+- NO EMOJI. Plain text only -- no Unicode emoji, no emoticons (":)", "<3", etc), no decorative symbols. Local AI models like Ollama mangle emoji into garbage in the game UI, so the mod strips them out anyway. Skip them entirely.
 - The caller and player are on GOOD TERMS unless friendship is negative or the journal \
   shows actual conflict. Never invent past conflict. BANNED phrases (and any variants): \
   "things got weird between us", "things have been weird", "things are weird between us", \
@@ -402,13 +403,13 @@ CURRENT status overrides past tone. By tier:
   An enemy responding to good news is sarcastic or competitive, not supportive.
 
 Age (match the sender's age stage, but family role wins where they conflict):
-- Teen: lowercase, abbreviations, lots of emoji. "omggg no way 😭"
+- Teen: lowercase, abbreviations, dramatic slang. "omggg no way" / "stoppp" / "dyinggg"
 - Young Adult: casual but articulate. "hey are you free tonight?"
-- Adult: complete sentences, minimal emoji, no youth slang. "Hi! Are you free this weekend?"
+- Adult: complete sentences, no youth slang. "Hi! Are you free this weekend?"
 - Elder: formal, warm, sometimes long-winded. "Hello dear, I hope you're well."
 
 Traits add flavor on top (Hot-Headed = caps, Gloomy = ellipses, Snob = condescending grammar, \
-Goofball = playful, Romantic = hearts, Loner = terse, Evil = passive aggressive). Traits \
+Goofball = playful, Romantic = soft language, Loner = terse, Evil = passive aggressive). Traits \
 do NOT override the family-role register above.
 
 # What to write
@@ -451,6 +452,7 @@ a season label like "(in 2 weeks, Winter)", frame timing by the season rather th
 the week count.
 
 # Hard rules
+- NO EMOJI. Plain text only -- no Unicode emoji, no emoticons (":)", "<3", etc), no decorative symbols. Local AI models like Ollama mangle emoji into garbage in the game UI, so the mod strips them out anyway. Skip them entirely.
 - The sender and player are on GOOD TERMS unless friendship is negative or the journal \
   shows actual conflict. Never invent past conflict. BANNED phrases (and any variants): \
   "things got weird between us", "things have been weird", "things are weird between us", \
@@ -556,6 +558,7 @@ a season label like "(in 2 weeks, Winter)", frame timing by the season rather th
 the week count.
 
 # Hard rules
+- NO EMOJI. Plain text only -- no Unicode emoji, no emoticons (":)", "<3", etc), no decorative symbols. Local AI models like Ollama mangle emoji into garbage in the game UI, so the mod strips them out anyway. Skip them entirely.
 - Family relationships are NEVER romantic, regardless of romance score.
 - No profanity or explicit content.
 - Don't assume same last name = related or in same household.
@@ -767,7 +770,7 @@ def _log_household_inspection():
     why no eligible recipients were found. Called only when the picker fails."""
     try:
         import os, datetime, services
-        path = os.path.join(os.path.expanduser("~"), "Documents", "ClaudeAI_Log.txt")
+        path = os.path.join(os.path.expanduser("~"), "Documents", "Llamafone_Log.txt")
         ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         hh = services.active_household()
         with open(path, "a", encoding="utf-8") as f:
@@ -1022,7 +1025,7 @@ def _log_picker(message):
     """Diagnostic logger for the contact picker. Goes to the main log file."""
     try:
         import os, datetime
-        path = os.path.join(os.path.expanduser("~"), "Documents", "ClaudeAI_Log.txt")
+        path = os.path.join(os.path.expanduser("~"), "Documents", "Llamafone_Log.txt")
         with open(path, "a", encoding="utf-8") as f:
             ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             f.write(f"[{ts}] [picker] {message}\n")
@@ -1231,7 +1234,7 @@ def _describe_recipient(recipient_sim, contact=None):
     except Exception:
         pass
 
-    # Household members the recipient lives with — so Claude knows about kids/spouses/etc
+    # Household members the recipient lives with — so the AI knows about kids/spouses/etc
     # who might come up in conversation but aren't in the contact's relationship tracker.
     household_lines = []
     contact_si = contact.get("sim_info") if contact else None
@@ -1574,7 +1577,7 @@ def _get_mutual_contacts(contact, recipient=None):
                 world = _get_sim_home_world(si)
                 world_part = f", lives in {world}" if world else ", world unknown — treat as long-distance only"
 
-                # Ghost marker — Claude must NEVER write about ghosts as if alive
+                # Ghost marker — the AI must NEVER write about ghosts as if alive
                 ghost_tag = ""
                 if _is_ghost(si):
                     ghost_tag = " [DECEASED — only reference in past tense or as a memory]"
@@ -2185,7 +2188,7 @@ def _describe_relationship(contact, recipient=None):
             parts.append(f"Romantic feelings: {r_label}")
 
     # If the relationship has explicitly changed (breakup, divorce, etc.) OR romance
-    # has gone negative, surface that as a clear warning so Claude doesn't continue
+    # has gone negative, surface that as a clear warning so the AI doesn't continue
     # treating them like a current partner based on past chat history.
     status = contact.get("status", "") or ""
     status_low = status.lower().replace("_", "").replace(" ", "")
@@ -2262,7 +2265,7 @@ def _friendship_label(score):
 def _romance_label(score):
     """Convert a Sims 4 romance score to a label.
     Positive = degrees of attraction. Negative = degrees of romantic friction
-    (post-breakup tension, bitterness, etc.) — important to surface so Claude
+    (post-breakup tension, bitterness, etc.) — important to surface so the AI
     doesn't treat an ex like a current crush.
     """
     if score is None or score == 0:
@@ -2310,14 +2313,14 @@ def _start_conversation(contact, first_message, recipient_sim=None):
 
 def _mark_reply_intent(recipient_sim):
     """Called when the player clicks the Reply button on a phone dialog.
-    Locks in which conversation the next claude.reply should target."""
+    Locks in which conversation the next llama.reply should target."""
     global _pending_reply_recipient_id
     if recipient_sim and getattr(recipient_sim, "sim_id", None):
         _pending_reply_recipient_id = recipient_sim.sim_id
 
 
 def _take_conversation_for_reply():
-    """Pick the right conversation when the player runs claude.reply.
+    """Pick the right conversation when the player runs llama.reply.
     Priority:
       1. Conversation flagged by the most recent Reply-button click (cleared after use).
       2. Conversation for the currently selected/active sim.
@@ -2342,7 +2345,7 @@ def _take_conversation_for_reply():
 
 
 def get_active_conversation():
-    """Return the conversation that claude.reply would currently target, or None.
+    """Return the conversation that llama.reply would currently target, or None.
     NOTE: does not consume the pending-reply flag."""
     if _pending_reply_recipient_id and _pending_reply_recipient_id in _conversations:
         return _conversations[_pending_reply_recipient_id]
@@ -2425,7 +2428,7 @@ def generate_call(callback=None, output=None):
         if callback:
             callback(text, error)
 
-    return api_client.call_claude_async(
+    return api_client.call_ai_async(
         [{"role": "user", "content": prompt}],
         system=system,
         use_fast_model=True,
@@ -2499,7 +2502,7 @@ def generate_text(callback=None, output=None):
         if callback:
             callback(text, error)
 
-    return api_client.call_claude_async(
+    return api_client.call_ai_async(
         [{"role": "user", "content": prompt}],
         system=system,
         use_fast_model=True,
@@ -2514,7 +2517,7 @@ def generate_reply(player_message, callback=None, output=None):
     """
     conversation = _take_conversation_for_reply()
     if not conversation:
-        msg = "No active conversation. Use claude.call or claude.text first to start one."
+        msg = "No active conversation. Use llama.call or llama.text first to start one."
         if callback:
             callback(None, msg)
         elif output:
@@ -2607,7 +2610,7 @@ def generate_reply(player_message, callback=None, output=None):
         else:
             _show_reply()
 
-    return api_client.call_claude_async(
+    return api_client.call_ai_async(
         [{"role": "user", "content": prompt}],
         system=system,
         use_fast_model=True,
@@ -2698,7 +2701,7 @@ def send_text(contact, player_message, callback=None, output=None):
         else:
             _show_reply()
 
-    return api_client.call_claude_async(
+    return api_client.call_ai_async(
         [{"role": "user", "content": prompt}],
         system=system,
         use_fast_model=True,
@@ -2768,7 +2771,7 @@ def send_call(contact, player_topic, callback=None, output=None):
         if callback:
             callback(text, error)
 
-    return api_client.call_claude_async(
+    return api_client.call_ai_async(
         [{"role": "user", "content": prompt}],
         system=system,
         use_fast_model=True,

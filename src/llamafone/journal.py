@@ -1,9 +1,9 @@
 """
 Persistent journal — saves generated stories, events, and dialogue to a JSON file
-so Claude can reference past events across play sessions.
+so the AI can reference past events across play sessions.
 
-The journal file lives in the same folder as claude_config.cfg (your Mods folder):
-  ClaudeAI_Journal.json
+The journal file lives in the same folder as llamafone.cfg (your Mods folder):
+  Llamafone_Journal.json
 
 Uses an in-memory cache so the file is only read from disk once, then kept in
 memory. Writes still go to disk immediately for persistence.
@@ -15,7 +15,7 @@ import os
 
 from . import config
 
-_JOURNAL_FILENAME = "ClaudeAI_Journal.json"
+_JOURNAL_FILENAME = "Llamafone_Journal.json"
 _MAX_ENTRIES = 150          # entries kept on disk before oldest are pruned
 _PROMPT_ENTRIES = 6         # how many recent entries to include in prompts
 _PREVIEW_CHARS = 220        # max chars per entry shown in prompts
@@ -188,12 +188,12 @@ def format_sim_history_for_prompt(sim_name, n=6, recipient_name=None, trailing_n
 
 
 def format_recent_for_display(n=10):
-    """Longer version for the claude.journal command — shows more content."""
+    """Longer version for the llama.journal command — shows more content."""
     entries = get_recent(n)
     if not entries:
         return "Journal is empty. Generate some stories or events to start building history!"
 
-    lines = [f"=== Claude AI Journal ({get_entry_count()} total entries) ==="]
+    lines = [f"=== Llamafone Journal ({get_entry_count()} total entries) ==="]
     for e in reversed(entries):  # newest first for display
         try:
             dt = datetime.datetime.fromisoformat(e["timestamp"])

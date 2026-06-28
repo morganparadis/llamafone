@@ -6,7 +6,7 @@ Sims 4 mods can't synthesise a brand-new SuperInteraction at runtime
 from pure Python -- the game's tuning pipeline requires an XML tuning
 backed by a .package. What we control from Python is which OBJECTS the
 tuned interaction shows up on. Our .package ships three interactions
-(Claude_Call, Claude_Text, Claude_Settings) whose `category` points at
+(Llamafone_Call, Llamafone_Text, Llamafone_Settings) whose `category` points at
 the in-game phoneCategory_Social tile (instance 0x19DBF). This module
 appends them to the Sim object tuning's `_phone_affordances` after
 instance load so they appear under Phone > Social.
@@ -19,16 +19,16 @@ import datetime
 # INTERACTION manager rather than by GUID so the same Python keeps
 # working if the package is ever regenerated with different IDs.
 _PHONE_INTERACTION_NAMES = (
-    "Claude_Call",
-    "Claude_Text",
-    "Claude_Settings",
+    "Llamafone_Call",
+    "Llamafone_Text",
+    "Llamafone_Settings",
 )
 
 
 def _log(msg):
     """Append to the main mod log so we can tell what got injected."""
     try:
-        path = os.path.join(os.path.expanduser("~"), "Documents", "ClaudeAI_Log.txt")
+        path = os.path.join(os.path.expanduser("~"), "Documents", "Llamafone_Log.txt")
         ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(path, "a", encoding="utf-8") as f:
             f.write(f"[{ts}] [phone_ui] {msg}\n")
@@ -98,7 +98,7 @@ def _append_affordance(obj_tuning, new_aff, attr_name="_phone_affordances"):
 
 
 def _inject_affordances():
-    """Run after all OBJECT tunings are loaded. Look up each Claude phone
+    """Run after all OBJECT tunings are loaded. Look up each Llamafone phone
     interaction by name and graft it onto every Sim object tuning's
     `_phone_affordances`."""
     tunings = []
@@ -110,7 +110,7 @@ def _inject_affordances():
         tunings.append((tuning_name, cls))
 
     if not tunings:
-        _log("Inject aborted -- no Claude phone interactions loaded from .package.")
+        _log("Inject aborted -- no Llamafone phone interactions loaded from .package.")
         return
 
     try:
@@ -138,7 +138,7 @@ def _inject_affordances():
 
 def register():
     """Register the inject callback with the OBJECT instance manager.
-    Called once during mod init (from claude_ai.__init__)."""
+    Called once during mod init (from llamafone.__init__)."""
     try:
         import services
         from sims4.resources import Types

@@ -56,7 +56,7 @@ def generate_story_update(callback=None):
         if callback:
             callback(text, error)
 
-    return api_client.call_claude_async(
+    return api_client.call_ai_async(
         [{"role": "user", "content": prompt}],
         system=system,
         callback=_callback_with_journal,
@@ -110,7 +110,7 @@ def generate_relationship_drama(sim1_name=None, sim2_name=None, callback=None):
         if callback:
             callback(text, error)
 
-    return api_client.call_claude_async(
+    return api_client.call_ai_async(
         [{"role": "user", "content": prompt}],
         system=system,
         callback=_callback_with_journal,
@@ -156,7 +156,7 @@ def generate_storyline(theme=None, callback=None):
         if callback:
             callback(text, error)
 
-    return api_client.call_claude_async(
+    return api_client.call_ai_async(
         [{"role": "user", "content": prompt}],
         system=system,
         callback=_callback_with_journal,

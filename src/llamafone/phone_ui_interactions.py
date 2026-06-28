@@ -1,5 +1,5 @@
 """
-Phone-wheel interactions for Claude AI.
+Phone-wheel interactions for Llamafone.
 
 We route through the in-game Social category on the phone (instance
 0x19DBF, "phoneCategory_Social") instead of authoring our own custom
@@ -35,7 +35,7 @@ _MESSAGE_INPUT = "message"
 def _log(msg):
     """Append to the mod log so we can debug what's happening in-game."""
     try:
-        path = os.path.join(os.path.expanduser("~"), "Documents", "ClaudeAI_Log.txt")
+        path = os.path.join(os.path.expanduser("~"), "Documents", "Llamafone_Log.txt")
         ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(path, "a", encoding="utf-8") as f:
             f.write(f"[{ts}] [phone_ui_interact] {msg}\n")
@@ -70,7 +70,7 @@ def _gather_contact_choices(main_sim_info):
     """
     Build a list of (sim_id, contact_dict) pairs for sims the player can
     plausibly contact. Uses sim_context.get_main_sim_network() so the
-    list matches what claude.text / claude.sendtext already consider --
+    list matches what llama.text / llama.sendtext already consider --
     teen+ household + relationships above the friendship threshold.
     """
     if not main_sim_info:
@@ -318,7 +318,7 @@ def _start_outbound(kind, sim_info):
         return
 
 
-class ClaudeCallInteraction(_ClaudePhoneInteractionBase):
+class LlamafoneCallInteraction(_ClaudePhoneInteractionBase):
     """Phone > Social > Claude Call -- pick a recipient, type a topic,
     Claude crafts and delivers the call."""
 
@@ -327,7 +327,7 @@ class ClaudeCallInteraction(_ClaudePhoneInteractionBase):
         _start_outbound("call", sim_info)
 
 
-class ClaudeTextInteraction(_ClaudePhoneInteractionBase):
+class LlamafoneTextInteraction(_ClaudePhoneInteractionBase):
     """Phone > Social > Claude Text -- pick a recipient, type a message,
     Claude crafts and sends the text."""
 
@@ -341,10 +341,10 @@ class ClaudeTextInteraction(_ClaudePhoneInteractionBase):
 # their current values. Tapping a row toggles a bool / opens a text-input
 # dialog for a numeric value, then the picker re-opens to show the update.
 #
-# All values write to ClaudeAI_Settings.json via config.set_setting(), which
+# All values write to Llamafone_Settings.json via config.set_setting(), which
 # the existing get_*() helpers in config.py and auto_events.py prefer over
 # the static .cfg file. Static values (API key, model names, language) are
-# intentionally left out -- those still live in claude_config.cfg because
+# intentionally left out -- those still live in llamafone.cfg because
 # editing them in-game adds little value and increases the surface area for
 # bad input.
 # ---------------------------------------------------------------------------
@@ -448,7 +448,7 @@ def _show_settings_picker(anchor_sim):
             "Pick a setting to change. Toggles flip on/off; numeric "
             "settings open a text box. Changes save instantly and apply "
             "without reloading. Static settings (API key, model, language) "
-            "still live in claude_config.cfg."
+            "still live in llamafone.cfg."
         )
         loc_ok = LocalizationHelperTuning.get_raw_text("Change")
         loc_cancel = LocalizationHelperTuning.get_raw_text("Done")
@@ -602,12 +602,12 @@ def _show_int_input(anchor_sim, setting):
         return False
 
 
-class ClaudeSettingsInteraction(_ClaudePhoneInteractionBase):
+class LlamafoneSettingsInteraction(_ClaudePhoneInteractionBase):
     """Phone > Social > Claude Settings -- opens an in-game settings
     panel listing the runtime-toggleable settings (auto events on/off,
     chance, interval, reply delay). Selecting a row flips a bool or
     opens a text-input dialog for a numeric value; changes are saved
-    to ClaudeAI_Settings.json and apply immediately without reloading
+    to Llamafone_Settings.json and apply immediately without reloading
     the save."""
 
     def _fire(self):

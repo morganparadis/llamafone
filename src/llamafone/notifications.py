@@ -67,7 +67,7 @@ def show(title, message, output=None):
     """
     _show_game_notification(title, message)
 
-    full_text = f"[Claude AI - {title}]\n{message}"
+    full_text = f"[Llamafone - {title}]\n{message}"
     if output:
         output(full_text)
     else:

@@ -1606,56 +1606,76 @@ _WORLD_NAMES = {
     # EP01 Get to Work
     "magnoliapromenade": "Magnolia Promenade",
     "ep01": "Magnolia Promenade",
-    # EP02 Get Together
+    # EP02 Get Together -- internal region is "NorthEurope".
     "windenburg": "Windenburg",
+    "northeurope": "Windenburg",
     "ep02": "Windenburg",
-    # EP03 City Living
+    # EP03 City Living -- internal region is "CityLife".
     "sanmyshuno": "San Myshuno",
+    "citylife": "San Myshuno",
     "ep03": "San Myshuno",
-    # EP04 Cats & Dogs
+    # EP04 Cats & Dogs -- internal region is "PetWorld".
     "brindletonbay": "Brindleton Bay",
+    "petworld": "Brindleton Bay",
     "ep04": "Brindleton Bay",
     # EP05 Seasons (no new world)
-    # EP06 Get Famous
+    # EP06 Get Famous -- internal region is "FameWorld".
     "delsolvalley": "Del Sol Valley",
+    "fameworld": "Del Sol Valley",
     "ep06": "Del Sol Valley",
-    # EP07 Island Living
+    # EP07 Island Living -- internal region is "IslandWorld".
     "sulani": "Sulani",
+    "islandworld": "Sulani",
     "ep07": "Sulani",
-    # EP08 Discover University
+    # EP08 Discover University -- internal region is "UniversityWorld".
     "britechester": "Britechester",
+    "universityworld": "Britechester",
     "ep08": "Britechester",
-    # EP09 Eco Lifestyle
+    # EP09 Eco Lifestyle -- internal region is "EcoWorld".
     "evergreenharbor": "Evergreen Harbor",
+    "ecoworld": "Evergreen Harbor",
     "ep09": "Evergreen Harbor",
-    # EP10 Snowy Escape
+    # EP10 Snowy Escape -- internal region is "MountainWorld".
     "mtkomorebi": "Mt. Komorebi",
+    "mountainworld": "Mt. Komorebi",
     "ep10": "Mt. Komorebi",
-    # EP11 Cottage Living
+    # EP11 Cottage Living -- internal region is "CottageWorld".
     "henfordonbagley": "Henford-on-Bagley",
     "henford": "Henford-on-Bagley",
+    "cottageworld": "Henford-on-Bagley",
     "ep11": "Henford-on-Bagley",
-    # EP12 High School Years
+    # EP12 High School Years -- internal region is "HighSchoolWorld".
     "copperdale": "Copperdale",
+    "highschoolworld": "Copperdale",
     "ep12": "Copperdale",
-    # EP13 Growing Together
+    # EP13 Growing Together -- internal region is "BayArea".
     "sansequoia": "San Sequoia",
+    "bayarea": "San Sequoia",
     "ep13": "San Sequoia",
-    # EP14 Horse Ranch
+    # EP14 Horse Ranch -- internal region is "EP14World".
     "chestnutridge": "Chestnut Ridge",
+    "ep14world": "Chestnut Ridge",
     "ep14": "Chestnut Ridge",
-    # EP15 For Rent
+    # EP15 For Rent -- internal region is "MultiUnitWorld".
     "tomarang": "Tomarang",
+    "multiunitworld": "Tomarang",
     "ep15": "Tomarang",
-    # EP16 Life & Death
+    # EP16 Life & Death -- internal region is "EP16World".
     "ravenwood": "Ravenwood",
+    "ep16world": "Ravenwood",
     "ep16": "Ravenwood",
-    # EP17 Lovestruck
+    # EP17 Lovestruck -- internal region is "EP17World".
     "ciudadenamorada": "Ciudad Enamorada",
+    "ep17world": "Ciudad Enamorada",
     "ep17": "Ciudad Enamorada",
-    # EP18 Businesses & Hobbies
+    # EP18 Businesses & Hobbies -- internal region is "EP18World".
     "nordhaven": "Nordhaven",
+    "ep18world": "Nordhaven",
     "ep18": "Nordhaven",
+    # EP20 Adventure Awaits -- internal region is "EP20World".
+    "gibbipoint": "Gibbi Point",
+    "ep20world": "Gibbi Point",
+    "ep20": "Gibbi Point",
     # GP packs with worlds
     "granitefalls": "Granite Falls",
     "outdoorretreat": "Granite Falls",
@@ -1723,29 +1743,109 @@ def _friendly_world_name(raw):
     return None
 
 
-def _get_sim_home_world(sim_info):
-    """Get the world/neighborhood name where a sim lives."""
+def _homeworld_log(message):
+    """Diagnostic log for home-world resolution. Helps debug cases where
+    a played sim's world isn't resolving (apartments, sub-region zones)."""
     try:
-        household = sim_info.household
-        if household:
-            home_zone_id = household.home_zone_id
-            if home_zone_id:
-                try:
-                    from world.region import get_region_instance_from_zone_id
-                    region = get_region_instance_from_zone_id(home_zone_id)
-                    if region:
-                        name = getattr(region, "__name__", "") or str(region)
-                        cleaned = (name
-                            .replace("Region_", "")
-                            .replace("region_", "")
-                            .replace("_", " ")
-                            .strip())
-                        if cleaned:
-                            return _friendly_world_name(cleaned)
-                except Exception:
-                    pass
+        import os, datetime
+        path = os.path.join(os.path.expanduser("~"), "Documents", "Llamafone_Log.txt")
+        with open(path, "a", encoding="utf-8") as f:
+            ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"[{ts}] [homeworld] {message}\n")
     except Exception:
         pass
+
+
+def _world_name_from_zone_id(zone_id, debug_label=""):
+    """Resolve a zone_id to a friendly world name, or None."""
+    if not zone_id:
+        return None
+    try:
+        from world.region import get_region_instance_from_zone_id
+        region = get_region_instance_from_zone_id(zone_id)
+        if not region:
+            _homeworld_log(f"{debug_label} zone_id={zone_id}: get_region_instance_from_zone_id returned None")
+            return None
+        name = getattr(region, "__name__", "") or str(region)
+        cleaned = (name
+            .replace("Region_", "")
+            .replace("region_", "")
+            .replace("_", " ")
+            .strip())
+        friendly = _friendly_world_name(cleaned) if cleaned else None
+        if not friendly:
+            _homeworld_log(
+                f"{debug_label} zone_id={zone_id} region.__name__={name!r} "
+                f"cleaned={cleaned!r} -> _friendly_world_name returned None"
+            )
+        return friendly
+    except Exception as e:
+        _homeworld_log(f"{debug_label} zone_id={zone_id}: exception {type(e).__name__}: {e}")
+        return None
+
+
+def _get_sim_home_world(sim_info):
+    """Get the world/neighborhood name where a sim lives.
+
+    Tries `sim_info.household` first (works for active household members),
+    then falls back to looking up `sim_info.household_id` via the household
+    manager (works for NPC/townie sims whose Household object isn't fully
+    loaded into the active session). Falls back further to the sim's
+    persisted `_zone_id` (their last known zone) as a last resort.
+    """
+    if sim_info is None:
+        return None
+
+    name_for_log = ""
+    try:
+        name_for_log = f"sim={getattr(sim_info, 'first_name', '?')} {getattr(sim_info, 'last_name', '?')}"
+    except Exception:
+        pass
+
+    # Path 1: direct household reference (active household, played sims).
+    try:
+        household = getattr(sim_info, "household", None)
+        if household is not None:
+            home_zone_id = getattr(household, "home_zone_id", None)
+            world = _world_name_from_zone_id(home_zone_id, debug_label=f"{name_for_log} path=household")
+            if world:
+                return world
+        else:
+            _homeworld_log(f"{name_for_log} path=household: sim_info.household is None")
+    except Exception as e:
+        _homeworld_log(f"{name_for_log} path=household: exception {type(e).__name__}: {e}")
+
+    # Path 2: look up by household_id (works for NPCs/townies).
+    try:
+        hh_id = getattr(sim_info, "household_id", None)
+        if hh_id:
+            import services
+            hh_mgr = services.household_manager()
+            if hh_mgr:
+                household = hh_mgr.get(hh_id)
+                if household is not None:
+                    home_zone_id = getattr(household, "home_zone_id", None)
+                    world = _world_name_from_zone_id(home_zone_id, debug_label=f"{name_for_log} path=hh_id={hh_id}")
+                    if world:
+                        return world
+                else:
+                    _homeworld_log(f"{name_for_log} path=hh_id={hh_id}: household_manager.get() returned None")
+        else:
+            _homeworld_log(f"{name_for_log} path=hh_id: household_id is missing")
+    except Exception as e:
+        _homeworld_log(f"{name_for_log} path=hh_id: exception {type(e).__name__}: {e}")
+
+    # Path 3: sim's own persisted zone_id (last known location).
+    try:
+        sim_zone_id = getattr(sim_info, "zone_id", None) or getattr(sim_info, "_zone_id", None)
+        if sim_zone_id:
+            world = _world_name_from_zone_id(sim_zone_id, debug_label=f"{name_for_log} path=sim.zone_id")
+            if world:
+                return world
+    except Exception as e:
+        _homeworld_log(f"{name_for_log} path=sim.zone_id: exception {type(e).__name__}: {e}")
+
+    _homeworld_log(f"{name_for_log}: ALL PATHS FAILED -- returning None")
     return None
 
 
@@ -1759,82 +1859,247 @@ def _season_context():
     return f"\n[SEASON: {season}]"
 
 
-# Static climate descriptors per world. Used so the AI knows whether a caller
-# is calling from somewhere tropical, snowy, gloomy, etc. -- Sims 4 only
-# simulates weather in the active world, so for off-world callers this is
-# the best signal we have.
-_WORLD_CLIMATES = {
-    "Willow Creek": "humid Southern (mild winters, hot humid summers)",
-    "Oasis Springs": "desert (hot dry days, mild winters)",
-    "Newcrest": "temperate (mild four seasons)",
-    "Magnolia Promenade": "humid Southern (mild)",
-    "Windenburg": "temperate European (cool, often overcast, snowy winters)",
-    "San Myshuno": "humid continental (hot summers, cold winters)",
-    "Brindleton Bay": "New England coastal (cold winters, warm summers, foggy)",
-    "Del Sol Valley": "Mediterranean (warm, dry, sunny)",
-    "Sulani": "tropical (warm year-round, frequent rain, occasional storms)",
-    "Britechester": "temperate college town (mild seasons, frequent rain)",
-    "Evergreen Harbor": "Pacific Northwest (cool, often rainy, overcast)",
-    "Mt. Komorebi": "cold alpine (snowy winters, mild summers)",
-    "Henford-on-Bagley": "mild English countryside (cool, wet, foggy mornings)",
-    "Copperdale": "temperate small-town American (four full seasons)",
-    "San Sequoia": "Northern Californian (mild, occasional fog)",
-    "Chestnut Ridge": "rural plains (hot summers, cold winters)",
-    "Tomarang": "tropical monsoon (hot, humid, heavy seasonal rain)",
-    "Ravenwood": "gothic Pacific Northwest (cool, misty, often overcast)",
-    "Ciudad Enamorada": "tropical Latin American (warm, lively, occasional rain)",
-    "Nordhaven": "Scandinavian coastal (cool, overcast, long dark winters)",
-    "Granite Falls": "mountain forest (cool, occasional rain)",
-    "Forgotten Hollow": "perpetually gloomy (overcast, foggy, cool)",
-    "Selvadorada": "tropical jungle (hot and humid year-round)",
-    "StrangerVille": "desert with a strange persistent haze (hot, dry, eerie)",
-    "Glimmerbrook": "rainy Pacific Northwest (cool, wet, mossy)",
-    "Batuu": "alien desert (hot, dry, otherworldly)",
-    "Tartosa": "Mediterranean coastal (warm, sunny, dry summers)",
-    "Moonwood Mill": "deep forest (cool, misty, frequent rain)",
-    "Innisgreen": "Irish countryside (cool, often rainy, lush green)",
+# Climate TYPE per world. The Sims 4 calendar is global -- Spring in Willow
+# Creek means Spring in Oasis Springs too -- but each world's real-world
+# climate analogue means different weather in the same season. We map each
+# world to a climate "type" and use _CLIMATE_BY_SEASON below to build a
+# season-aware description so the AI doesn't, say, invent snow in Sulani
+# during a globally-Winter session.
+_WORLD_CLIMATE_TYPE = {
+    "Willow Creek": "humid_subtropical",
+    "Oasis Springs": "desert",
+    "Newcrest": "humid_subtropical",
+    "Magnolia Promenade": "humid_subtropical",
+    "Windenburg": "temperate_oceanic",
+    "San Myshuno": "urban_continental",
+    "Brindleton Bay": "new_england_coast",
+    "Del Sol Valley": "mediterranean",
+    "Sulani": "tropical",
+    "Britechester": "humid_continental",
+    "Evergreen Harbor": "pacific_northwest",
+    "Mt. Komorebi": "alpine",
+    "Henford-on-Bagley": "temperate_oceanic",
+    "Copperdale": "humid_continental",
+    "San Sequoia": "pacific_northwest",
+    "Chestnut Ridge": "semi_arid_plains",
+    "Tomarang": "tropical_monsoon",
+    "Ravenwood": "pacific_northwest",
+    "Ciudad Enamorada": "tropical",
+    "Nordhaven": "subarctic",
+    "Granite Falls": "mountain_forest",
+    "Forgotten Hollow": "perpetual_gloom",
+    "Selvadorada": "tropical",
+    "StrangerVille": "desert_strange",
+    "Glimmerbrook": "pacific_northwest",
+    "Batuu": "alien_desert",
+    "Tartosa": "mediterranean",
+    "Moonwood Mill": "pacific_northwest",
+    "Innisgreen": "temperate_oceanic",
+    # EP20 Adventure Awaits -- New Zealand-inspired with all four seasons
+    # AND geothermal hot springs that stay swimmable year-round.
+    "Gibbi Point": "gibbi_geothermal",
+}
+
+# (climate_type, season) -> short description of likely current weather.
+# Persistent climate constraints (e.g. "never snows") are included where
+# they matter so the AI doesn't invent climatically-wrong weather.
+_CLIMATE_BY_SEASON = {
+    "desert": {
+        "Spring": "mild and dry, sunny -- desert, no snow even in winter",
+        "Summer": "very hot and dry, intensely sunny -- desert",
+        "Fall": "warm and dry, sunny -- desert",
+        "Winter": "mild and dry -- desert, doesn't snow",
+    },
+    "desert_strange": {
+        "Spring": "warm and dry with a strange persistent haze -- desert, no snow",
+        "Summer": "very hot and dry, eerie haze -- desert",
+        "Fall": "warm and dry, haze lingers -- desert",
+        "Winter": "mild and dry, haze -- desert, doesn't snow",
+    },
+    "alien_desert": {
+        "Spring": "hot, dry, otherworldly -- alien desert, no Earth weather",
+        "Summer": "very hot and dry -- alien desert",
+        "Fall": "warm and dry -- alien desert",
+        "Winter": "mild and dry -- alien desert, doesn't snow",
+    },
+    "tropical": {
+        "Spring": "warm and humid, occasional rain -- tropical, never snows",
+        "Summer": "hot and humid, frequent rain or storms -- tropical, never snows",
+        "Fall": "warm and humid, rainy -- tropical, never snows",
+        "Winter": "still warm and humid, occasional rain -- tropical, never snows",
+    },
+    "tropical_monsoon": {
+        "Spring": "warm and humid -- tropical, never snows",
+        "Summer": "hot, humid, heavy monsoon rains -- tropical, never snows",
+        "Fall": "warm, humid, tail of monsoon rains -- never snows",
+        "Winter": "still warm, drier season -- tropical, never snows",
+    },
+    "mediterranean": {
+        "Spring": "warm and sunny, occasional rain -- Mediterranean",
+        "Summer": "hot, dry, sunny -- Mediterranean",
+        "Fall": "mild and pleasant, occasional rain -- Mediterranean",
+        "Winter": "cool and sometimes rainy -- Mediterranean, rarely snows",
+    },
+    "semi_arid_plains": {
+        "Spring": "mild, dry, big skies -- semi-arid",
+        "Summer": "hot and dry, dusty -- semi-arid",
+        "Fall": "warm and dry, crisp evenings -- semi-arid",
+        "Winter": "cool and dry -- semi-arid, snow is uncommon",
+    },
+    "humid_subtropical": {
+        "Spring": "mild, often rainy, humid",
+        "Summer": "hot and humid, frequent thunderstorms",
+        "Fall": "mild and pleasant",
+        "Winter": "cool, occasional frost -- snow is rare",
+    },
+    "humid_continental": {
+        "Spring": "mild, often rainy",
+        "Summer": "warm and humid",
+        "Fall": "crisp and cool",
+        "Winter": "cold, often snowy",
+    },
+    "urban_continental": {
+        "Spring": "mild, city showers",
+        "Summer": "hot and humid in the concrete",
+        "Fall": "cool, crisp",
+        "Winter": "cold, snowy in the streets",
+    },
+    "temperate_oceanic": {
+        "Spring": "cool, often rainy or misty",
+        "Summer": "mild and pleasant, occasional rain",
+        "Fall": "cool, damp, foggy mornings",
+        "Winter": "cold, damp, frequent rain -- snow is occasional",
+    },
+    "new_england_coast": {
+        "Spring": "cool, foggy, often rainy",
+        "Summer": "warm, occasional sea fog",
+        "Fall": "crisp, leaves turning, brisk wind off the coast",
+        "Winter": "cold and snowy, coastal storms",
+    },
+    "pacific_northwest": {
+        "Spring": "cool, rainy, often overcast",
+        "Summer": "mild, occasional rain, sometimes sunny",
+        "Fall": "cool, damp, leaves and rain",
+        "Winter": "cold and rainy, occasional snow",
+    },
+    "mountain_forest": {
+        "Spring": "cool, occasional rain, snow still lingering at altitude",
+        "Summer": "mild and pleasant, cool nights",
+        "Fall": "crisp and cold, leaves turning",
+        "Winter": "cold and snowy",
+    },
+    "alpine": {
+        "Spring": "still cold, snow lingering at altitude",
+        "Summer": "mild lower down, can be chilly higher up",
+        "Fall": "crisp, cold, first snow at altitude",
+        "Winter": "deep snow, very cold -- snowy by default",
+    },
+    "subarctic": {
+        "Spring": "cool, late thaw, long daylight building",
+        "Summer": "mild with very long daylight hours",
+        "Fall": "cool, damp, daylight shrinking",
+        "Winter": "very cold and dark, snowy",
+    },
+    "perpetual_gloom": {
+        "Spring": "perpetually overcast and foggy -- season barely matters",
+        "Summer": "perpetually overcast and gloomy",
+        "Fall": "perpetually overcast and foggy",
+        "Winter": "perpetually overcast and gloomy -- cool, sometimes snow",
+    },
+    "gibbi_geothermal": {
+        "Spring": "cool and damp, often misty -- geothermal hot springs stay swimmable year-round",
+        "Summer": "mild and pleasant, lush green -- hot springs always warm",
+        "Fall": "cool, foggy mornings, leaves turning -- hot springs still warm",
+        "Winter": "cold with snow at altitude -- but the hot springs are still warm enough to swim in",
+    },
 }
 
 
-def _get_world_climate(world_name):
-    """Return a short climate descriptor for a world, or None if unknown."""
+def _get_world_climate(world_name, season=None):
+    """Return a season-aware climate description for a world, or None.
+    If `season` is None, falls back to a generic per-type description.
+    """
     if not world_name:
         return None
-    return _WORLD_CLIMATES.get(world_name)
+    climate_type = _WORLD_CLIMATE_TYPE.get(world_name)
+    if not climate_type:
+        return None
+    seasons = _CLIMATE_BY_SEASON.get(climate_type)
+    if not seasons:
+        return None
+    if season and season in seasons:
+        return seasons[season]
+    # Generic fallback if season is unknown -- use Spring as a neutral default.
+    return seasons.get("Spring")
 
 
 def _weather_context(main_si, contact):
-    """Build a [WEATHER: ...] block describing current conditions where the
-    player is and the climate of the caller's home world (if different).
-    The caller-side is static climate data since Sims 4 only simulates
-    weather in the active world.
+    """Build a [WEATHER: ...] block with two pieces of context:
+      1. Player (callee) -- live weather where they actually are, since
+         Sims 4 only simulates weather in the active zone. This is real,
+         observable data and it's fair game to discuss.
+      2. Caller -- climate-typical for their home world this season
+         (we don't have live weather for non-active worlds).
     """
-    main_home = _get_sim_home_world(main_si) if main_si else None
     other_si = contact.get("sim_info")
     other_home = _get_sim_home_world(other_si) if other_si else None
 
     current_world_raw = sim_context.get_current_world()
     current_world = _friendly_world_name(current_world_raw) if current_world_raw else None
-    player_loc = current_world or main_home
 
+    season = sim_context.get_current_season()
     current_weather = sim_context.get_current_weather()
 
-    parts = []
-    if player_loc and current_weather:
-        parts.append(f"in {player_loc} it's currently {current_weather}")
-    elif player_loc:
-        climate = _get_world_climate(player_loc)
+    lines = []
+
+    # Callee (player) -- live weather where they physically are. The
+    # GEOGRAPHY / CURRENT LOCATION tags above already say WHERE they
+    # are, so this just states what.
+    if current_weather:
+        lines.append(f"Live weather where the player is: {current_weather}.")
+    elif current_world:
+        climate = _get_world_climate(current_world, season)
         if climate:
-            parts.append(f"player is in {player_loc} ({climate})")
+            lines.append(
+                f"Live weather not readable; climate-typical for player's "
+                f"location ({current_world}): {climate}."
+            )
 
-    if other_home and (not player_loc or other_home.lower() != player_loc.lower()):
-        other_climate = _get_world_climate(other_home)
-        if other_climate:
-            parts.append(f"{contact['name']} is in {other_home} ({other_climate})")
+    # Caller -- climate norms for their world (skip if same world as player).
+    caller_reason = None
+    if not other_home:
+        caller_reason = "other_home=None (couldn't read caller's home world from sim_info)"
+    elif current_world and other_home.lower() == current_world.lower():
+        caller_reason = f"caller is in the same world as player ({other_home})"
+    else:
+        other_climate = _get_world_climate(other_home, season)
+        if not other_climate:
+            caller_reason = f"world {other_home!r} not in _WORLD_CLIMATE_TYPE map"
+        else:
+            season_label = f" this {season}" if season else ""
+            lines.append(
+                f"{contact['name']} is in {other_home}{season_label} -- "
+                f"climate-typical: {other_climate}."
+            )
 
-    if not parts:
+    if caller_reason:
+        try:
+            import os, datetime
+            path = os.path.join(os.path.expanduser("~"), "Documents", "Llamafone_Log.txt")
+            with open(path, "a", encoding="utf-8") as f:
+                ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                f.write(f"[{ts}] [weather] caller-side skipped for {contact.get('name','?')}: {caller_reason}\n")
+        except Exception:
+            pass
+
+    if not lines:
         return ""
-    return f"\n[WEATHER: {'; '.join(parts)}. Reference naturally if it fits, never as a forced topic.]"
+    return (
+        f"\n[WEATHER: {' '.join(lines)} "
+        f"Background context. Dramatic weather (thunderstorm, heavy snow, "
+        f"heatwave) is fair game to mention; routine weather usually isn't "
+        f"worth bringing up. Don't open with weather.]"
+    )
 
 
 def _location_context(main_si, contact):

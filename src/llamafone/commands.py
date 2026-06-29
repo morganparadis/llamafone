@@ -196,6 +196,113 @@ try:
             output(f"[Llamafone] Could not apply '{mood}' -- see Llamafone_Log.txt.")
             output(f"[Llamafone] Try: llama.dumpbuffs {mood}  -- then llama.dumpbuffs feeling")
 
+    @sims4.commands.Command("llama.scanworlds", command_type=sims4.commands.CommandType.Live)
+    def cmd_scan_worlds(_connection=None):
+        """Iterate every household in the save, resolve each household's
+        home zone to a region name + friendly world, and report mismatches.
+        Output goes to Documents/Llamafone_WorldScan.txt -- paste it back
+        so unresolved regions can be added to the world-name alias map."""
+        import os
+        output = sims4.commands.CheatOutput(_connection)
+        path = os.path.join(os.path.expanduser("~"), "Documents", "Llamafone_WorldScan.txt")
+        lines = []
+        try:
+            import services
+            from . import phone as _phone
+
+            hh_mgr = services.household_manager()
+            if hh_mgr is None:
+                lines.append("ERROR: household_manager() returned None.")
+            else:
+                regions_seen = {}
+                households_total = 0
+                households_with_home = 0
+                for household in list(hh_mgr.values()):
+                    households_total += 1
+                    try:
+                        home_zone_id = getattr(household, "home_zone_id", None)
+                        if not home_zone_id:
+                            continue
+                        households_with_home += 1
+                        try:
+                            from world.region import get_region_instance_from_zone_id
+                            region = get_region_instance_from_zone_id(home_zone_id)
+                            err = None
+                        except Exception as e:
+                            region = None
+                            err = f"{type(e).__name__}: {e}"
+                        if region is None:
+                            key = f"<none:zone_id={home_zone_id}>"
+                            if key not in regions_seen:
+                                regions_seen[key] = {
+                                    "raw": "<no region>",
+                                    "cleaned": "",
+                                    "friendly": None,
+                                    "zone_ids": set(),
+                                    "sample_household": getattr(household, "name", "?"),
+                                    "error": err,
+                                }
+                            regions_seen[key]["zone_ids"].add(home_zone_id)
+                            continue
+                        raw_name = getattr(region, "__name__", "") or str(region)
+                        cleaned = (raw_name
+                            .replace("Region_", "")
+                            .replace("region_", "")
+                            .replace("_", " ")
+                            .strip())
+                        friendly = _phone._friendly_world_name(cleaned) if cleaned else None
+                        if raw_name not in regions_seen:
+                            regions_seen[raw_name] = {
+                                "raw": raw_name,
+                                "cleaned": cleaned,
+                                "friendly": friendly,
+                                "zone_ids": set(),
+                                "sample_household": getattr(household, "name", "?"),
+                                "error": None,
+                            }
+                        regions_seen[raw_name]["zone_ids"].add(home_zone_id)
+                    except Exception as inner:
+                        lines.append(f"Per-household error: {type(inner).__name__}: {inner}")
+
+                lines.append(f"Scanned {households_total} households "
+                             f"({households_with_home} with a home zone).")
+                lines.append(f"Distinct regions: {len(regions_seen)}.")
+                lines.append("")
+
+                resolved = sorted([r for r in regions_seen.values() if r["friendly"]],
+                                  key=lambda r: r["friendly"])
+                unresolved = sorted([r for r in regions_seen.values() if not r["friendly"]],
+                                    key=lambda r: r["raw"])
+
+                if unresolved:
+                    lines.append(f"=== UNRESOLVED ({len(unresolved)}) -- need aliases ===")
+                    for r in unresolved:
+                        lines.append(
+                            f"  raw={r['raw']!r}  cleaned={r['cleaned']!r}  "
+                            f"sample_household={r['sample_household']!r}"
+                            + (f"  error={r['error']}" if r.get("error") else "")
+                        )
+                    lines.append("")
+
+                if resolved:
+                    lines.append(f"=== RESOLVED ({len(resolved)}) ===")
+                    for r in resolved:
+                        lines.append(
+                            f"  raw={r['raw']!r}  ->  {r['friendly']!r}  "
+                            f"(zone_ids={len(r['zone_ids'])})"
+                        )
+        except Exception as e:
+            lines.append(f"FATAL: {type(e).__name__}: {e}")
+
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+            output(f"[Llamafone] World scan written to {path}")
+        except Exception as e:
+            output(f"[Llamafone] Could not write file: {e}")
+            for ln in lines[:40]:
+                output(ln)
+
     @sims4.commands.Command("llama.testweather", command_type=sims4.commands.CommandType.Live)
     def cmd_test_weather(_connection=None):
         """Dump everything we can read from the WeatherService. Use this when

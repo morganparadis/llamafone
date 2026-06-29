@@ -235,10 +235,19 @@ def _worker():
         # after a game-state miss so a single paused moment doesn't burn 5 minutes.
         elapsed = 0
         wait_target = get_interval_seconds() if fired_full_cycle else 30
+        last_pause_log = 0
+        pause_log_interval = 60  # log "waiting for unpause" at most once a minute
         while _running and elapsed < wait_target:
             time.sleep(5)
             if not _is_game_paused():
                 elapsed += 5
+            else:
+                # Silent waits look like the thread died. Log periodically
+                # so the user can see we're alive but pause-gated.
+                last_pause_log += 5
+                if last_pause_log >= pause_log_interval:
+                    _log(f"Waiting for game to unpause -- {int(wait_target - elapsed)}s of active-play remaining before next tick.")
+                    last_pause_log = 0
 
 
 # ---------------------------------------------------------------------------

@@ -655,12 +655,17 @@ def get_current_weather():
     """Return a short description of current weather in the active world,
     or None if Seasons isn't installed / weather isn't readable.
 
-    Examples: "rainy", "snowing heavily", "thunderstorm", "foggy",
-    "rain, cool", "clear, hot".
+    Examples: "light rain, cool", "snowing, freezing", "thunderstorm",
+    "overcast, cool", "clear, hot".
 
-    WeatherService internals vary between patches, so this reads several
-    attribute names defensively and gracefully returns None on anything
-    unexpected.
+    Combines two signals from WeatherService:
+      1. `_current_weather_types` -- set of WeatherType enums for temp,
+         sky cover, and special events (thunderstorm).
+      2. `_trans_info` -- dict mapping PrecipitationType.RAIN=1000 and
+         .SNOW=1001 to a WeatherElementTuple whose start_value is the
+         current precipitation intensity (0.0-1.0). The weather-types
+         set only fires the "Rain"/"Snow" entry above a high threshold,
+         so for light precipitation we need to read intensities directly.
     """
     try:
         import services
@@ -668,81 +673,163 @@ def get_current_weather():
         if not ws:
             return None
 
-        # Look for the per-effect intensity dict. Different game patches
-        # expose it under different names.
-        effects = None
-        for attr in ("_weather_info", "weather_info", "_weather_data"):
-            candidate = getattr(ws, attr, None)
-            if candidate and hasattr(candidate, "items"):
-                effects = candidate
-                break
-
-        precip = None
-        special = None
-        cloud = None
-        if effects:
-            best_intensity = 0.0
-            for effect, intensity in effects.items():
+        # --- Weather types: temperature, sky cover, thunder ---
+        types = None
+        try:
+            types = ws.get_current_weather_types()
+        except Exception:
+            types = getattr(ws, "_current_weather_types", None)
+        type_names = set()
+        if types:
+            for t in types:
                 try:
-                    f_intensity = float(intensity)
+                    raw = str(t).split(".")[-1].split(" ")[0].upper()
+                    type_names.add(raw)
                 except Exception:
                     continue
-                if f_intensity <= 0.05:
-                    continue
-                name = str(effect).split(".")[-1].upper()
-                if "THUNDER" in name or "LIGHTNING" in name:
-                    special = "thunderstorm"
-                elif "SNOW" in name and f_intensity > best_intensity:
-                    if f_intensity > 0.7:
-                        precip = "heavy snow"
-                    elif f_intensity > 0.3:
-                        precip = "snowing"
-                    else:
-                        precip = "light snow"
-                    best_intensity = f_intensity
-                elif "RAIN" in name and f_intensity > best_intensity:
-                    if f_intensity > 0.7:
-                        precip = "heavy rain"
-                    elif f_intensity > 0.3:
-                        precip = "raining"
-                    else:
-                        precip = "light rain"
-                    best_intensity = f_intensity
-                elif "FOG" in name and not precip:
-                    cloud = "foggy"
-                elif ("CLOUD" in name or "OVERCAST" in name) and f_intensity > 0.6 and not precip:
-                    cloud = "overcast"
 
-        # Temperature -- Sims 4 internal scale is roughly -2 (freezing) to 3 (scorching).
         temp = None
-        for attr in ("_current_temperature", "current_temperature", "_temperature"):
-            t = getattr(ws, attr, None)
-            if t is not None:
-                try:
-                    f_t = float(t)
-                except Exception:
-                    continue
-                if f_t < -1.5:
-                    temp = "freezing"
-                elif f_t < -0.5:
-                    temp = "cold"
-                elif f_t < 0.5:
-                    temp = "cool"
-                elif f_t < 1.5:
-                    temp = "warm"
-                elif f_t < 2.5:
-                    temp = "hot"
-                else:
-                    temp = "scorching"
-                break
+        if "BURNING" in type_names:
+            temp = "scorching"
+        elif "HOT" in type_names or "HEATWAVE" in type_names:
+            temp = "hot"
+        elif "WARM" in type_names:
+            temp = "warm"
+        elif "COOL" in type_names:
+            temp = "cool"
+        elif "COLD" in type_names:
+            temp = "cold"
+        elif "FREEZING" in type_names:
+            temp = "freezing"
 
-        # Special weather wins outright (thunderstorm > rain > snow > cloud).
-        if special:
-            return f"{special}, {temp}" if temp else special
+        # --- Precipitation intensity from _trans_info ---
+        # PrecipitationType.RAIN = 1000, .SNOW = 1001 (Sims 4 enum values).
+        # Each entry is a WeatherElementTuple(start_value, start_time,
+        # end_value, end_time) describing a linear transition from start
+        # to end. The "current" intensity is the linear interpolation
+        # against now. We try to interpolate, but fall back to max(start,
+        # end) on error so we don't miss rain that's transitioning.
+        def _ticks(t):
+            for attr in ("absolute_ticks", "value", "ticks"):
+                fn = getattr(t, attr, None)
+                if callable(fn):
+                    try:
+                        return float(fn())
+                    except Exception:
+                        continue
+                if fn is not None:
+                    try:
+                        return float(fn)
+                    except Exception:
+                        continue
+            try:
+                # Last-resort: parse "DateAndTime(123456)" via str()
+                raw = str(t)
+                if "(" in raw and raw.endswith(")"):
+                    return float(raw.split("(")[-1][:-1])
+            except Exception:
+                pass
+            return None
+
+        try:
+            import services
+            ts = services.time_service()
+            now = getattr(ts, "sim_now", None) if ts else None
+        except Exception:
+            now = None
+        now_ticks = _ticks(now) if now is not None else None
+
+        def _read_intensity(elem_id):
+            trans = getattr(ws, "_trans_info", None)
+            if not trans:
+                return 0.0
+            entry = None
+            try:
+                entry = trans.get(elem_id)
+            except Exception:
+                entry = None
+            if entry is None:
+                # Some patches key by enum object instead of int.
+                try:
+                    for k, v in trans.items():
+                        try:
+                            if int(getattr(k, "value", k)) == elem_id:
+                                entry = v
+                                break
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
+            if entry is None:
+                return 0.0
+            try:
+                start_val = float(getattr(entry, "start_value", 0) or 0)
+                end_val = float(getattr(entry, "end_value", start_val) or start_val)
+            except Exception:
+                return 0.0
+            # Try to interpolate. If anything fails, take the max of
+            # start/end so we don't silently miss rain in transition.
+            if now_ticks is None:
+                return max(start_val, end_val)
+            t_start = _ticks(getattr(entry, "start_time", None))
+            t_end = _ticks(getattr(entry, "end_time", None))
+            if t_start is None or t_end is None or t_end <= t_start:
+                return max(start_val, end_val)
+            if now_ticks <= t_start:
+                return start_val
+            if now_ticks >= t_end:
+                return end_val
+            ratio = (now_ticks - t_start) / (t_end - t_start)
+            return start_val + (end_val - start_val) * ratio
+
+        rain_intensity = _read_intensity(1000)
+        snow_intensity = _read_intensity(1001)
+
+        # Thunder/lightning special case (any storm wins outright).
+        has_thunder = any(("THUNDER" in n or "LIGHTNING" in n) for n in type_names)
+
+        # Thresholds tuned to match the game's own "Light Rain" UI cutoff
+        # (the OUTDOOR_AUTONOMY_RAIN_PENALTIES tuning starts a non-zero
+        # rain penalty at 0.02, so anything at/near that is visible rain
+        # to the player).
+        precip = None
+        if has_thunder:
+            precip = "thunderstorm"
+        elif snow_intensity > rain_intensity and snow_intensity > 0.01:
+            if snow_intensity > 0.6:
+                precip = "heavy snow"
+            elif snow_intensity > 0.2:
+                precip = "snowing"
+            else:
+                precip = "light snow"
+        elif rain_intensity > 0.01:
+            if rain_intensity > 0.6:
+                precip = "heavy rain"
+            elif rain_intensity > 0.2:
+                precip = "raining"
+            else:
+                precip = "light rain"
+
+        # Sky cover (only used when no precipitation headline).
+        sky = None
+        if not precip:
+            if "CLEAR_SKIES" in type_names:
+                sky = "clear"
+            elif "CLOUDY_FULL" in type_names or "OVERCAST" in type_names:
+                sky = "overcast"
+            elif "PARTLY_CLOUDY" in type_names or "CLOUDY_PARTIAL" in type_names:
+                sky = "partly cloudy"
+            elif any("FOG" in n for n in type_names):
+                sky = "foggy"
+
+        if precip and temp:
+            return f"{precip}, {temp}"
         if precip:
-            return f"{precip}, {temp}" if temp else precip
-        if cloud:
-            return f"{cloud}, {temp}" if temp else cloud
+            return precip
+        if sky and temp:
+            return f"{sky}, {temp}"
+        if sky:
+            return sky
         if temp:
             return f"clear, {temp}"
         return None

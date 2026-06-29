@@ -494,6 +494,51 @@ section > p { max-width: 780px; margin-left: auto; margin-right: auto; }
   color: var(--ink-soft);
 }
 
+/* -------- Differentiators (Phone-first / No installs / Any AI) -------- */
+
+.differentiators {
+  padding-top: 3rem;
+  padding-bottom: 2.5rem;
+}
+.differentiators > h2 {
+  text-align: center;
+}
+.differentiators > p.muted {
+  text-align: center;
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.diff-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.25rem;
+  margin-top: 2rem;
+}
+.diff-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 1.5rem 1.4rem;
+  box-shadow: var(--shadow-sm);
+  text-align: left;
+}
+.diff-card h3 {
+  margin: 0.5em 0 0.5em;
+  font-size: 1.15rem;
+  color: var(--accent-deep);
+}
+.diff-card p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.96rem;
+  line-height: 1.55;
+}
+.diff-emoji {
+  font-size: 2.2rem;
+  line-height: 1;
+}
+
 /* -------- Features grid -------- */
 
 .feature-grid {

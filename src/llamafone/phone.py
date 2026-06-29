@@ -1759,6 +1759,84 @@ def _season_context():
     return f"\n[SEASON: {season}]"
 
 
+# Static climate descriptors per world. Used so the AI knows whether a caller
+# is calling from somewhere tropical, snowy, gloomy, etc. -- Sims 4 only
+# simulates weather in the active world, so for off-world callers this is
+# the best signal we have.
+_WORLD_CLIMATES = {
+    "Willow Creek": "humid Southern (mild winters, hot humid summers)",
+    "Oasis Springs": "desert (hot dry days, mild winters)",
+    "Newcrest": "temperate (mild four seasons)",
+    "Magnolia Promenade": "humid Southern (mild)",
+    "Windenburg": "temperate European (cool, often overcast, snowy winters)",
+    "San Myshuno": "humid continental (hot summers, cold winters)",
+    "Brindleton Bay": "New England coastal (cold winters, warm summers, foggy)",
+    "Del Sol Valley": "Mediterranean (warm, dry, sunny)",
+    "Sulani": "tropical (warm year-round, frequent rain, occasional storms)",
+    "Britechester": "temperate college town (mild seasons, frequent rain)",
+    "Evergreen Harbor": "Pacific Northwest (cool, often rainy, overcast)",
+    "Mt. Komorebi": "cold alpine (snowy winters, mild summers)",
+    "Henford-on-Bagley": "mild English countryside (cool, wet, foggy mornings)",
+    "Copperdale": "temperate small-town American (four full seasons)",
+    "San Sequoia": "Northern Californian (mild, occasional fog)",
+    "Chestnut Ridge": "rural plains (hot summers, cold winters)",
+    "Tomarang": "tropical monsoon (hot, humid, heavy seasonal rain)",
+    "Ravenwood": "gothic Pacific Northwest (cool, misty, often overcast)",
+    "Ciudad Enamorada": "tropical Latin American (warm, lively, occasional rain)",
+    "Nordhaven": "Scandinavian coastal (cool, overcast, long dark winters)",
+    "Granite Falls": "mountain forest (cool, occasional rain)",
+    "Forgotten Hollow": "perpetually gloomy (overcast, foggy, cool)",
+    "Selvadorada": "tropical jungle (hot and humid year-round)",
+    "StrangerVille": "desert with a strange persistent haze (hot, dry, eerie)",
+    "Glimmerbrook": "rainy Pacific Northwest (cool, wet, mossy)",
+    "Batuu": "alien desert (hot, dry, otherworldly)",
+    "Tartosa": "Mediterranean coastal (warm, sunny, dry summers)",
+    "Moonwood Mill": "deep forest (cool, misty, frequent rain)",
+    "Innisgreen": "Irish countryside (cool, often rainy, lush green)",
+}
+
+
+def _get_world_climate(world_name):
+    """Return a short climate descriptor for a world, or None if unknown."""
+    if not world_name:
+        return None
+    return _WORLD_CLIMATES.get(world_name)
+
+
+def _weather_context(main_si, contact):
+    """Build a [WEATHER: ...] block describing current conditions where the
+    player is and the climate of the caller's home world (if different).
+    The caller-side is static climate data since Sims 4 only simulates
+    weather in the active world.
+    """
+    main_home = _get_sim_home_world(main_si) if main_si else None
+    other_si = contact.get("sim_info")
+    other_home = _get_sim_home_world(other_si) if other_si else None
+
+    current_world_raw = sim_context.get_current_world()
+    current_world = _friendly_world_name(current_world_raw) if current_world_raw else None
+    player_loc = current_world or main_home
+
+    current_weather = sim_context.get_current_weather()
+
+    parts = []
+    if player_loc and current_weather:
+        parts.append(f"in {player_loc} it's currently {current_weather}")
+    elif player_loc:
+        climate = _get_world_climate(player_loc)
+        if climate:
+            parts.append(f"player is in {player_loc} ({climate})")
+
+    if other_home and (not player_loc or other_home.lower() != player_loc.lower()):
+        other_climate = _get_world_climate(other_home)
+        if other_climate:
+            parts.append(f"{contact['name']} is in {other_home} ({other_climate})")
+
+    if not parts:
+        return ""
+    return f"\n[WEATHER: {'; '.join(parts)}. Reference naturally if it fits, never as a forced topic.]"
+
+
 def _location_context(main_si, contact):
     """Build a short string describing where each sim lives AND where the
     recipient currently is (in case they're on vacation, etc.)."""
@@ -2414,7 +2492,7 @@ def generate_call(callback=None, output=None):
     prompt = (
         f"Caller info:\n{rel_desc}{history_block}{mutual_block}\n\n"
         f"{recipient_block}{events_block}\n\n"
-        f"They are calling {recipient_name}{_location_context(recipient, contact)}.{_season_context()}\n\n"
+        f"They are calling {recipient_name}{_location_context(recipient, contact)}.{_season_context()}{_weather_context(recipient, contact)}\n\n"
         f"Write what {contact['name']} says during this phone call."
     )
 
@@ -2488,7 +2566,7 @@ def generate_text(callback=None, output=None):
     prompt = (
         f"Sender info:\n{rel_desc}{history_block}{mutual_block}\n\n"
         f"{recipient_block}{events_block}\n\n"
-        f"They are texting {recipient_name}{_location_context(recipient, contact)}.{_season_context()}\n\n"
+        f"They are texting {recipient_name}{_location_context(recipient, contact)}.{_season_context()}{_weather_context(recipient, contact)}\n\n"
         f"Write 1-2 short text messages from {contact['name']}."
     )
 

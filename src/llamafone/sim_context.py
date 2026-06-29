@@ -651,6 +651,105 @@ def get_current_world():
         return None
 
 
+def get_current_weather():
+    """Return a short description of current weather in the active world,
+    or None if Seasons isn't installed / weather isn't readable.
+
+    Examples: "rainy", "snowing heavily", "thunderstorm", "foggy",
+    "rain, cool", "clear, hot".
+
+    WeatherService internals vary between patches, so this reads several
+    attribute names defensively and gracefully returns None on anything
+    unexpected.
+    """
+    try:
+        import services
+        ws = services.weather_service()
+        if not ws:
+            return None
+
+        # Look for the per-effect intensity dict. Different game patches
+        # expose it under different names.
+        effects = None
+        for attr in ("_weather_info", "weather_info", "_weather_data"):
+            candidate = getattr(ws, attr, None)
+            if candidate and hasattr(candidate, "items"):
+                effects = candidate
+                break
+
+        precip = None
+        special = None
+        cloud = None
+        if effects:
+            best_intensity = 0.0
+            for effect, intensity in effects.items():
+                try:
+                    f_intensity = float(intensity)
+                except Exception:
+                    continue
+                if f_intensity <= 0.05:
+                    continue
+                name = str(effect).split(".")[-1].upper()
+                if "THUNDER" in name or "LIGHTNING" in name:
+                    special = "thunderstorm"
+                elif "SNOW" in name and f_intensity > best_intensity:
+                    if f_intensity > 0.7:
+                        precip = "heavy snow"
+                    elif f_intensity > 0.3:
+                        precip = "snowing"
+                    else:
+                        precip = "light snow"
+                    best_intensity = f_intensity
+                elif "RAIN" in name and f_intensity > best_intensity:
+                    if f_intensity > 0.7:
+                        precip = "heavy rain"
+                    elif f_intensity > 0.3:
+                        precip = "raining"
+                    else:
+                        precip = "light rain"
+                    best_intensity = f_intensity
+                elif "FOG" in name and not precip:
+                    cloud = "foggy"
+                elif ("CLOUD" in name or "OVERCAST" in name) and f_intensity > 0.6 and not precip:
+                    cloud = "overcast"
+
+        # Temperature -- Sims 4 internal scale is roughly -2 (freezing) to 3 (scorching).
+        temp = None
+        for attr in ("_current_temperature", "current_temperature", "_temperature"):
+            t = getattr(ws, attr, None)
+            if t is not None:
+                try:
+                    f_t = float(t)
+                except Exception:
+                    continue
+                if f_t < -1.5:
+                    temp = "freezing"
+                elif f_t < -0.5:
+                    temp = "cold"
+                elif f_t < 0.5:
+                    temp = "cool"
+                elif f_t < 1.5:
+                    temp = "warm"
+                elif f_t < 2.5:
+                    temp = "hot"
+                else:
+                    temp = "scorching"
+                break
+
+        # Special weather wins outright (thunderstorm > rain > snow > cloud).
+        if special:
+            return f"{special}, {temp}" if temp else special
+        if precip:
+            return f"{precip}, {temp}" if temp else precip
+        if cloud:
+            return f"{cloud}, {temp}" if temp else cloud
+        if temp:
+            return f"clear, {temp}"
+        return None
+    except Exception:
+        return None
+
+
 def get_current_season():
     """Return the current season name (Spring/Summer/Fall/Winter), or None if Seasons isn't installed."""
     try:

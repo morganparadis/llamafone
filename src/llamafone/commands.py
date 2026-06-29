@@ -196,6 +196,71 @@ try:
             output(f"[Llamafone] Could not apply '{mood}' -- see Llamafone_Log.txt.")
             output(f"[Llamafone] Try: llama.dumpbuffs {mood}  -- then llama.dumpbuffs feeling")
 
+    @sims4.commands.Command("llama.testweather", command_type=sims4.commands.CommandType.Live)
+    def cmd_test_weather(_connection=None):
+        """Dump everything we can read from the WeatherService. Use this when
+        get_current_weather() returns None despite Seasons being installed --
+        the output reveals which attribute names the current patch uses."""
+        import os
+        output = sims4.commands.CheatOutput(_connection)
+        path = os.path.join(os.path.expanduser("~"), "Documents", "Llamafone_Weather.txt")
+        lines = []
+        try:
+            import services
+            ws = services.weather_service()
+            lines.append(f"weather_service() -> {ws!r}")
+            if ws is None:
+                lines.append("Seasons pack is not installed (or weather service not started).")
+            else:
+                # Top-level attributes worth inspecting
+                interesting = [a for a in dir(ws) if not a.startswith("__") and any(
+                    keyword in a.lower() for keyword in ("weather", "temp", "info", "effect", "rain", "snow", "forecast", "season")
+                )]
+                lines.append(f"\nRelevant attributes on weather_service ({len(interesting)}):")
+                for attr in sorted(interesting):
+                    try:
+                        val = getattr(ws, attr)
+                        if callable(val):
+                            lines.append(f"  {attr}() -- callable")
+                        else:
+                            preview = repr(val)
+                            if len(preview) > 240:
+                                preview = preview[:240] + "..."
+                            lines.append(f"  {attr} = {preview}")
+                    except Exception as e:
+                        lines.append(f"  {attr} -- ERROR reading: {e}")
+
+                # Drill into _weather_info if present
+                wi = getattr(ws, "_weather_info", None) or getattr(ws, "weather_info", None)
+                if wi is not None:
+                    lines.append(f"\n_weather_info -> {type(wi).__name__}")
+                    wi_attrs = [a for a in dir(wi) if not a.startswith("__")]
+                    for attr in sorted(wi_attrs)[:40]:
+                        try:
+                            val = getattr(wi, attr)
+                            if callable(val):
+                                continue
+                            preview = repr(val)
+                            if len(preview) > 200:
+                                preview = preview[:200] + "..."
+                            lines.append(f"  weather_info.{attr} = {preview}")
+                        except Exception as e:
+                            lines.append(f"  weather_info.{attr} -- ERROR: {e}")
+        except Exception as e:
+            lines.append(f"ERROR: {type(e).__name__}: {e}")
+
+        lines.append(f"\nsim_context.get_current_weather() -> {sim_context.get_current_weather()!r}")
+        lines.append(f"sim_context.get_current_season() -> {sim_context.get_current_season()!r}")
+
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+            output(f"[Llamafone] Wrote {len(lines)} lines to {path}")
+        except Exception as e:
+            output(f"[Llamafone] Could not write file: {e}")
+            for ln in lines:
+                output(ln)
+
     # -------------------------------------------------------------------------
     # Dialogue
     # -------------------------------------------------------------------------

@@ -1209,6 +1209,41 @@ def _describe_recipient(recipient_sim, contact=None):
     if traits:
         parts.append(f"{recipient_sim.first_name}'s traits: {', '.join(traits)}")
 
+    # Recipient's current mood, career, aspiration -- the caller block has
+    # these too, and the AI needs them on the recipient side so it can ask
+    # about real things ("how's the doctor track going?", "still going for
+    # Renaissance Sim?"). Mood was a regression from earlier versions.
+    try:
+        mood = sim_context.get_sim_mood(recipient_sim)
+        if mood:
+            parts.append(f"{recipient_sim.first_name}'s current mood: {mood}")
+    except Exception:
+        pass
+
+    try:
+        career = sim_context.get_sim_career(recipient_sim)
+        if career:
+            parts.append(f"{recipient_sim.first_name}'s career: {career}")
+    except Exception:
+        pass
+
+    try:
+        aspiration = sim_context.get_sim_aspiration(recipient_sim)
+        if aspiration:
+            parts.append(f"{recipient_sim.first_name}'s aspiration: {aspiration}")
+    except Exception:
+        pass
+
+    # Top 3 skills -- enables save-aware callbacks like "how's the painting
+    # going?" when the player has actually been raising Painting.
+    try:
+        skills = sim_context.get_sim_skills(recipient_sim, limit=3)
+        if skills:
+            skill_str = ", ".join(f"{name} {lvl}" for name, lvl in skills.items())
+            parts.append(f"{recipient_sim.first_name}'s top skills: {skill_str}")
+    except Exception:
+        pass
+
     # Recipient's world -- the sender already gets this, and skipping it on
     # the recipient leaves the model guessing whether they live in the same
     # place or somewhere else, which produces phrases like "ran into your
@@ -2500,6 +2535,14 @@ def _describe_relationship(contact, recipient=None):
         aspiration = sim_context.get_sim_aspiration(si)
         if aspiration:
             parts.append(f"{name}'s aspiration: {aspiration}")
+
+        try:
+            skills = sim_context.get_sim_skills(si, limit=3)
+            if skills:
+                skill_str = ", ".join(f"{sk} {lvl}" for sk, lvl in skills.items())
+                parts.append(f"{name}'s top skills: {skill_str}")
+        except Exception:
+            pass
 
         clubs = sim_context.get_sim_clubs(si)
         if clubs:

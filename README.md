@@ -47,7 +47,7 @@ Every time you run a command, the mod reads live data from the game and sends it
 | Traits (up to 6) | Bookworm, Ambitious, Loner |
 | Career and aspiration | Doctor, Renaissance Sim |
 | Skill levels | Cooking 7, Programming 4, Fitness 2 |
-| Household name, members, funds | The Feng Household, §42,800 |
+| Household name, members | The Feng Household — Lily, Gabriel, Marcus |
 | Current lot | Oakenstead |
 | Current world and season | Oasis Springs, Summer |
 | Relationship network | names, relationship types, friendship scores, family roles |

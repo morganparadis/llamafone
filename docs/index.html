@@ -47,7 +47,7 @@
     "description": "A free phone-first script mod for The Sims 4 that generates AI-powered phone calls and text messages (bring your own AI -- Claude, OpenAI, Gemini, or local Ollama). Random sims call and text you in character, shaped by their traits, mood, relationships, and what's actually happening in your save.",
     "url": "https://morganparadis.github.io/llamafone/",
     "downloadUrl": "https://github.com/morganparadis/llamafone/releases/latest",
-    "softwareVersion": "3.0.0",
+    "softwareVersion": "3.1.0",
     "image": "https://morganparadis.github.io/llamafone/img/llamafonelogo-square.PNG",
     "author": { "@type": "Person", "name": "morganparadis" },
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
@@ -641,6 +641,19 @@ api_key  = </code></pre>
   <ol class="changelog-list">
 
     <li class="changelog-entry">
+      <div class="changelog-date">June 29, 2026</div>
+      <div class="changelog-body">
+        <h3>Weather-aware calls and texts (v3.1)</h3>
+        <ul>
+          <li><strong>The AI knows what the weather is doing.</strong> Calls and texts now include a live read of the weather where your sim physically is — light rain, heavy snow, thunderstorm, scorching, whatever's actually on the radar. Dramatic weather (storms, blizzards, heatwaves) is fair game to come up in conversation; routine weather stays in the background.</li>
+          <li><strong>Off-world callers know their own climate too.</strong> Every Sims 4 world is mapped to a real-world climate analogue (Sulani tropical, Mt. Komorebi alpine, Oasis Springs desert, etc.) with per-season descriptions. So a friend calling from Sulani in globally-Winter still won't pretend it's snowing — tropical islands don't get snow even when the calendar flips. Gibbi Point's geothermal hot springs get their own treatment too.</li>
+          <li><strong>Apartment residents resolve correctly.</strong> Fixed a long-standing bug where played sims living in San Myshuno (and any other pack-named residential region) were tagged "world unknown" in the prompt. Now every household resolves to a real world, with three fallback lookup paths and a new <code>llama.scanworlds</code> diagnostic to audit them all in one shot.</li>
+          <li><strong>Auto-events show their work.</strong> The background thread now logs "waiting for game to unpause" so silent pause-gating doesn't look like a dead thread anymore. New <code>llama.testweather</code> cheat command dumps the WeatherService state for diagnostics.</li>
+        </ul>
+      </div>
+    </li>
+
+    <li class="changelog-entry">
       <div class="changelog-date">June 28, 2026</div>
       <div class="changelog-body">
         <h3>Llamafone — new name, four AI providers (v3.0)</h3>
@@ -737,12 +750,6 @@ api_key  = </code></pre>
       <div class="roadmap-status status-planned">Planned</div>
       <h3>Group texts</h3>
       <p>Multi-sim chats where everyone replies in their own voice. Pick two or three sims, type the message, and watch the group chat unfold — siblings ribbing each other, the friend group planning a night out, parents coordinating around the kids. Each reply lands in character based on their relationship to you AND to each other.</p>
-    </li>
-
-    <li class="roadmap-card">
-      <div class="roadmap-status status-planned">Planned</div>
-      <h3>Weather-aware calls and texts</h3>
-      <p>The AI knows the weather in <em>both</em> sims' worlds. A friend calling from Sulani in a tropical storm sounds different from one texting from Henford-on-Bagley on a sunny afternoon. Snowed-in plans, heatwave complaints, "stay safe out there" — all grounded in what's actually on the radar in your save.</p>
     </li>
 
     <li class="roadmap-card">

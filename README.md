@@ -87,6 +87,8 @@ Each sim has a unique voice based on their **age, traits, mood, career, and aspi
 
 **Realistic reply delays** — when you text a sim, they "think" for a few seconds before responding instead of replying instantly. Close friends reply fast; lazy or hostile sims drag. Calls reply instantly. Toggle from the in-game Settings panel, or set `reply_delay_enabled = false` in the config.
 
+**Weather-aware.** Every call and text knows what the weather is actually doing where your sim is — light rain, heavy snow, thunderstorm, heatwave. Dramatic weather is fair game to come up in conversation; routine weather stays out of the way. Off-world callers know their own world's climate too (Sulani is tropical, Mt. Komorebi is alpine, Oasis Springs is desert — none get snow misapplied just because it's globally Winter).
+
 ### Phone UI (Phone > Social)
 
 The phone itself has three Llamafone items under the Social tile — no cheat console needed for everyday use:
@@ -140,6 +142,8 @@ Llamafone is a phone mod, but the AI plumbing is general-purpose. These commands
 | `llama.reload` | Reload config file (after editing llamafone.cfg by hand) |
 | `llama.debug` / `llama.debugsim` | Game API debug info |
 | `llama.dumpphone` / `llama.dumpprompt` | Dump the most recent prompt or phone-affordance state for inspection |
+| `llama.testweather` | Dump the WeatherService state for diagnosing the live-weather read |
+| `llama.scanworlds` | Audit every household's home-region resolution (paste back if any are unresolved) |
 
 ---
 

@@ -3162,11 +3162,18 @@ def send_text(contact, player_message, callback=None, output=None):
     mutuals = _get_mutual_contacts(contact)
     mutual_block = _format_mutual_block(mutuals, casual=False)
 
+    # Describe the PLAYER (main_si) -- the person the contact is texting
+    # back to. Without this, the AI generates the contact's reply knowing
+    # nothing about who they're talking to (no career callback, no mood
+    # awareness, no aspiration context, no skills).
+    recipient_block = _describe_recipient(main_si, contact=contact)
+
     events_text = events.format_shared_events_for_prompt(main_si, contact.get("sim_info"))
     events_block = f"\n\n{events_text}" if events_text else ""
 
     prompt = (
-        f"Relationship info:\n{rel_desc}{history_block}{mutual_block}{events_block}\n\n"
+        f"Relationship info:\n{rel_desc}{history_block}{mutual_block}\n\n"
+        f"{recipient_block}{events_block}\n\n"
         f"{main_name} just texted {other_name}: \"{player_message}\"\n\n"
         f"Write {other_name}'s reply (1-3 short text messages). "
         f"If {main_name} mentions people or events you don't have details about, "
@@ -3248,11 +3255,18 @@ def send_call(contact, player_topic, callback=None, output=None):
     mutuals = _get_mutual_contacts(contact)
     mutual_block = _format_mutual_block(mutuals, casual=False)
 
+    # Describe the PLAYER (main_si) -- the person the contact is replying
+    # to on the call. Without this, the AI generates the contact's
+    # response knowing nothing about the player's career, mood,
+    # aspiration, or skills.
+    recipient_block = _describe_recipient(main_si, contact=contact)
+
     events_text = events.format_shared_events_for_prompt(main_si, contact.get("sim_info"))
     events_block = f"\n\n{events_text}" if events_text else ""
 
     prompt = (
-        f"Person being called:\n{rel_desc}{history_block}{mutual_block}{events_block}\n\n"
+        f"Person being called:\n{rel_desc}{history_block}{mutual_block}\n\n"
+        f"{recipient_block}{events_block}\n\n"
         f"{main_name} is calling {other_name}. {main_name} says: \"{player_topic}\"\n\n"
         f"Write what {other_name} says in response (3-5 lines of dialogue). "
         f"They should react naturally to what {main_name} said."

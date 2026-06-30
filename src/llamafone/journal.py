@@ -14,20 +14,23 @@ import json
 import os
 
 from . import config
+from . import save_id as _save_id
 
-_JOURNAL_FILENAME = "Llamafone_Journal.json"
+_JOURNAL_FILENAME = "Journal.json"
 _PROMPT_ENTRIES = 6         # how many recent entries to include in prompts
 _PREVIEW_CHARS = 220        # max chars per entry shown in prompts
 
-# In-memory cache — loaded once, kept in sync with disk
+# In-memory cache + the save id it was loaded for. The cache is
+# invalidated whenever the current save id changes (player switched
+# saves) so two saves never share journal history.
 _cache = None
+_cached_for_save_id = None
 
 
 def _journal_path():
-    cfg = config._find_config_file()
-    if cfg:
-        return os.path.join(os.path.dirname(cfg), _JOURNAL_FILENAME)
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", _JOURNAL_FILENAME)
+    """Per-save journal path in the Sims 4 saves folder. Returns None
+    when no save is loaded -- callers must skip reads/writes."""
+    return _save_id.data_path(_JOURNAL_FILENAME)
 
 
 def _log(message):
@@ -43,17 +46,19 @@ def _log(message):
 
 
 def _load():
-    """Load from disk if cache is empty, else return cache.
+    """Load from disk if cache is empty OR the current save changed.
 
     SAFETY RULE: never silently delete a journal. If parsing fails,
     rename the bad file to a timestamped .bak so the user can recover
     it manually -- never overwrite a corrupt journal blindly.
     """
-    global _cache
-    if _cache is not None:
+    global _cache, _cached_for_save_id
+    current = _save_id.get_current_save_id()
+    if _cache is not None and _cached_for_save_id == current:
         return _cache
+    _cached_for_save_id = current
     path = _journal_path()
-    if not os.path.exists(path):
+    if path is None or not os.path.exists(path):
         _cache = []
         return _cache
     try:
@@ -83,9 +88,12 @@ def _save(entries):
     """Atomic write -- write to .tmp, then os.replace() onto the real
     path. The original journal file is never partially-overwritten, so
     a crash mid-write can't corrupt it. No trimming: unbounded growth."""
-    global _cache
+    global _cache, _cached_for_save_id
     _cache = entries
+    _cached_for_save_id = _save_id.get_current_save_id()
     path = _journal_path()
+    if path is None:
+        return  # no save loaded -- nothing to persist
     tmp = path + ".tmp"
     try:
         with open(tmp, "w", encoding="utf-8") as f:
@@ -109,7 +117,8 @@ def _save(entries):
 # Public write API
 # ---------------------------------------------------------------------------
 
-def add_entry(content_type, content, sim_name=None, recipient_name=None):
+def add_entry(content_type, content, sim_name=None, recipient_name=None,
+              sim_id=None, recipient_id=None):
     """
     Save a generated piece of content to the journal.
 
@@ -118,6 +127,14 @@ def add_entry(content_type, content, sim_name=None, recipient_name=None):
         content:        the full generated text
         sim_name:       optional name of the sim this was generated for / from
         recipient_name: for phone calls/texts, the household sim who received it
+        sim_id:         globally-unique sim id (preferred lookup key -- name
+                        collisions like two "Bella Goth"s break name-based
+                        lookups but sim_id is unique per sim, even across saves)
+        recipient_id:   globally-unique sim id of the recipient
+
+    Both names AND ids are stored when available: ids drive lookups, names
+    drive display. Legacy entries with only names still match via the name
+    fallback in `get_sim_history`.
     """
     entries = _load()
     entry = {
@@ -129,8 +146,35 @@ def add_entry(content_type, content, sim_name=None, recipient_name=None):
         entry["sim"] = sim_name
     if recipient_name:
         entry["recipient"] = recipient_name
+    if sim_id is not None:
+        entry["sim_id"] = str(sim_id)
+    if recipient_id is not None:
+        entry["recipient_id"] = str(recipient_id)
     entries.append(entry)
+    # Opportunistic backfill: if this write supplies a name<->id mapping,
+    # apply it to any legacy entries with that name and no id. Self-heals
+    # the journal as the player uses the mod -- no migration script.
+    if sim_id is not None and sim_name:
+        _backfill_id_for_name(entries, "sim", str(sim_id), sim_name)
+    if recipient_id is not None and recipient_name:
+        _backfill_id_for_name(entries, "recipient", str(recipient_id), recipient_name)
     _save(entries)
+
+
+def _backfill_id_for_name(entries, field_prefix, new_id, name):
+    """Walk `entries` and stamp `<field_prefix>_id = new_id` onto any legacy
+    entry that has matching `<field_prefix>` name and no id yet. Mutates in
+    place; caller is responsible for persisting. Only backfills when the
+    name match is exact (case-insensitive) -- ambiguous names (two sims
+    sharing a name) won't ever get stamped unless one of them has been
+    explicitly written with its id first."""
+    id_field = f"{field_prefix}_id"
+    name_lower = name.lower()
+    for e in entries:
+        if e.get(id_field):
+            continue
+        if e.get(field_prefix, "").lower() == name_lower:
+            e[id_field] = new_id
 
 
 def clear():
@@ -179,23 +223,46 @@ def get_entry_count():
     return len(_load())
 
 
-def get_sim_history(sim_name, n=6, recipient_name=None):
+def get_sim_history(sim_name, n=6, recipient_name=None,
+                    sim_id=None, recipient_id=None):
     """
     Return recent journal entries involving a specific sim.
-    If recipient_name is given, ONLY return entries explicitly tagged with that
-    recipient — legacy entries without a recipient field are excluded to prevent
-    cross-recipient contamination (e.g. old texts addressed to one sim leaking
-    into prompts for another).
+
+    Matching priority per field:
+      - If the entry has an `<field>_id`, match against the provided id and
+        ignore the name. IDs are authoritative -- two Bella Goths get
+        separate histories.
+      - If the entry has NO id (legacy data), fall back to name match.
+
+    `sim_id` / `recipient_id` are optional. When not provided, lookup
+    behaves exactly like pre-id-tracking versions (name-only).
     """
-    entries = _load()
-    matched = [e for e in entries if e.get("sim", "").lower() == sim_name.lower()]
-    if recipient_name:
-        rn = recipient_name.lower()
-        matched = [e for e in matched if e.get("recipient", "").lower() == rn]
+    sid = str(sim_id) if sim_id is not None else None
+    rid = str(recipient_id) if recipient_id is not None else None
+    sname_l = sim_name.lower() if sim_name else ""
+    rname_l = recipient_name.lower() if recipient_name else None
+
+    def _matches_sim(e):
+        eid = e.get("sim_id")
+        if eid:
+            return sid is not None and eid == sid
+        return e.get("sim", "").lower() == sname_l
+
+    def _matches_recipient(e):
+        eid = e.get("recipient_id")
+        if eid:
+            return rid is not None and eid == rid
+        return e.get("recipient", "").lower() == rname_l
+
+    matched = [e for e in _load() if _matches_sim(e)]
+    if rname_l is not None or rid is not None:
+        matched = [e for e in matched if _matches_recipient(e)]
     return matched[-n:]
 
 
-def format_sim_history_for_prompt(sim_name, n=6, recipient_name=None, trailing_note=None):
+def format_sim_history_for_prompt(sim_name, n=6, recipient_name=None,
+                                  trailing_note=None, sim_id=None,
+                                  recipient_id=None):
     """
     Return a prompt-friendly summary of recent interactions with a specific sim.
     If recipient_name is given, only includes history involving that recipient.
@@ -204,8 +271,16 @@ def format_sim_history_for_prompt(sim_name, n=6, recipient_name=None, trailing_n
     `trailing_note`, if provided, is appended as a single line under the
     journal block -- used by callers to flag "these predate a relationship
     shift, treat the warmth as obsolete" without bloating the system prompt.
+
+    `sim_id` / `recipient_id`, if provided, take priority over name matching.
+    See `get_sim_history` for the exact precedence rules.
     """
-    entries = get_sim_history(sim_name, n, recipient_name=recipient_name)
+    entries = get_sim_history(
+        sim_name, n,
+        recipient_name=recipient_name,
+        sim_id=sim_id,
+        recipient_id=recipient_id,
+    )
     if not entries:
         return ""
 

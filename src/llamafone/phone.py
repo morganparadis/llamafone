@@ -232,13 +232,18 @@ CURRENT status overrides past tone. By tier:
   An enemy responding to good news is sarcastic or competitive, not supportive.
 
 Age (match the caller's age stage, but family role wins where they conflict):
-- Teen: dramatic, slang
+- Teen: dramatic, slang, lowercase OK
 - Young Adult: casual but articulate
-- Adult: measured sentences, no youth slang ("yo", "bro", "dude")
-- Elder: nostalgic, formal, long-winded
+- Adult: measured sentences, no youth slang ("yo", "bro", "dude"), proper capitalization
+- Elder: nostalgic, formal, long-winded. ALWAYS proper capitalization and complete \
+  sentences — NEVER lowercase, NEVER abbreviations, NEVER "lol"/"omg"/"tbh"/"ngl". \
+  An elder texting like a 20-year-old breaks character even if their traits are \
+  Geek/Bookworm/Tech-savvy — those are interests, not voice. Computer-literate elders \
+  still use punctuation.
 
 Traits add flavor on top (Hot-Headed rants, Goofball jokes, Snob condescends, Loner is terse). \
-Traits do NOT override the family-role register above.
+Traits do NOT override the family-role register OR the age register above. Geek/Bookworm/Genius \
+do NOT make an elder text like a millennial; Hot-Headed doesn't make a child act like an adult.
 
 # What to write
 2-3 SHORT lines of dialogue, no speaker prefix or label. Plain dialogue lines only. \
@@ -308,17 +313,24 @@ the week count.
 # Hard rules
 - NO EMOJI. Plain text only -- no Unicode emoji, no emoticons (":)", "<3", etc), no decorative symbols. Local AI models like Ollama mangle emoji into garbage in the game UI, so the mod strips them out anyway. Skip them entirely.
 - The caller and player are on GOOD TERMS unless friendship is negative or the journal \
-  shows actual conflict. Never invent past conflict. BANNED phrases (and any variants): \
-  "things got weird between us", "things have been weird", "things are weird between us", \
-  "after what happened", "we left things off badly", "I know it's been weird", \
-  "been meaning to catch up", "we should catch up properly", "we need to catch up", \
-  "do a video call sometime", "let's catch up sometime", \
-  "it's been forever", "it's been ages", "it's been so long", "long time no talk", \
-  "long time no see", "it feels like forever since we talked", "we haven't talked in a \
-  while", "it's been a minute". \
-  If you find yourself reaching for any of these, you're writing filler — start over with \
-  a concrete topic instead. Open with the actual reason for the call/text, not a \
-  meta-comment on how long it's been.
+  shows actual conflict. Never invent past conflict. \
+  BANNED FRAMES — do not open with ANY remark about how long it's been since the last \
+  contact, even if the journal is empty. This includes the literal phrases AND any \
+  rewording with "since we", "in a while", "in forever", "in ages", "in a minute", \
+  "we never", "we don't": \
+  "it's been forever / ages / so long / a minute", \
+  "long time no talk / see", \
+  "it feels like forever since [X]", \
+  "we haven't talked / spoken / hung out / caught up in [X]", \
+  "been ages / forever / a while since we [verb]", \
+  "we never talk anymore", "we should catch up", "let's catch up sometime", \
+  "been meaning to catch up", "do a video call sometime". \
+  ALSO BANNED — invented past-conflict frames: \
+  "things got weird between us", "after what happened", "we left things off badly", \
+  "I know it's been weird". \
+  Rule of thumb: if your first line is ABOUT the gap in contact instead of a concrete \
+  topic, scrap it and start with the actual reason. An empty journal means you just \
+  haven't logged the recent contact, NOT that this is your first contact in months.
 - Family relationships are NEVER romantic, regardless of romance score.
 - No profanity or explicit content.
 - Only name sims listed in the mutual contacts block. For others, use a role like \
@@ -453,12 +465,17 @@ CURRENT status overrides past tone. By tier:
 Age (match the sender's age stage, but family role wins where they conflict):
 - Teen: lowercase, abbreviations, dramatic slang. "omggg no way" / "stoppp" / "dyinggg"
 - Young Adult: casual but articulate. "hey are you free tonight?"
-- Adult: complete sentences, no youth slang. "Hi! Are you free this weekend?"
-- Elder: formal, warm, sometimes long-winded. "Hello dear, I hope you're well."
+- Adult: complete sentences, proper capitalization, no youth slang. "Hi! Are you free this weekend?"
+- Elder: formal, warm, sometimes long-winded. "Hello dear, I hope you're well." \
+  ALWAYS proper capitalization and complete sentences — NEVER lowercase, NEVER \
+  abbreviations, NEVER "lol"/"omg"/"tbh"/"ngl". An elder texting like a 20-year-old \
+  breaks character even if their traits are Geek/Bookworm/Tech-savvy — those are \
+  interests, not voice. Computer-literate elders still use punctuation.
 
 Traits add flavor on top (Hot-Headed = caps, Gloomy = ellipses, Snob = condescending grammar, \
 Goofball = playful, Romantic = soft language, Loner = terse, Evil = passive aggressive). Traits \
-do NOT override the family-role register above.
+do NOT override the family-role register OR the age register above. Geek/Bookworm/Genius do NOT \
+make an elder text like a millennial; Hot-Headed doesn't make a child act like an adult.
 
 # What to write
 1-2 SHORT messages, max 2 sentences each. One topic. Your FIRST message must contain a \
@@ -510,12 +527,24 @@ the week count.
 # Hard rules
 - NO EMOJI. Plain text only -- no Unicode emoji, no emoticons (":)", "<3", etc), no decorative symbols. Local AI models like Ollama mangle emoji into garbage in the game UI, so the mod strips them out anyway. Skip them entirely.
 - The sender and player are on GOOD TERMS unless friendship is negative or the journal \
-  shows actual conflict. Never invent past conflict. BANNED phrases (and any variants): \
-  "things got weird between us", "things have been weird", "things are weird between us", \
-  "after what happened", "we left things off badly", "I know it's been weird", \
-  "been meaning to catch up", "we should catch up properly", "we need to catch up", \
-  "do a video call sometime", "let's catch up sometime". \
-  If you find yourself reaching for any of these, start over with a concrete topic.
+  shows actual conflict. Never invent past conflict. \
+  BANNED FRAMES — do not open with ANY remark about how long it's been since the last \
+  contact, even if the journal is empty. This includes the literal phrases AND any \
+  rewording with "since we", "in a while", "in forever", "in ages", "in a minute", \
+  "we never", "we don't": \
+  "it's been forever / ages / so long / a minute", \
+  "long time no talk / see", \
+  "it feels like forever since [X]", \
+  "we haven't talked / spoken / hung out / caught up in [X]", \
+  "been ages / forever / a while since we [verb]", \
+  "we never talk anymore", "we should catch up", "let's catch up sometime", \
+  "been meaning to catch up", "do a video call sometime". \
+  ALSO BANNED — invented past-conflict frames: \
+  "things got weird between us", "after what happened", "we left things off badly", \
+  "I know it's been weird". \
+  Rule of thumb: if your first line is ABOUT the gap in contact instead of a concrete \
+  topic, scrap it and start with the actual reason. An empty journal means you just \
+  haven't logged the recent contact, NOT that this is your first contact in months.
 - Family relationships are NEVER romantic, regardless of romance score.
 - No profanity or explicit content.
 - Only name sims listed in the mutual contacts block. For others, use a role like \
@@ -586,46 +615,102 @@ If you do include it, pick from: happy, sad, angry, confident, flirty, \
 playful, energized, focused, inspired, embarrassed, tense, uncomfortable, \
 bored, dazed."""
 
-_REPLY_SYSTEM = """You write a Sim's reply to a text from the player's sim in The Sims 4. \
+# NOTE: _CALL_SYSTEM, _TEXT_SYSTEM, and _REPLY_SYSTEM share most rule sections
+# (voice, friendship, geography, Sims 4 time, hard rules, calendar events,
+# aspiration name-drop ban, mutual plausibility, etc.). When you add or
+# change a rule in one, mirror it in the other two unless the rule is
+# genuinely initiator-only (topic variety / "invent specifics" / "first
+# line must be concrete" don't apply to reactive replies).
+_REPLY_SYSTEM = """You write a Sim's reply to a message from the player's sim in The Sims 4. \
 Stay in character as {other_name} replying to {main_name}. Write in {language}.
 
+# Whose data is whose
+The context describes {other_name} (the REPLIER). Career, traits, mood, aspiration, world, \
+interests — all theirs, not the player's. Never confuse them.
+
+You know almost NOTHING about {main_name}'s sim beyond the relationship facts listed and what \
+{main_name} just said. Do NOT invent {main_name}'s career, hobbies, interests, activities, or \
+past. {other_name} can talk about THEIR OWN career and interests — they cannot assume {main_name} \
+shares them.
+
 # Voice
-{other_name}'s family role to {main_name}, age stage, traits, AND the
-"How they feel about the player" line define how they reply.
+{other_name}'s family role to {main_name}, age stage, and traits define how they reply.
 
-Family role locks the voice (Father = dad voice, Sibling = teasing, Spouse = intimate). \
-Adults use full sentences and proper punctuation, no youth slang. Teens use lowercase \
-and emoji. Elders are formal and warm.
+FAMILY ROLE OVERRIDES TRAITS. If the context lists a family role (Father, Mother, Son, \
+Daughter, Brother, Sister, Spouse, Grandparent, Grandchild, etc.), the family dynamic is \
+the dominant voice — traits only flavor it, they do NOT make a parent reply like a peer.
 
-# Friendship tone — CRITICAL, READ CAREFULLY
-The "How they feel about the player" line is the LAW. Match it strictly. \
-If past chat history contradicts the current label (e.g. old warm messages but \
-they're now "enemies"), assume a falling-out happened SINCE then — the CURRENT \
-status overrides past tone. Don't keep being warm because old messages were warm.
+Parent → child (you are {main_name}'s Father/Mother): you are replying to your OWN KID. \
+Warm and parental, even if you have outgoing/adventurous/cheerful traits. NEVER use \
+peer-style openers like "hey man", "hey bro", "dude", "yo" — that is how friends text, \
+not how a parent texts their own child. Just dad/mom, no peer register.
 
-By tier:
-- "best friends, very close" / "close friends" / "friends, get along well": warm, easy, glad to hear from them
-- "friendly acquaintances": polite, friendly, normal
-- "barely know each other": HESITANT, CONFUSED. You barely remember {main_name} — \
-  you maybe met once or twice. Receiving this text out of the blue is weird. \
-  Lead with something like "wait who is this", "sorry — is this [their name]? \
-  how'd you get my number?", "hi! we've met right? remind me where...", "do I \
-  know you? sorry brain blank". Be a little stilted and ask for a refresher. \
-  NEVER warm, NEVER familiar, NEVER pretend you remember details you don't. \
-  This tier does NOT apply if a family role is listed — family always knows family.
-- "have some negative history": cool, brief, slightly stilted; no warmth
-- "actively dislike each other": cold, dismissive, short replies, may snipe; no warmth ANYWHERE
-- "enemies": OPENLY HOSTILE. Cutting, snarky, dismissive, may insult or mock. \
-  Treats the message with contempt. Refuses help. Zero warmth. NEVER apologizes, \
+Child → parent (you are {main_name}'s Son/Daughter): respectful, familiar.
+
+Sibling → sibling: teasing, candid, no formality. Inside jokes welcome.
+
+Spouse → spouse: intimate, casual, shorthand. Pet names if traits fit.
+
+Grandparent → grandchild: dotes, fuller sentences, may ramble warmly.
+
+If NO family role is listed, {other_name} is a friend/coworker/acquaintance — peer-style \
+"hey", "what's up" register is fine and family terms like "mom"/"dad"/"son"/"daughter" \
+are FORBIDDEN.
+
+Friendship tone — CRITICAL. The "How they feel about the player" line is the LAW. \
+If past chat contradicts the current label, assume a falling-out happened since — \
+CURRENT status overrides past tone. By tier:
+- friends / close / best friends: warm, glad to hear from them
+- friendly acquaintances: polite, normal
+- barely know each other: HESITANT, CONFUSED. You met {main_name} once or twice and \
+  barely remember them. Getting a text from them feels random even to you. Lead with \
+  confusion: "wait who is this lol", "sorry — is this {main_name}? remind me where we \
+  met", "hi! I don't know if you remember me but...". Short, stilted, awkward. NEVER \
+  warm, NEVER familiar. This tier does NOT apply if a family role is listed — family \
+  always remembers family.
+- have some negative history: cool, brief, no warmth
+- actively dislike each other: cold, dismissive, may snipe; no warmth ANYWHERE
+- enemies: OPENLY HOSTILE — cutting, snarky, dismissive, contemptuous. NEVER apologizes, \
   NEVER mends, NEVER says "rooting for you" / "happy for you" / "always have been" / \
-  "I would never" / "I miss you/us" / "hope you're well". An enemy responding to "things \
-  are great" would be sarcastic ("congrats, like I care") or competitive ("good for you, \
-  meanwhile I'm crushing it") — never supportive.
+  "I would never" / "I miss you" / "hope you're well". An enemy responding to good news \
+  is sarcastic or competitive, not supportive.
+
+Age (match {other_name}'s age stage, but family role wins where they conflict):
+- Teen: lowercase, abbreviations, dramatic slang. "omggg no way" / "stoppp"
+- Young Adult: casual but articulate. "hey are you free tonight?"
+- Adult: complete sentences, proper capitalization, no youth slang. "Hi! Are you free this weekend?"
+- Elder: formal, warm, sometimes long-winded. "Hello dear, I hope you're well." \
+  ALWAYS proper capitalization and complete sentences — NEVER lowercase, NEVER \
+  abbreviations, NEVER "lol"/"omg"/"tbh"/"ngl". An elder texting like a 20-year-old \
+  breaks character even if their traits are Geek/Bookworm/Tech-savvy — those are \
+  interests, not voice. Computer-literate elders still use punctuation.
+
+Traits add flavor on top (Hot-Headed = caps, Gloomy = ellipses, Snob = condescending \
+grammar, Goofball = playful, Romantic = soft language, Loner = terse, Evil = passive \
+aggressive). Traits do NOT override the family-role register OR the age register above. \
+Geek/Bookworm/Genius do NOT make an elder text like a millennial; Hot-Headed doesn't \
+make a child act like an adult.
 
 # What to write
-1-2 SHORT messages, max 2 sentences each. React authentically to what {main_name} said — \
-no generic responses. If they mention someone or something not in the context, react in \
-character (curious, confused, gossipy) — never refuse or ask for details.
+1-2 SHORT messages, max 2 sentences each. React authentically to what {main_name} just \
+said — no generic responses. Stay reactive (don't pivot to your own unrelated topic \
+unless what {main_name} said genuinely doesn't warrant a substantive reply).
+
+# Geography rule (STRICT)
+Look at {other_name}'s world vs {main_name}'s world (both listed in the context).
+- SAME world: in-person plans are fine ("come over", "let's grab coffee", "I saw X").
+- DIFFERENT worlds: NEVER suggest casual in-person meetups ("come over", "stop by", \
+  "let's hang out"). NEVER claim to have "run into" {main_name}. Frame everything as \
+  long-distance — texts, video chats, social media, or a PLANNED future visit. Same \
+  rule for mentions of mutuals: only "ran into X" / "saw X" / "bumped into X" if X's \
+  listed world matches {other_name}'s world EXACTLY. Each mutual entry includes \
+  "lives in <world>" -- check that against {other_name}'s world before claiming any \
+  in-person encounter with the mutual.
+- HOUSEHOLD / CLOSE RELATIONSHIPS: cohabiting sims (same household) and romantic partners \
+  NEVER "run into" each other or "bump into" each other — they live shared lives. Frame \
+  their replies as coordinating the day, asking what's for dinner, reacting to something \
+  that just happened, or planning what to do next. Same rule for mutuals: a wife doesn't \
+  "run into" her own husband.
 
 # Sims 4 time
 Sims 4 runs much faster than real life. By default ONE in-game week equals \
@@ -637,42 +722,92 @@ a season label like "(in 2 weeks, Winter)", frame timing by the season rather th
 the week count.
 
 # Hard rules
-- NO EMOJI. Plain text only -- no Unicode emoji, no emoticons (":)", "<3", etc), no decorative symbols. Local AI models like Ollama mangle emoji into garbage in the game UI, so the mod strips them out anyway. Skip them entirely.
+- NO EMOJI. Plain text only -- no Unicode emoji, no emoticons (":)", "<3", etc), no \
+  decorative symbols. Local AI models like Ollama mangle emoji into garbage in the game \
+  UI, so the mod strips them out anyway. Skip them entirely.
+- {other_name} and {main_name} are on GOOD TERMS unless friendship is negative or the \
+  journal shows actual conflict. Never invent past conflict. \
+  BANNED FRAMES — do not open with ANY remark about how long it's been since the last \
+  contact, even if the journal is empty. This includes the literal phrases AND any \
+  rewording with "since we", "in a while", "in forever", "in ages", "in a minute", \
+  "we never", "we don't": \
+  "it's been forever / ages / so long / a minute", \
+  "long time no talk / see", \
+  "it feels like forever since [X]", \
+  "we haven't talked / spoken / hung out / caught up in [X]", \
+  "been ages / forever / a while since we [verb]", \
+  "we never talk anymore", "we should catch up", "let's catch up sometime", \
+  "been meaning to catch up", "do a video call sometime". \
+  ALSO BANNED — invented past-conflict frames: \
+  "things got weird between us", "after what happened", "we left things off badly", \
+  "I know it's been weird". \
+  Rule of thumb: if your first line is ABOUT the gap in contact instead of replying to \
+  {main_name}'s actual message, scrap it and start over. An empty journal means recent \
+  contact just wasn't logged, NOT that this is your first contact in months.
 - Family relationships are NEVER romantic, regardless of romance score.
 - No profanity or explicit content.
-- Don't assume same last name = related or in same household.
-- DECEASED sims (marked [DECEASED]) are GHOSTS. Never reference them as if alive. \
-  Talk about them in past tense or as memories.
-- Stay in character. Never acknowledge being an AI or claim missing information.
-- PLAY ALONG with the player. If {main_name} references things you don't have data for \
-  (companies, hobbies, side businesses, etc.), treat them as canon. \
-  NEVER push back, correct, or say "I think you have me confused" — the player is driving \
-  the story. Roll with it, ask curious in-character questions if needed.
-- CALENDAR EVENTS are the EXCEPTION to "play along". The upcoming-events block is \
-  ground truth from the in-game calendar. Only reference events listed there, and do \
-  NOT invent details the block doesn't state — who the event is for, who's hosting, \
-  what's planned. If the block names an honoree ("in memory of X", "for X and Y"), use \
-  that exact framing; if it doesn't, stay vague ("the funeral later") and do NOT guess \
-  whose it is from other context like which mutual sim is deceased.
+- Only name sims listed in the mutual contacts block. For others, use a role like \
+  "my coworker", "a friend of mine".
+- Only reference sims in age-appropriate contexts (teens at school, adults at work, etc.). \
+  The [SEASON: ...] tag is mainly for CONSISTENCY — don't write school-related content if \
+  it's Summer, or summer-vacation content in Winter. The season can come up occasionally \
+  when it fits, but it should NOT be the topic of most replies.
+- Adults don't treat children/toddlers as peers — only as kids in their own/family/friends' lives.
+- Sims with the same last name are NOT automatically related or in the same household.
+- Stay in character. Never acknowledge being an AI or claim missing information. Improvise.
+- DECEASED sims (marked [DECEASED]) are GHOSTS. Never reference them as if alive. If they \
+  come up, talk about them in past tense, as memories, or as ghosts who appear sometimes. \
+  Don't suggest visiting them, calling them, hanging out with them, etc.
+- PLAY ALONG with {main_name}. If {main_name} references things you don't have data for \
+  (companies, hobbies, side businesses, mods, etc.), treat them as canon and respond as \
+  if you know them. NEVER push back, correct, or say "I think you have me confused" — \
+  the player is driving the story. If unsure, ask a curious in-character question \
+  instead of disputing the premise.
+- CALENDAR EVENTS are the EXCEPTION to "play along". The upcoming-events block is ground \
+  truth pulled from the in-game calendar. Only reference events listed there, and do NOT \
+  invent details the block doesn't state — who the event is for, who's hosting, what's \
+  planned, where it is. If the block names an honoree ("in memory of X", "for X and Y") \
+  use that exact framing; if it doesn't, stay vague ("the funeral later", "the wedding \
+  next week") and do NOT guess whose it is from other context like which mutual sim is \
+  deceased. CRITICAL: calendar events are KNOWN to both sims — you live in the same \
+  world and see the same calendar. NEVER deliver them as breaking news ("just heard X \
+  is coming up", "did you know it's almost X"). Reference them as already-known: "you \
+  doing anything for the holiday?", "see you at the funeral later". Holidays and season \
+  changes especially are obviously known — nobody "just hears" Summer is starting in 4 days.
+- ASPIRATIONS are background context, NOT names sims would say out loud. The aspiration \
+  string ("Renaissance Sim", "Track Knowledge", "Bestselling Author", "Friend of the \
+  Animals", etc.) is a game-tuning label that real people would never use in \
+  conversation. NEVER say "the [aspiration name] aspiration", "your [aspiration name] \
+  aspiration", "working on Track Knowledge", "doing my Bestselling Author thing". \
+  Instead, talk around it in natural language about the underlying goal -- "the book \
+  you're working on", "your research", "how the studying is going", "your music \
+  project", "the gardening business you're building". Same goes for {other_name}'s own \
+  aspiration -- never name-drop it as a label.
+- MUTUAL PLAUSIBILITY -- if you're tempted to ask {main_name} whether a mutual would be \
+  into your topic ("would Apollo even care about this?", "is this too far out of her \
+  wheelhouse?"), that's a tell that the mutual does NOT plausibly fit and you know it. \
+  In that case, just don't bring them up at all -- pick a mutual whose traits/career/age \
+  actually fit, or skip the gossip entirely. Never advertise the bad fit by hedging in \
+  front of {main_name}.
 
 # Output format (STRICT)
-PLAIN TEXT ONLY. No markdown, no `**bold**`, no `---` separators, no "Message 1:" labels.
+PLAIN TEXT ONLY. No markdown. No `**bold**`, no `*italics*`, no `_emphasis_`, no \
+headings, no `---` separators, no labels like "Message 1:" or "Reply:". Just the messages.
 
 Format your response as:
 <message 1 text>
-<message 2 text, optional>
+<message 2 text, optional, on its own line>
+<message 3 text, optional, on its own line>
 
 Just the messages, then OPTIONALLY one final line:
 MOOD: <emotion>
 
-ONLY include the MOOD line if this text would *genuinely* change how \
-the recipient feels — big news, an argument, a confession, a flirty \
-escalation, etc. SKIP the MOOD line for routine check-ins, mundane \
-updates, gossip, casual catching-up, or small talk. Most texts should \
-NOT emit a MOOD line. \
-If you do include it, pick from: happy, sad, angry, confident, flirty, \
-playful, energized, focused, inspired, embarrassed, tense, uncomfortable, \
-bored, dazed."""
+ONLY include the MOOD line if this reply would *genuinely* change how {main_name}'s sim \
+feels — big news, an argument, a confession, a flirty escalation, etc. SKIP the MOOD \
+line for routine check-ins, mundane updates, gossip, casual catching-up, or small talk. \
+Most replies should NOT emit a MOOD line. If you do include it, pick from: happy, sad, \
+angry, confident, flirty, playful, energized, focused, inspired, embarrassed, tense, \
+uncomfortable, bored, dazed."""
 
 
 
@@ -1596,6 +1731,15 @@ def _format_mutual_block(mutuals, casual=True):
         "Toddler isn't sharing investment tips. Only invoke a mutual as participating "
         "in something they'd plausibly do given who they are. If they don't fit your "
         "topic, just don't mention them -- pick a different mutual or skip the gossip."
+    )
+    body += (
+        "\nINTERESTS / CLUBS / CAREERS DO NOT TRANSFER between mutuals. Each sim's "
+        "clubs, career, and skills are listed individually in their own entry -- do "
+        "NOT assume sim A shares sim B's clubs/interests just because they know each "
+        "other. If you want to mention an activity, name the ONE sim whose listed "
+        "entry actually has that club/career/skill. Saying \"you and Bob doing that "
+        "board-game stuff\" is wrong if only Bob's clubs list \"Board\" and the "
+        "recipient's doesn't."
     )
     return body
 
@@ -2890,10 +3034,14 @@ def generate_call(callback=None, output=None):
     system = _CALL_SYSTEM.format(language=language)
     rel_desc = _describe_relationship(contact, recipient=recipient)
 
+    contact_id = getattr(contact.get("sim_info"), "sim_id", None)
+    recipient_sim_id = getattr(recipient, "sim_id", None)
     sim_history = journal.format_sim_history_for_prompt(
         contact["name"],
         recipient_name=recipient_name,
         trailing_note=_journal_obsolescence_note(contact),
+        sim_id=contact_id,
+        recipient_id=recipient_sim_id,
     )
     history_block = f"\n\n{sim_history}" if sim_history else ""
 
@@ -2920,7 +3068,14 @@ def generate_call(callback=None, output=None):
         if text:
             text = _apply_mood_from_text(text, recipient=recipient, is_incoming=True)
             _start_conversation(contact, text, recipient_sim=recipient, kind="call")
-            journal.add_entry("call", f"Call from {contact['name']} (to {recipient_name}):\n{text}", sim_name=contact["name"], recipient_name=recipient_name)
+            journal.add_entry(
+                "call",
+                f"Call from {contact['name']} (to {recipient_name}):\n{text}",
+                sim_name=contact["name"],
+                recipient_name=recipient_name,
+                sim_id=contact_id,
+                recipient_id=recipient_sim_id,
+            )
             caller_si = contact.get("sim_info")
             shown = False
             if caller_si:
@@ -2966,10 +3121,14 @@ def generate_text(callback=None, output=None):
     system = _TEXT_SYSTEM.format(language=language)
     rel_desc = _describe_relationship(contact, recipient=recipient)
 
+    contact_id = getattr(contact.get("sim_info"), "sim_id", None)
+    recipient_sim_id = getattr(recipient, "sim_id", None)
     sim_history = journal.format_sim_history_for_prompt(
         contact["name"],
         recipient_name=recipient_name,
         trailing_note=_journal_obsolescence_note(contact),
+        sim_id=contact_id,
+        recipient_id=recipient_sim_id,
     )
     history_block = f"\n\n{sim_history}" if sim_history else ""
 
@@ -2994,7 +3153,14 @@ def generate_text(callback=None, output=None):
         if text:
             text = _apply_mood_from_text(text, recipient=recipient, is_incoming=True)
             _start_conversation(contact, text, recipient_sim=recipient)
-            journal.add_entry("text", f"Text from {contact['name']} (to {recipient_name}):\n{text}", sim_name=contact["name"], recipient_name=recipient_name)
+            journal.add_entry(
+                "text",
+                f"Text from {contact['name']} (to {recipient_name}):\n{text}",
+                sim_name=contact["name"],
+                recipient_name=recipient_name,
+                sim_id=contact_id,
+                recipient_id=recipient_sim_id,
+            )
             sender_si = contact.get("sim_info")
             shown = False
             if sender_si:
@@ -3053,10 +3219,16 @@ def generate_reply(player_message, callback=None, output=None):
     )
     rel_desc = _describe_relationship(contact, recipient=recipient)
     convo_text = _format_conversation_history(history, main_name, other_name)
+    contact_id = getattr(contact.get("sim_info"), "sim_id", None)
+    main_sim_id = getattr(recipient, "sim_id", None) if recipient else (
+        getattr(sim_context.get_main_sim_info(), "sim_id", None)
+    )
     sim_history = journal.format_sim_history_for_prompt(
         other_name,
         recipient_name=main_name,
         trailing_note=_journal_obsolescence_note(contact),
+        sim_id=contact_id,
+        recipient_id=main_sim_id,
     )
     history_block = f"\n\n{sim_history}" if sim_history else ""
 
@@ -3066,9 +3238,17 @@ def generate_reply(player_message, callback=None, output=None):
     events_text = events.format_shared_events_for_prompt(recipient, contact.get("sim_info"))
     events_block = f"\n\n{events_text}" if events_text else ""
 
+    geo_main = recipient if recipient else sim_context.get_main_sim_info()
+    context_tags = (
+        f"{_location_context(geo_main, contact)}"
+        f"{_season_context()}"
+        f"{_weather_context(geo_main, contact)}"
+    )
+
     prompt = (
         f"Relationship info:\n{rel_desc}{history_block}{mutual_block}{events_block}\n\n"
-        f"Conversation so far:\n{convo_text}\n\n"
+        f"Conversation so far:\n{convo_text}"
+        f"{context_tags}\n\n"
         f"Write {other_name}'s reply (1-3 short text messages)."
     )
 
@@ -3103,6 +3283,8 @@ def generate_reply(player_message, callback=None, output=None):
                 f"{other_name}: {text_clean}",
                 sim_name=other_name,
                 recipient_name=main_name,
+                sim_id=contact_id,
+                recipient_id=main_sim_id,
             )
             title = f"Reply from {other_name}"
             sender_si = contact.get("sim_info")
@@ -3153,10 +3335,14 @@ def send_text(contact, player_message, callback=None, output=None):
         main_name=main_name,
     )
     rel_desc = _describe_relationship(contact)
+    contact_id = getattr(contact.get("sim_info"), "sim_id", None)
+    main_sim_id = getattr(main_si, "sim_id", None)
     sim_history = journal.format_sim_history_for_prompt(
         other_name,
         recipient_name=main_name,
         trailing_note=_journal_obsolescence_note(contact),
+        sim_id=contact_id,
+        recipient_id=main_sim_id,
     )
     history_block = f"\n\n{sim_history}" if sim_history else ""
     mutuals = _get_mutual_contacts(contact)
@@ -3165,9 +3351,16 @@ def send_text(contact, player_message, callback=None, output=None):
     events_text = events.format_shared_events_for_prompt(main_si, contact.get("sim_info"))
     events_block = f"\n\n{events_text}" if events_text else ""
 
+    context_tags = (
+        f"{_location_context(main_si, contact)}"
+        f"{_season_context()}"
+        f"{_weather_context(main_si, contact)}"
+    )
+
     prompt = (
         f"Relationship info:\n{rel_desc}{history_block}{mutual_block}{events_block}\n\n"
-        f"{main_name} just texted {other_name}: \"{player_message}\"\n\n"
+        f"{main_name} just texted {other_name}: \"{player_message}\""
+        f"{context_tags}\n\n"
         f"Write {other_name}'s reply (1-3 short text messages). "
         f"If {main_name} mentions people or events you don't have details about, "
         f"improvise naturally as {other_name} would — react in character, never refuse."
@@ -3197,6 +3390,8 @@ def send_text(contact, player_message, callback=None, output=None):
                 f"{other_name}: {text_clean}",
                 sim_name=other_name,
                 recipient_name=main_name,
+                sim_id=contact_id,
+                recipient_id=main_sim_id,
             )
             title = f"Reply from {other_name}"
             sender_si = contact.get("sim_info")
@@ -3237,12 +3432,24 @@ def send_call(contact, player_topic, callback=None, output=None):
     _refresh_milestones_for(contact, main_si)
 
     language = config.get_language()
-    system = _CALL_SYSTEM.format(language=language)
+    # Outgoing call from the player: the AI sim is answering, not
+    # initiating. _REPLY_SYSTEM frames them as REPLYING to the player's
+    # call -- using _CALL_SYSTEM here would (wrongly) tell them they're
+    # the one placing the call.
+    system = _REPLY_SYSTEM.format(
+        language=language,
+        other_name=other_name,
+        main_name=main_name,
+    )
     rel_desc = _describe_relationship(contact)
+    contact_id = getattr(contact.get("sim_info"), "sim_id", None)
+    main_sim_id = getattr(main_si, "sim_id", None)
     sim_history = journal.format_sim_history_for_prompt(
         other_name,
         recipient_name=main_name,
         trailing_note=_journal_obsolescence_note(contact),
+        sim_id=contact_id,
+        recipient_id=main_sim_id,
     )
     history_block = f"\n\n{sim_history}" if sim_history else ""
     mutuals = _get_mutual_contacts(contact)
@@ -3251,9 +3458,16 @@ def send_call(contact, player_topic, callback=None, output=None):
     events_text = events.format_shared_events_for_prompt(main_si, contact.get("sim_info"))
     events_block = f"\n\n{events_text}" if events_text else ""
 
+    context_tags = (
+        f"{_location_context(main_si, contact)}"
+        f"{_season_context()}"
+        f"{_weather_context(main_si, contact)}"
+    )
+
     prompt = (
         f"Person being called:\n{rel_desc}{history_block}{mutual_block}{events_block}\n\n"
-        f"{main_name} is calling {other_name}. {main_name} says: \"{player_topic}\"\n\n"
+        f"{main_name} is calling {other_name}. {main_name} says: \"{player_topic}\""
+        f"{context_tags}\n\n"
         f"Write what {other_name} says in response (3-5 lines of dialogue). "
         f"They should react naturally to what {main_name} said."
     )
@@ -3270,6 +3484,8 @@ def send_call(contact, player_topic, callback=None, output=None):
                 f"{other_name}: {text}",
                 sim_name=other_name,
                 recipient_name=main_name,
+                sim_id=contact_id,
+                recipient_id=main_sim_id,
             )
             title = f"Call with {other_name}"
             caller_si = contact.get("sim_info")

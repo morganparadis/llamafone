@@ -15,7 +15,7 @@ Commands (open cheat console with Ctrl+Shift+C):
 """
 
 MOD_NAME = "Llamafone"
-MOD_VERSION = "3.1.1"
+MOD_VERSION = "3.1.2"
 
 # Captured at module-load time -- the moment Sims 4 imported this build.
 # Used in prompts so a llama.dumpprompt definitively shows which load
@@ -94,8 +94,16 @@ try:
     import threading
     from . import commands   # noqa: F401 -- registers all llama.* cheat commands
     from . import auto_events
+    from . import save_id
 
     auto_events.start()  # starts only if auto_events_enabled = true in config
+
+    # Hook Zone.on_loading_screen_animation_finished so the per-save data
+    # folder is materialized and a milestone re-scan is kicked off the
+    # moment a save finishes loading (initial load OR quit-to-main-menu
+    # then load different save). No polling.
+    if not save_id.install_save_load_hook():
+        _log("save_id.install_save_load_hook: zone class not ready at mod-load; will retry from startup thread")
 
     # Wire up phone-UI injection BEFORE object tunings finish loading.
     # The companion .package supplies the interaction tunings (which are
@@ -139,6 +147,11 @@ try:
                 client = cm.get_first_client()
                 if not client or not getattr(client, "active_sim", None):
                     continue
+
+                # Belt-and-braces: if the Zone hook wasn't installable at
+                # mod-load (rare -- the zone module is usually imported by
+                # the engine before mods run), install it now.
+                save_id.install_save_load_hook()
 
                 from . import notifications, config, milestones
                 _log(f"Game client ready (attempt {attempt + 1}), showing startup notification.")

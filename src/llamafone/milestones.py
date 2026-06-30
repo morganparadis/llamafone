@@ -23,13 +23,14 @@ import os
 import threading
 
 from . import config, sim_context
+from . import save_id as _save_id
 
-_SNAPSHOTS_FILENAME = "Llamafone_SimSnapshots.json"
-_MILESTONES_FILENAME = "Llamafone_Milestones.json"
+_SNAPSHOTS_FILENAME = "SimSnapshots.json"
+_MILESTONES_FILENAME = "Milestones.json"
 # Per-contact tracker of which milestones each contact has already had
 # surfaced to them, so the same sim doesn't keep asking the player about
 # the same job-quit / promotion / breakup across multiple calls.
-_REFERENCES_FILENAME = "Llamafone_MilestoneRefs.json"
+_REFERENCES_FILENAME = "MilestoneRefs.json"
 
 # Cap the milestones log so it doesn't grow unbounded.
 _MAX_MILESTONES = 200
@@ -57,22 +58,18 @@ def _log(message):
 # ---------------------------------------------------------------------------
 
 def _snapshots_path():
-    cfg = config._find_config_file()
-    if cfg:
-        return os.path.join(os.path.dirname(cfg), _SNAPSHOTS_FILENAME)
-    return os.path.join(os.path.expanduser("~"), "Documents", _SNAPSHOTS_FILENAME)
+    """Per-save snapshots path. Returns None when no save is loaded."""
+    return _save_id.data_path(_SNAPSHOTS_FILENAME)
 
 
 def _milestones_path():
-    cfg = config._find_config_file()
-    if cfg:
-        return os.path.join(os.path.dirname(cfg), _MILESTONES_FILENAME)
-    return os.path.join(os.path.expanduser("~"), "Documents", _MILESTONES_FILENAME)
+    """Per-save milestones log path. Returns None when no save is loaded."""
+    return _save_id.data_path(_MILESTONES_FILENAME)
 
 
 def _load_snapshots():
     path = _snapshots_path()
-    if not os.path.exists(path):
+    if path is None or not os.path.exists(path):
         return {}
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -84,6 +81,8 @@ def _load_snapshots():
 
 def _save_snapshots(snapshots):
     path = _snapshots_path()
+    if path is None:
+        return
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump({
@@ -97,7 +96,7 @@ def _save_snapshots(snapshots):
 
 def _load_milestones():
     path = _milestones_path()
-    if not os.path.exists(path):
+    if path is None or not os.path.exists(path):
         return []
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -109,6 +108,8 @@ def _load_milestones():
 
 def _save_milestones(entries):
     path = _milestones_path()
+    if path is None:
+        return
     trimmed = entries[-_MAX_MILESTONES:]
     try:
         with open(path, "w", encoding="utf-8") as f:
@@ -118,16 +119,14 @@ def _save_milestones(entries):
 
 
 def _references_path():
-    cfg = config.get_config_path()
-    if cfg:
-        return os.path.join(os.path.dirname(cfg), _REFERENCES_FILENAME)
-    return os.path.join(os.path.expanduser("~"), "Documents", _REFERENCES_FILENAME)
+    """Per-save milestone-references path. Returns None when no save loaded."""
+    return _save_id.data_path(_REFERENCES_FILENAME)
 
 
 def _load_references():
     """Returns nested dict: {contact_id_str: {recipient_id_str: [timestamp, ...]}}."""
     path = _references_path()
-    if not os.path.exists(path):
+    if path is None or not os.path.exists(path):
         return {}
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -139,6 +138,8 @@ def _load_references():
 
 def _save_references(refs):
     path = _references_path()
+    if path is None:
+        return
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(refs, f, indent=2, ensure_ascii=False)
@@ -226,24 +227,50 @@ def _get_active_career(sim_info):
     return (None, None)
 
 
-def _get_spouse_id(sim_info):
-    """Return the sim_id of the spouse, or None if not married."""
+def _get_spouse_info(sim_info):
+    """Return (spouse_id, known) for this sim.
+
+    `known=False` means we could not read this sim's relationships at all
+    (tracker missing, target list empty, generator threw). For sims outside
+    the active household, the relationship_tracker is loaded lazily -- a
+    scan during startup can see zero targets even for a married sim, then
+    a later scan sees the spouse normally. That transient None used to
+    fire phantom "divorce + remarriage" milestones, so callers must skip
+    the spouse diff whenever either side is unknown.
+
+    `known=True, spouse_id=None` means we DID read relationships and
+    confirmed there's no spouse bit -- a real "not married" result.
+    """
     try:
         rt = _safe(sim_info, "relationship_tracker", None)
         if rt is None:
-            return None
-        for tid in rt.target_sim_gen():
+            return (None, False)
+        try:
+            targets = list(rt.target_sim_gen())
+        except Exception:
+            return (None, False)
+        if not targets:
+            # No targets at all almost always means the tracker hasn't
+            # populated yet, not that the sim genuinely knows no one.
+            return (None, False)
+        for tid in targets:
             try:
                 bits = list(rt.get_all_bits(tid))
                 for b in bits:
                     name = sim_context._get_trait_name(b).lower()
                     if "spouse" in name or ("married" in name and "unmarried" not in name):
-                        return tid
+                        return (tid, True)
             except Exception:
                 continue
+        return (None, True)
     except Exception:
-        pass
-    return None
+        return (None, False)
+
+
+def _get_spouse_id(sim_info):
+    """Backward-compat shim -- returns just the id, dropping the known flag."""
+    spouse_id, _known = _get_spouse_info(sim_info)
+    return spouse_id
 
 
 def _get_in_household(sim_info, active_household_id):
@@ -277,6 +304,7 @@ def _capture(sim_info, active_household_id):
     try:
         name = f"{_safe(sim_info, 'first_name', '')} {_safe(sim_info, 'last_name', '')}".strip()
         career_name, career_level = _get_active_career(sim_info)
+        spouse_id, spouse_known = _get_spouse_info(sim_info)
         return {
             "name": name,
             "age_stage": _get_age_stage(sim_info),
@@ -284,7 +312,8 @@ def _capture(sim_info, active_household_id):
             "career_level": career_level,
             "is_dead": bool(_safe(sim_info, "is_dead", False) or _safe(sim_info, "is_ghost", False)),
             "is_pregnant": bool(_safe(sim_info, "is_pregnant", False)),
-            "spouse_id": _get_spouse_id(sim_info),
+            "spouse_id": spouse_id,
+            "spouse_known": spouse_known,
             # `in_household` (active-household relative) is kept for back-
             # compat with old snapshots but no longer drives the diff.
             "in_household": _get_in_household(sim_info, active_household_id),
@@ -365,25 +394,31 @@ def _diff(prev, curr, name):
             "description": f"{name} had a baby",
         })
 
-    # Spouse
-    prev_spouse = prev.get("spouse_id")
-    curr_spouse = curr.get("spouse_id")
-    if prev_spouse != curr_spouse:
-        if curr_spouse and not prev_spouse:
-            events.append({
-                "type": "marriage",
-                "description": f"{name} got married",
-            })
-        elif prev_spouse and not curr_spouse:
-            events.append({
-                "type": "divorce_or_widowed",
-                "description": f"{name} is no longer married (divorce, widowed, or breakup)",
-            })
-        elif prev_spouse and curr_spouse:
-            events.append({
-                "type": "remarriage",
-                "description": f"{name} remarried someone new",
-            })
+    # Spouse -- only diff if BOTH snapshots had reliable spouse reads.
+    # Legacy snapshots (before spouse_known was tracked) default to True
+    # so existing data still diffs normally. New snapshots with unknown
+    # reads skip the diff and try again next scan.
+    prev_known = prev.get("spouse_known", True)
+    curr_known = curr.get("spouse_known", True)
+    if prev_known and curr_known:
+        prev_spouse = prev.get("spouse_id")
+        curr_spouse = curr.get("spouse_id")
+        if prev_spouse != curr_spouse:
+            if curr_spouse and not prev_spouse:
+                events.append({
+                    "type": "marriage",
+                    "description": f"{name} got married",
+                })
+            elif prev_spouse and not curr_spouse:
+                events.append({
+                    "type": "divorce_or_widowed",
+                    "description": f"{name} is no longer married (divorce, widowed, or breakup)",
+                })
+            elif prev_spouse and curr_spouse:
+                events.append({
+                    "type": "remarriage",
+                    "description": f"{name} remarried someone new",
+                })
 
     # Household membership -- check the ABSOLUTE household_id, not the
     # active-household-relative in_household flag. Toggling which family

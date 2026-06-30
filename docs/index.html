@@ -641,6 +641,36 @@ api_key  = </code></pre>
   <ol class="changelog-list">
 
     <li class="changelog-entry">
+      <div class="changelog-date">June 30, 2026</div>
+      <div class="changelog-body">
+        <h3>Per-save history, smarter replies (v3.1.2)</h3>
+        <div style="border:2px solid #d97706;background:#fff8eb;padding:12px 16px;border-radius:8px;margin:0 0 12px;">
+          <strong>⚠️ IMPORTANT — your journal/milestones moved.</strong>
+          <p style="margin:6px 0 0;">Per-save data (journal, milestones, sim snapshots, milestone references) now lives in:</p>
+          <p style="margin:6px 0; font-family:monospace; word-break:break-all;">Documents/Electronic Arts/The Sims 4/saves/Llamafone/Slot_NNNNNNNN__&lt;your save name&gt;/</p>
+          <p style="margin:6px 0 0;">…instead of one shared file in your Mods folder. The folder is created automatically when you load each save. If you want to keep your existing v3.1.1 journal/milestones data, do this once per save AFTER updating:</p>
+          <ol style="margin:6px 0 0 1.2em;">
+            <li>Launch a save in Sims 4. Wait for the loading screen to finish (the per-save folder gets created at that moment).</li>
+            <li>Quit. Open <code>Documents/Electronic Arts/The Sims 4/saves/Llamafone/</code> — you'll see a <code>Slot_NNNNNNNN__&lt;save name&gt;/</code> folder for the save you just loaded.</li>
+            <li>From your Mods folder, copy these files in and drop the <code>Llamafone_</code> prefix: <code>Llamafone_Journal.json</code> → <code>Journal.json</code>, <code>Llamafone_Milestones.json</code> → <code>Milestones.json</code>, <code>Llamafone_SimSnapshots.json</code> → <code>SimSnapshots.json</code>, <code>Llamafone_MilestoneRefs.json</code> → <code>MilestoneRefs.json</code>.</li>
+            <li>Repeat for every save you want history preserved on.</li>
+          </ol>
+          <p style="margin:6px 0 0;">If you don't migrate, each save just starts fresh — nothing breaks. <code>llamafone.cfg</code> and <code>Llamafone_Settings.json</code> stay in the Mods folder unchanged (those are global, not per-save).</p>
+        </div>
+        <ul>
+          <li><strong>Per-save data folders.</strong> Multiple saves no longer share one history. Load Save A, talk to Bella → her journal entries land in A's folder; switch to Save B and a parallel "Bella" there has her own clean slate. The folder is created the instant Sims 4's loading screen finishes (verified hook against the game's <code>Zone.on_loading_screen_animation_finished</code> — no polling, no surprise CPU).</li>
+          <li><strong>Journal lookups by sim_id, not name.</strong> Two sims with the same name (Maxis premades, your own duplicates) no longer cross-contaminate. Entries store both the name (for display) and the sim_id (for lookup). Legacy entries opportunistically get their sim_id filled in as you interact with each sim — no migration script, the journal self-heals.</li>
+          <li><strong>Reply prompt brought up to parity with the call/text prompt.</strong> When an AI sim replies to your message, they now get the same rule set their incoming messages have — full friendship-tier table, geography rule, Sims 4 time block, banned-filler rules, calendar event handling, aspiration name-drop ban, mutual plausibility check. Previously the reply prompt was abbreviated and several rules silently didn't apply on the reply path. The user prompt also now carries <code>[GEOGRAPHY]</code>, <code>[SEASON]</code>, <code>[WEATHER]</code> tags on replies just like it does on incoming calls/texts.</li>
+          <li><strong>Outgoing calls/texts know who's calling.</strong> When YOU call or text someone via the phone UI or <code>llama.send_text</code>/<code>llama.send_call</code>, the prompt now includes the player's full recipient block — mood, career, aspiration, top-3 skills. Previously only the contact was described, so the AI had no idea who they were talking TO. (Bonus fix: outgoing-call path was using the incoming-call system prompt by mistake, which told the AI to initiate the call instead of answer it. Fixed.)</li>
+          <li><strong>Elder sims actually text like elders.</strong> The age rule was a soft "Elder: formal, warm" line that the AI would override when a sim's traits (Geek, Bookworm, Genius, Programming 10) read as a "tech nerd" archetype — pattern-matching them to lowercase millennial voice. Now hardened: elders ALWAYS use proper capitalization and complete sentences, regardless of traits. Traits are interests, not voice.</li>
+          <li><strong>"Been ages since we caught up" frame killed.</strong> The banned-filler list previously matched literal phrases like "it's been ages" but slipped past reworded versions ("been ages since we [verb]"). Now bans the whole frame — any opening about how long it's been since contact, including with an empty journal (an empty journal just means recent contact wasn't logged, NOT that this is your first contact in months).</li>
+          <li><strong>Clubs and interests stop transferring between mutuals.</strong> The AI was reading Daniel's "Board" club listing and writing "you and Bob doing that board-game stuff" to a sim who wasn't in the club. New rule explicitly says each sim's clubs/career/skills are listed individually — assume nothing transfers.</li>
+          <li><strong>Phantom divorce/remarriage milestones fixed.</strong> For sims outside the active household, Sims 4 loads the relationship tracker lazily — a startup scan could see zero targets, conclude "not married", then a later scan would see the real spouse and conclude "got married", firing a phantom divorce + remarriage pair. The detector now tracks whether the relationship read was reliable and skips the comparison when it wasn't.</li>
+        </ul>
+      </div>
+    </li>
+
+    <li class="changelog-entry">
       <div class="changelog-date">June 29, 2026</div>
       <div class="changelog-body">
         <h3>Smarter context, durable journal (v3.1.1)</h3>
@@ -779,6 +809,12 @@ api_key  = </code></pre>
       <div class="roadmap-status status-planned">Planned</div>
       <h3>Standalone Llamafone phone app</h3>
       <p>A dedicated icon on your sim's phone home screen — tap it and you're in Llamafone, with quick access to calls, texts, conversation history, and settings. No more digging through the Social menu. The Phone &gt; Social tiles will stay too, but the standalone app makes the mod feel native alongside the game's other phone apps.</p>
+    </li>
+
+    <li class="roadmap-card">
+      <div class="roadmap-status status-planned">Planned</div>
+      <h3>Past-event memory</h3>
+      <p>The Sims 4 calendar drops events from the in-game UI the moment they end — so a wedding you attended on Monday is gone from the prompt by Tuesday. The mod will snapshot calendar events as you live through them and surface the recent ones in calls and texts, so sims can text the morning after a party with "good seeing you last night", reference a funeral you both attended last weekend, or follow up on something that happened at the holiday gathering. Memory you keep, even after the game forgets.</p>
     </li>
 
     <li class="roadmap-card">

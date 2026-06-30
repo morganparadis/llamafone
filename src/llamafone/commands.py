@@ -818,7 +818,12 @@ try:
 
         recipient_name = recipient.first_name
         rel_desc = phone._describe_relationship(contact, recipient=recipient)
-        sim_history = journal.format_sim_history_for_prompt(contact["name"], recipient_name=recipient_name)
+        sim_history = journal.format_sim_history_for_prompt(
+            contact["name"],
+            recipient_name=recipient_name,
+            sim_id=getattr(contact.get("sim_info"), "sim_id", None),
+            recipient_id=getattr(recipient, "sim_id", None),
+        )
         history_block = f"\n\n{sim_history}" if sim_history else ""
         mutuals = phone._get_mutual_contacts(contact, recipient=recipient)
         mutual_block = ""

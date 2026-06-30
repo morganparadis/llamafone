@@ -44,13 +44,9 @@ def _log(message):
         pass
 
 
-def get_current_save_id():
-    """Return a stable per-save-FILE identifier, or None if no save is loaded.
-
-    Uses `save_slot.slot_id` (matches the on-disk filename
-    `Slot_<id>.save`). NOT `get_save_slot_proto_guid()` -- testing showed
-    that returns the same value for different saves (likely the world guid,
-    shared across saves of the same world)."""
+def _get_current_slot_id_int():
+    """Resolve the loaded save's slot id as a Python int, or None when
+    no save is loaded."""
     try:
         import services
     except Exception:
@@ -75,14 +71,34 @@ def get_current_save_id():
         slot = svc.get_save_slot_proto_buff()
         if slot is not None:
             slot_id = getattr(slot, "slot_id", None)
-            # In proto3, an unset int32 reads as 0 rather than None, which
-            # would falsely match the main menu / pre-load state. Treat 0
-            # as "no save loaded" -- real saves get nonzero slot ids.
+            # proto3 reads an unset int32 as 0; treat 0 as no-save-loaded.
             if slot_id:
-                return f"Slot_{int(slot_id):08d}"
+                return int(slot_id)
     except Exception:
         pass
     return None
+
+
+def get_current_save_id():
+    """Return a stable per-save identifier matching the on-disk .save
+    filename, or None if no save is loaded.
+
+    The persistence service stores slot_id as a decimal int, but Sims 4
+    names the actual save files in LOWERCASE HEX (8 zero-padded digits).
+    Slot id 4373 decimal -> "Slot_00001115.save" on disk because
+    0x1115 == 4373. We format with `:08x` to match the filename exactly.
+    WickedWhims uses the same scheme (uppercase) for its complex_save_data
+    folder; the .ver / .day / .week rotation files also share this format.
+
+    Pre-v3.1.4 the folder was named with DECIMAL formatting (`Slot_00004373`
+    for the same save) which didn't match the .save filename. data_dir()
+    contains a one-time migration that renames legacy decimal folders to
+    the correct hex names so existing journal/milestones history is
+    preserved across the upgrade."""
+    slot_id = _get_current_slot_id_int()
+    if slot_id is None:
+        return None
+    return f"Slot_{slot_id:08x}"
 
 
 def _get_current_slot_name():
@@ -121,24 +137,64 @@ def _saves_folder():
 
 
 def data_dir():
-    """Return `<saves>/Llamafone/<Slot_NNNNNNNN>[__name]/`, creating it on
-    demand. Returns None when no save is loaded -- callers MUST handle
-    None and silently skip writes in that case (no fallback location).
+    """Return `<saves>/Llamafone/Slot_NNNNNNNN/` (lowercase hex matching
+    the on-disk .save filename), creating it on demand. Returns None
+    when no save is loaded -- callers MUST handle None and silently
+    skip writes in that case (no fallback location).
 
-    The folder name leads with the slot id (matches the in-saves filename
-    `Slot_NNNNNNNN.save`) and appends the player-facing slot name when
-    available so the folder is easy to spot in Explorer."""
+    One-time migration for v3.1.2/3 -> v3.1.4: earlier versions formatted
+    the slot id as DECIMAL (e.g. `Slot_00004373` for what should be
+    `Slot_00001115`), and v3.1.3 also appended the player-facing save
+    name (e.g. `Slot_00004373__My Saved Game 32 [Recovered]`). When
+    data_dir runs and the new hex-format folder doesn't exist yet, we
+    look for any of those legacy variants for THIS save's slot id and
+    rename it. Preserves history across the upgrade."""
     save_id = get_current_save_id()
     if not save_id:
         return None
-    slot_name = _sanitize_for_path(_get_current_slot_name())
-    folder_name = f"{save_id}__{slot_name}" if slot_name else save_id
-    base = os.path.join(_saves_folder(), "Llamafone", folder_name)
-    try:
-        os.makedirs(base, exist_ok=True)
-    except Exception:
-        return None
+    base_root = os.path.join(_saves_folder(), "Llamafone")
+    base = os.path.join(base_root, save_id)
+    if not os.path.exists(base):
+        slot_id_int = _get_current_slot_id_int()
+        legacy = _find_legacy_folder(base_root, slot_id_int) if slot_id_int else None
+        if legacy is not None:
+            try:
+                os.rename(legacy, base)
+                _log(f"migrated legacy folder {os.path.basename(legacy)!r} -> {save_id!r}")
+            except Exception as e:
+                _log(f"legacy migration failed: {type(e).__name__}: {e}")
+        try:
+            os.makedirs(base, exist_ok=True)
+        except Exception:
+            return None
     return base
+
+
+def _find_legacy_folder(base_root, slot_id_decimal):
+    """Find the v3.1.2/3 folder for this save -- it was named with the
+    DECIMAL slot id (`Slot_00004373` for slot_id=4373), optionally with
+    a `__<sanitized-slot-name>` suffix added by v3.1.3. Returns the
+    path of the first match, or None.
+
+    The legacy decimal-formatted name CANNOT collide with the new
+    hex-formatted name for any save because both formats are 8 digits
+    and 0-9 only -- a decimal "00004373" is unambiguously NOT a hex
+    representation of itself (which would need `4373` hex == 17267
+    decimal). So matching by decimal prefix is safe."""
+    if not os.path.isdir(base_root):
+        return None
+    legacy_prefix = f"Slot_{slot_id_decimal:08d}"
+    try:
+        for entry in os.listdir(base_root):
+            full = os.path.join(base_root, entry)
+            if not os.path.isdir(full):
+                continue
+            # Exact match (v3.1.2 naming) or decimal-prefix__name (v3.1.3)
+            if entry == legacy_prefix or entry.startswith(legacy_prefix + "__"):
+                return full
+    except Exception:
+        pass
+    return None
 
 
 def data_path(filename):

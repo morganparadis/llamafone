@@ -47,7 +47,7 @@
     "description": "A free phone-first script mod for The Sims 4 that generates AI-powered phone calls and text messages (bring your own AI -- Claude, OpenAI, Gemini, or local Ollama). Random sims call and text you in character, shaped by their traits, mood, relationships, and what's actually happening in your save.",
     "url": "https://morganparadis.github.io/llamafone/",
     "downloadUrl": "https://github.com/morganparadis/llamafone/releases/latest",
-    "softwareVersion": "3.1.3",
+    "softwareVersion": "3.1.4",
     "image": "https://morganparadis.github.io/llamafone/img/llamafonelogo-square.PNG",
     "author": { "@type": "Person", "name": "morganparadis" },
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
@@ -644,6 +644,14 @@ api_key  = </code></pre>
   <p class="muted">Recent changes from the dev branch — the mod's actively maintained.</p>
 
   <ol class="changelog-list">
+
+    <li class="changelog-entry">
+      <div class="changelog-date">June 30, 2026</div>
+      <div class="changelog-body">
+        <h3>Hotfix: per-save folder names now match the .save filename (v3.1.4)</h3>
+        <p>v3.1.2/3 named per-save folders with the slot id formatted as decimal (e.g. <code>Slot_00004373</code>) when Sims 4 actually names the .save files with the slot id in lowercase hex (<code>Slot_00001115.save</code> for the same id — <code>0x1115 == 4373</code>). The folder name didn't match the filename, and on every play session the mod could land on a different decimal value as the player's save state changed. v3.1.4 formats slot ids as hex to match the .save filename exactly. On first load after upgrading, the mod auto-renames your old decimal-named folder to the correct hex name so your journal/milestones history carries over. No manual migration needed.</p>
+      </div>
+    </li>
 
     <li class="changelog-entry">
       <div class="changelog-date">June 30, 2026</div>

@@ -56,6 +56,39 @@ def _log(message):
 # ---------------------------------------------------------------------------
 # File I/O
 # ---------------------------------------------------------------------------
+#
+# Reentrant lock guarding ALL snapshot / milestones / references file
+# operations. The background scan daemon and the main game thread both
+# read and write these files; without the lock, a phone prompt building
+# milestones could hit the JSON file mid-write and get a JSONDecodeError.
+# RLock so nested helpers (scan_and_record calls _load_snapshots then
+# _save_snapshots while holding the lock) work cleanly.
+_lock = threading.RLock()
+
+
+def _atomic_write_json(path, data):
+    """Write JSON via .tmp + fsync + os.replace so a crash mid-write can't
+    corrupt the file. Mirrors the journal hardening pattern. Best-effort:
+    on failure the on-disk file is left untouched and the tmp is cleaned
+    up if possible."""
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.flush()
+            try:
+                os.fsync(f.fileno())
+            except Exception:
+                pass  # not all platforms; best-effort
+        os.replace(tmp, path)
+    except Exception as e:
+        _log(f"_atomic_write_json({path}) failed: {type(e).__name__}: {e}")
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except Exception:
+            pass
+
 
 def _snapshots_path():
     """Per-save snapshots path. Returns None when no save is loaded."""
@@ -68,54 +101,50 @@ def _milestones_path():
 
 
 def _load_snapshots():
-    path = _snapshots_path()
-    if path is None or not os.path.exists(path):
-        return {}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return data.get("snapshots", {}) if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+    with _lock:
+        path = _snapshots_path()
+        if path is None or not os.path.exists(path):
+            return {}
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("snapshots", {}) if isinstance(data, dict) else {}
+        except Exception:
+            return {}
 
 
 def _save_snapshots(snapshots):
-    path = _snapshots_path()
-    if path is None:
-        return
-    try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump({
-                "schema_version": 1,
-                "snapshots": snapshots,
-                "last_scan_at": datetime.datetime.now().isoformat(),
-            }, f, indent=2, ensure_ascii=False)
-    except Exception:
-        pass
+    with _lock:
+        path = _snapshots_path()
+        if path is None:
+            return
+        _atomic_write_json(path, {
+            "schema_version": 1,
+            "snapshots": snapshots,
+            "last_scan_at": datetime.datetime.now().isoformat(),
+        })
 
 
 def _load_milestones():
-    path = _milestones_path()
-    if path is None or not os.path.exists(path):
-        return []
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return data if isinstance(data, list) else []
-    except Exception:
-        return []
+    with _lock:
+        path = _milestones_path()
+        if path is None or not os.path.exists(path):
+            return []
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data if isinstance(data, list) else []
+        except Exception:
+            return []
 
 
 def _save_milestones(entries):
-    path = _milestones_path()
-    if path is None:
-        return
-    trimmed = entries[-_MAX_MILESTONES:]
-    try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(trimmed, f, indent=2, ensure_ascii=False)
-    except Exception:
-        pass
+    with _lock:
+        path = _milestones_path()
+        if path is None:
+            return
+        trimmed = entries[-_MAX_MILESTONES:]
+        _atomic_write_json(path, trimmed)
 
 
 def _references_path():
@@ -125,26 +154,24 @@ def _references_path():
 
 def _load_references():
     """Returns nested dict: {contact_id_str: {recipient_id_str: [timestamp, ...]}}."""
-    path = _references_path()
-    if path is None or not os.path.exists(path):
-        return {}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+    with _lock:
+        path = _references_path()
+        if path is None or not os.path.exists(path):
+            return {}
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
 
 
 def _save_references(refs):
-    path = _references_path()
-    if path is None:
-        return
-    try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(refs, f, indent=2, ensure_ascii=False)
-    except Exception:
-        pass
+    with _lock:
+        path = _references_path()
+        if path is None:
+            return
+        _atomic_write_json(path, refs)
 
 
 def _referenced_timestamps(contact_id, recipient_id):
@@ -174,14 +201,15 @@ def mark_referenced(contact_id, recipient_id, milestone_entries):
     if not timestamps:
         return
     try:
-        refs = _load_references()
-        ckey = str(contact_id)
-        rkey = str(recipient_id)
-        contact_block = refs.setdefault(ckey, {})
-        existing = set(contact_block.get(rkey, []))
-        existing.update(timestamps)
-        contact_block[rkey] = sorted(existing)
-        _save_references(refs)
+        with _lock:
+            refs = _load_references()
+            ckey = str(contact_id)
+            rkey = str(recipient_id)
+            contact_block = refs.setdefault(ckey, {})
+            existing = set(contact_block.get(rkey, []))
+            existing.update(timestamps)
+            contact_block[rkey] = sorted(existing)
+            _save_references(refs)
     except Exception:
         pass
 
@@ -395,11 +423,14 @@ def _diff(prev, curr, name):
         })
 
     # Spouse -- only diff if BOTH snapshots had reliable spouse reads.
-    # Legacy snapshots (before spouse_known was tracked) default to True
-    # so existing data still diffs normally. New snapshots with unknown
-    # reads skip the diff and try again next scan.
-    prev_known = prev.get("spouse_known", True)
-    curr_known = curr.get("spouse_known", True)
+    # Legacy snapshots (from before spouse_known existed) default to False
+    # so we DON'T diff against them -- v3.1.1 -> v3.1.2 upgrade snapshots
+    # might have been taken when the relationship_tracker was still lazy,
+    # which used to fire phantom divorce events. Cost: real divorces that
+    # happened during upgrade are missed for one scan; they show up on
+    # the next scan once both snapshots have spouse_known=True.
+    prev_known = prev.get("spouse_known", False)
+    curr_known = curr.get("spouse_known", False)
     if prev_known and curr_known:
         prev_spouse = prev.get("spouse_id")
         curr_spouse = curr.get("spouse_id")
@@ -486,33 +517,37 @@ def scan_and_record():
         hh = services.active_household()
         active_hh_id = _safe(hh, "id", None) if hh else None
 
-        snapshots = _load_snapshots()
-        milestones = _load_milestones()
-        now_iso = datetime.datetime.now().isoformat()
-
         sims = _collect_sims_to_scan()
-        new_count = 0
-        for sid, sim_info in sims.items():
-            sid_key = str(sid)
-            curr = _capture(sim_info, active_hh_id)
-            if not curr:
-                continue
-            prev = snapshots.get(sid_key)
-            events = _diff(prev, curr, curr.get("name") or "Someone")
-            for ev in events:
-                ev["timestamp"] = now_iso
-                ev["sim_id"] = sid_key
-                ev["sim_name"] = curr.get("name")
-                milestones.append(ev)
-                new_count += 1
-            snapshots[sid_key] = curr
+        # Hold the lock across the whole load -> diff -> save cycle so a
+        # second background scan or a phone-context scan_sims can't race
+        # us and overwrite our snapshot updates.
+        with _lock:
+            snapshots = _load_snapshots()
+            milestones = _load_milestones()
+            now_iso = datetime.datetime.now().isoformat()
 
-        _save_snapshots(snapshots)
-        if new_count > 0:
-            _save_milestones(milestones)
-            _log(f"Recorded {new_count} new milestone(s) across {len(sims)} sim(s).")
-        else:
-            _log(f"Scanned {len(sims)} sim(s), no new milestones since last scan.")
+            new_count = 0
+            for sid, sim_info in sims.items():
+                sid_key = str(sid)
+                curr = _capture(sim_info, active_hh_id)
+                if not curr:
+                    continue
+                prev = snapshots.get(sid_key)
+                events = _diff(prev, curr, curr.get("name") or "Someone")
+                for ev in events:
+                    ev["timestamp"] = now_iso
+                    ev["sim_id"] = sid_key
+                    ev["sim_name"] = curr.get("name")
+                    milestones.append(ev)
+                    new_count += 1
+                snapshots[sid_key] = curr
+
+            _save_snapshots(snapshots)
+            if new_count > 0:
+                _save_milestones(milestones)
+                _log(f"Recorded {new_count} new milestone(s) across {len(sims)} sim(s).")
+            else:
+                _log(f"Scanned {len(sims)} sim(s), no new milestones since last scan.")
     except Exception as e:
         _log(f"scan_and_record raised: {type(e).__name__}: {e}")
 
@@ -534,35 +569,38 @@ def scan_sims(sim_infos):
         hh = services.active_household()
         active_hh_id = _safe(hh, "id", None) if hh else None
 
-        snapshots = _load_snapshots()
-        milestones = _load_milestones()
-        now_iso = datetime.datetime.now().isoformat()
+        # Same locking pattern as scan_and_record: hold across the whole
+        # load -> diff -> save cycle.
+        with _lock:
+            snapshots = _load_snapshots()
+            milestones = _load_milestones()
+            now_iso = datetime.datetime.now().isoformat()
 
-        new_count = 0
-        for sim_info in sim_infos:
-            if sim_info is None:
-                continue
-            sid = _safe(sim_info, "sim_id", None)
-            if sid is None:
-                continue
-            sid_key = str(sid)
-            curr = _capture(sim_info, active_hh_id)
-            if not curr:
-                continue
-            prev = snapshots.get(sid_key)
-            events = _diff(prev, curr, curr.get("name") or "Someone")
-            for ev in events:
-                ev["timestamp"] = now_iso
-                ev["sim_id"] = sid_key
-                ev["sim_name"] = curr.get("name")
-                milestones.append(ev)
-                new_count += 1
-            snapshots[sid_key] = curr
+            new_count = 0
+            for sim_info in sim_infos:
+                if sim_info is None:
+                    continue
+                sid = _safe(sim_info, "sim_id", None)
+                if sid is None:
+                    continue
+                sid_key = str(sid)
+                curr = _capture(sim_info, active_hh_id)
+                if not curr:
+                    continue
+                prev = snapshots.get(sid_key)
+                events = _diff(prev, curr, curr.get("name") or "Someone")
+                for ev in events:
+                    ev["timestamp"] = now_iso
+                    ev["sim_id"] = sid_key
+                    ev["sim_name"] = curr.get("name")
+                    milestones.append(ev)
+                    new_count += 1
+                snapshots[sid_key] = curr
 
-        _save_snapshots(snapshots)
-        if new_count > 0:
-            _save_milestones(milestones)
-            _log(f"Targeted scan: {new_count} new milestone(s) across {len(sim_infos)} sim(s).")
+            _save_snapshots(snapshots)
+            if new_count > 0:
+                _save_milestones(milestones)
+                _log(f"Targeted scan: {new_count} new milestone(s) across {len(sim_infos)} sim(s).")
     except Exception as e:
         _log(f"scan_sims raised: {type(e).__name__}: {e}")
 

@@ -47,7 +47,7 @@
     "description": "A free phone-first script mod for The Sims 4 that generates AI-powered phone calls and text messages (bring your own AI -- Claude, OpenAI, Gemini, or local Ollama). Random sims call and text you in character, shaped by their traits, mood, relationships, and what's actually happening in your save.",
     "url": "https://morganparadis.github.io/llamafone/",
     "downloadUrl": "https://github.com/morganparadis/llamafone/releases/latest",
-    "softwareVersion": "3.1.2",
+    "softwareVersion": "3.1.3",
     "image": "https://morganparadis.github.io/llamafone/img/llamafonelogo-square.PNG",
     "author": { "@type": "Person", "name": "morganparadis" },
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
@@ -644,6 +644,21 @@ api_key  = </code></pre>
   <p class="muted">Recent changes from the dev branch — the mod's actively maintained.</p>
 
   <ol class="changelog-list">
+
+    <li class="changelog-entry">
+      <div class="changelog-date">June 30, 2026</div>
+      <div class="changelog-body">
+        <h3>Stability pass (v3.1.3)</h3>
+        <p class="muted">No new features — just hardening based on a code audit after v3.1.2. Safe to drop in; same data layout as v3.1.2, no migration steps.</p>
+        <ul>
+          <li><strong>Journal + milestones writes are now thread-safe.</strong> The mod runs several things on background threads (auto-events, milestone scans, reply-delay timers) that all read and write the same files. Added locks so concurrent writes can't race and lose entries.</li>
+          <li><strong>Milestones writes are now atomic.</strong> Snapshots, milestone log, and per-contact references now use the same write-to-.tmp-then-rename pattern the journal already had. A crash mid-write can't corrupt the file anymore.</li>
+          <li><strong>Phantom divorces stopped for good.</strong> v3.1.2's fix for the lazy-load relationship bug only kicked in when BOTH snapshots had the new "spouse was readable" flag. Snapshots that survived from v3.1.1 didn't have the flag, so the safety check defaulted to "yes diff" and could still fire a phantom divorce on the first scan after upgrade. The default is now "no diff" until a clean snapshot exists — at the cost of missing real divorces only on the very first scan after upgrade.</li>
+          <li><strong>Reply-delay timers cancelled when you switch saves.</strong> If a sim was about to text you back in ~30 seconds and you quit to the main menu, the reply used to fire in the new save's context (wrong contact, wrong conversation). Pending timers are now cancelled when a new save loads.</li>
+          <li><strong>Backfill won't misattribute ambiguous names.</strong> The opportunistic journal backfill (which stamps a sim_id onto legacy name-only entries when it learns the mapping) now refuses to backfill when two sims share a name — the legacy entries stay name-only rather than getting bound to the wrong sim.</li>
+        </ul>
+      </div>
+    </li>
 
     <li class="changelog-entry">
       <div class="changelog-date">June 30, 2026</div>

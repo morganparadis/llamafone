@@ -12,6 +12,7 @@ memory. Writes still go to disk immediately for persistence.
 import datetime
 import json
 import os
+import threading
 
 from . import config
 from . import save_id as _save_id
@@ -25,6 +26,15 @@ _PREVIEW_CHARS = 220        # max chars per entry shown in prompts
 # saves) so two saves never share journal history.
 _cache = None
 _cached_for_save_id = None
+
+# Reentrant lock protecting the cache and the on-disk file from
+# interleaved access. Three things can call into this module concurrently:
+# the main game thread (phone prompts, story commands), the auto_events
+# daemon, and the milestones background scan. Without a lock, two writers
+# can race the load -> append -> save sequence and lose entries. RLock
+# (not Lock) is used because add_entry naturally calls _load and _save
+# both of which acquire the same lock -- RLock makes reentrant grabs safe.
+_lock = threading.RLock()
 
 
 def _journal_path():
@@ -52,65 +62,67 @@ def _load():
     rename the bad file to a timestamped .bak so the user can recover
     it manually -- never overwrite a corrupt journal blindly.
     """
-    global _cache, _cached_for_save_id
-    current = _save_id.get_current_save_id()
-    if _cache is not None and _cached_for_save_id == current:
-        return _cache
-    _cached_for_save_id = current
-    path = _journal_path()
-    if path is None or not os.path.exists(path):
-        _cache = []
-        return _cache
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            _cache = json.load(f)
-        if not isinstance(_cache, list):
-            _log(f"Journal at {path} parsed but isn't a list; preserving as .bak")
+    with _lock:
+        global _cache, _cached_for_save_id
+        current = _save_id.get_current_save_id()
+        if _cache is not None and _cached_for_save_id == current:
+            return _cache
+        _cached_for_save_id = current
+        path = _journal_path()
+        if path is None or not os.path.exists(path):
+            _cache = []
+            return _cache
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                _cache = json.load(f)
+            if not isinstance(_cache, list):
+                _log(f"Journal at {path} parsed but isn't a list; preserving as .bak")
+                try:
+                    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    os.rename(path, f"{path}.notlist-{ts}.bak")
+                except Exception:
+                    pass
+                _cache = []
+        except Exception as e:
             try:
                 ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                os.rename(path, f"{path}.notlist-{ts}.bak")
-            except Exception:
-                pass
+                bak = f"{path}.corrupt-{ts}.bak"
+                os.rename(path, bak)
+                _log(f"Could not parse journal ({type(e).__name__}: {e}); preserved as {bak}")
+            except Exception as e2:
+                _log(f"Journal parse failed AND backup failed: {e} / {e2}")
             _cache = []
-    except Exception as e:
-        try:
-            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            bak = f"{path}.corrupt-{ts}.bak"
-            os.rename(path, bak)
-            _log(f"Could not parse journal ({type(e).__name__}: {e}); preserved as {bak}")
-        except Exception as e2:
-            _log(f"Journal parse failed AND backup failed: {e} / {e2}")
-        _cache = []
-    return _cache
+        return _cache
 
 
 def _save(entries):
     """Atomic write -- write to .tmp, then os.replace() onto the real
     path. The original journal file is never partially-overwritten, so
     a crash mid-write can't corrupt it. No trimming: unbounded growth."""
-    global _cache, _cached_for_save_id
-    _cache = entries
-    _cached_for_save_id = _save_id.get_current_save_id()
-    path = _journal_path()
-    if path is None:
-        return  # no save loaded -- nothing to persist
-    tmp = path + ".tmp"
-    try:
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(entries, f, indent=2, ensure_ascii=False)
-            f.flush()
-            try:
-                os.fsync(f.fileno())
-            except Exception:
-                pass  # not all platforms; best-effort
-        os.replace(tmp, path)  # atomic on POSIX + Windows (same volume)
-    except Exception as e:
-        _log(f"_save failed ({type(e).__name__}: {e}); journal on disk untouched")
+    with _lock:
+        global _cache, _cached_for_save_id
+        _cache = entries
+        _cached_for_save_id = _save_id.get_current_save_id()
+        path = _journal_path()
+        if path is None:
+            return  # no save loaded -- nothing to persist
+        tmp = path + ".tmp"
         try:
-            if os.path.exists(tmp):
-                os.remove(tmp)
-        except Exception:
-            pass
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(entries, f, indent=2, ensure_ascii=False)
+                f.flush()
+                try:
+                    os.fsync(f.fileno())
+                except Exception:
+                    pass  # not all platforms; best-effort
+            os.replace(tmp, path)  # atomic on POSIX + Windows (same volume)
+        except Exception as e:
+            _log(f"_save failed ({type(e).__name__}: {e}); journal on disk untouched")
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -136,40 +148,53 @@ def add_entry(content_type, content, sim_name=None, recipient_name=None,
     drive display. Legacy entries with only names still match via the name
     fallback in `get_sim_history`.
     """
-    entries = _load()
-    entry = {
-        "timestamp": datetime.datetime.now().isoformat(),
-        "type": content_type,
-        "content": content,
-    }
-    if sim_name:
-        entry["sim"] = sim_name
-    if recipient_name:
-        entry["recipient"] = recipient_name
-    if sim_id is not None:
-        entry["sim_id"] = str(sim_id)
-    if recipient_id is not None:
-        entry["recipient_id"] = str(recipient_id)
-    entries.append(entry)
-    # Opportunistic backfill: if this write supplies a name<->id mapping,
-    # apply it to any legacy entries with that name and no id. Self-heals
-    # the journal as the player uses the mod -- no migration script.
-    if sim_id is not None and sim_name:
-        _backfill_id_for_name(entries, "sim", str(sim_id), sim_name)
-    if recipient_id is not None and recipient_name:
-        _backfill_id_for_name(entries, "recipient", str(recipient_id), recipient_name)
-    _save(entries)
+    # Hold the lock across the whole load -> append -> backfill -> save
+    # sequence so concurrent writes (auto_events daemon, milestone scan,
+    # main thread phone call) can't race and lose entries.
+    with _lock:
+        entries = _load()
+        entry = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "type": content_type,
+            "content": content,
+        }
+        if sim_name:
+            entry["sim"] = sim_name
+        if recipient_name:
+            entry["recipient"] = recipient_name
+        if sim_id is not None:
+            entry["sim_id"] = str(sim_id)
+        if recipient_id is not None:
+            entry["recipient_id"] = str(recipient_id)
+        entries.append(entry)
+        # Opportunistic backfill: if this write supplies a name<->id mapping,
+        # apply it to any legacy entries with that name and no id. Self-heals
+        # the journal as the player uses the mod -- no migration script.
+        if sim_id is not None and sim_name:
+            _backfill_id_for_name(entries, "sim", str(sim_id), sim_name)
+        if recipient_id is not None and recipient_name:
+            _backfill_id_for_name(entries, "recipient", str(recipient_id), recipient_name)
+        _save(entries)
 
 
 def _backfill_id_for_name(entries, field_prefix, new_id, name):
     """Walk `entries` and stamp `<field_prefix>_id = new_id` onto any legacy
     entry that has matching `<field_prefix>` name and no id yet. Mutates in
-    place; caller is responsible for persisting. Only backfills when the
-    name match is exact (case-insensitive) -- ambiguous names (two sims
-    sharing a name) won't ever get stamped unless one of them has been
-    explicitly written with its id first."""
+    place; caller is responsible for persisting.
+
+    AMBIGUITY GUARD: if any existing entry already binds this name to a
+    DIFFERENT id, the name is shared between two sims -- backfilling would
+    misattribute one sim's legacy entries to the other. In that case we
+    bail and leave the legacy entries name-only, so later lookups can still
+    surface them via the name-fallback path."""
     id_field = f"{field_prefix}_id"
     name_lower = name.lower()
+    # First pass: refuse to backfill if the name is already bound to another id.
+    for e in entries:
+        eid = e.get(id_field)
+        if eid and eid != new_id and e.get(field_prefix, "").lower() == name_lower:
+            return
+    # Second pass: stamp the id onto legacy entries with this name.
     for e in entries:
         if e.get(id_field):
             continue

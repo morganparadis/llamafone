@@ -180,6 +180,15 @@ def _on_save_loaded(save_id):
     _last_handled_save_id = save_id
     folder = data_dir()
     _log(f"save loaded: id={save_id!r} folder={folder!r}")
+    # Cancel any pending reply-delay Timers from the previous save. A
+    # stale Timer firing in the new save's context would write into the
+    # wrong conversation. Lazy import keeps save_id importable from
+    # anywhere without dragging in phone.
+    try:
+        from . import phone
+        phone._cancel_all_timers()
+    except Exception as e:
+        _log(f"phone Timer cancel failed: {type(e).__name__}: {e}")
     try:
         from . import milestones
         milestones.start_background_scan()

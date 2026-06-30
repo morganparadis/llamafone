@@ -22,6 +22,35 @@ _last_active_recipient_id = None
 # llama.reply which conversation to continue.
 _pending_reply_recipient_id = None
 
+# Pending reply-delay Timers. Each Timer fires _show_reply after the
+# "sim is thinking" delay. We track them so we can cancel any that are
+# still pending when the player quits to main menu and loads a different
+# save -- a stale Timer firing in the new save's context would write into
+# the wrong conversation. See save_id._on_save_loaded.
+_active_timers = []
+_active_timers_lock = threading.Lock()
+
+
+def _track_timer(timer):
+    """Register a started Timer for later cancellation. Also reaps any
+    already-fired Timers from the list so it doesn't grow unbounded."""
+    with _active_timers_lock:
+        _active_timers[:] = [t for t in _active_timers if t.is_alive()]
+        _active_timers.append(timer)
+
+
+def _cancel_all_timers():
+    """Cancel every pending reply-delay Timer. Called from save_id on
+    save load so a Timer queued before the switch doesn't fire against
+    the new save's _conversations dict."""
+    with _active_timers_lock:
+        for t in _active_timers:
+            try:
+                t.cancel()
+            except Exception:
+                pass
+        _active_timers.clear()
+
 
 _REPLY_TEXT_INPUT_NAME = "reply_text"
 
@@ -3300,7 +3329,10 @@ def generate_reply(player_message, callback=None, output=None):
                 callback(text_clean, None)
 
         if delay > 0:
-            threading.Timer(delay, _show_reply).start()
+            t = threading.Timer(delay, _show_reply)
+            t.daemon = True
+            _track_timer(t)
+            t.start()
         else:
             _show_reply()
 
@@ -3411,7 +3443,10 @@ def send_text(contact, player_message, callback=None, output=None):
                 callback(text_clean, None)
 
         if delay > 0:
-            threading.Timer(delay, _show_reply).start()
+            t = threading.Timer(delay, _show_reply)
+            t.daemon = True
+            _track_timer(t)
+            t.start()
         else:
             _show_reply()
 

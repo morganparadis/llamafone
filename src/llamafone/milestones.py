@@ -247,11 +247,21 @@ def _get_spouse_id(sim_info):
 
 
 def _get_in_household(sim_info, active_household_id):
+    # Retained for backward-compat with old snapshots. New snapshots use
+    # household_id directly so we detect actual moves between households,
+    # NOT just "the player switched which family they're playing".
     try:
         hh_id = _safe(sim_info, "household_id", None)
         return hh_id == active_household_id if active_household_id is not None else False
     except Exception:
         return False
+
+
+def _get_household_id(sim_info):
+    try:
+        return _safe(sim_info, "household_id", None)
+    except Exception:
+        return None
 
 
 def _get_aspiration(sim_info):
@@ -275,7 +285,13 @@ def _capture(sim_info, active_household_id):
             "is_dead": bool(_safe(sim_info, "is_dead", False) or _safe(sim_info, "is_ghost", False)),
             "is_pregnant": bool(_safe(sim_info, "is_pregnant", False)),
             "spouse_id": _get_spouse_id(sim_info),
+            # `in_household` (active-household relative) is kept for back-
+            # compat with old snapshots but no longer drives the diff.
             "in_household": _get_in_household(sim_info, active_household_id),
+            # `household_id` is the absolute household identity. Only THIS
+            # changing signals an actual move; toggling which household
+            # the player is controlling does not.
+            "household_id": _get_household_id(sim_info),
             "aspiration": _get_aspiration(sim_info),
         }
     except Exception as e:
@@ -369,16 +385,18 @@ def _diff(prev, curr, name):
                 "description": f"{name} remarried someone new",
             })
 
-    # Household membership
-    if prev.get("in_household") and not curr.get("in_household"):
+    # Household membership -- check the ABSOLUTE household_id, not the
+    # active-household-relative in_household flag. Toggling which family
+    # the player is currently controlling used to fire false moved-in /
+    # moved-out events for every sim every time the player swapped
+    # households via Manage Households. Now we only fire when the sim's
+    # actual household assignment changes.
+    prev_hh = prev.get("household_id")
+    curr_hh = curr.get("household_id")
+    if prev_hh is not None and curr_hh is not None and prev_hh != curr_hh:
         events.append({
-            "type": "moved_out",
-            "description": f"{name} moved out of the household",
-        })
-    elif not prev.get("in_household") and curr.get("in_household"):
-        events.append({
-            "type": "moved_in",
-            "description": f"{name} moved into the household",
+            "type": "moved_household",
+            "description": f"{name} moved to a different household",
         })
 
     # Aspiration
@@ -559,6 +577,16 @@ def format_for_prompt(sim_info, contact_id=None, mark_seen=True):
         if sid is None:
             return ""
         events = get_recent_for_sim(sid, exclude_for_contact=contact_id)
+        if not events:
+            return ""
+        # Filter out deprecated milestone types. The old "moved_in" /
+        # "moved_out" detector compared sim.household_id to the active
+        # household, so it fired bogus moves whenever the player switched
+        # which household they were controlling. Those entries are still
+        # in users' save files; suppress them here so they stop polluting
+        # prompts. New real moves are stored as "moved_household".
+        _SUPPRESS_TYPES = {"moved_in", "moved_out"}
+        events = [e for e in events if e.get("type") not in _SUPPRESS_TYPES]
         if not events:
             return ""
         lines = ["Recent in their life:"]

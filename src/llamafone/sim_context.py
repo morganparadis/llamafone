@@ -488,95 +488,77 @@ def get_sim_mood(sim_info):
 
 def get_sim_skills(sim_info, min_level=1, limit=12):
     """
-    Return a dict of {skill_name: level} for skills the sim has learned.
+    Return a dict of {skill_name: level} for the sim's leveled-up skills.
     Only includes skills at or above min_level. Sorted highest first.
 
-    Tries several tracker attributes AND several accessor methods because
-    the SkillTracker's runtime API varies by patch and by whether the
-    sim is in the active household (lazy hydration). Also filters to
-    classes whose name contains "Skill" so we don't accidentally include
-    commodity/motive stats if we land on the statistic_tracker.
+    Uses sim_info.all_skills() -- the game's own iterator over
+    commodity_tracker filtered to Skill instances. get_user_value()
+    returns the displayed level (1-10 major, 0-5 minor). SimInfo also
+    exposes top_skills(N) but rolling our own gives us label cleaning,
+    minor/hidden filtering, and a defensive code path if the API shifts.
     """
     skills = {}
-
-    # Collect every plausible tracker on the sim. skill_tracker is the
-    # canonical one; statistic_tracker can contain skill stats on some
-    # builds; the underscore variants are internal lazy slots.
-    candidate_trackers = []
-    for attr_name in ("skill_tracker", "statistic_tracker",
-                      "_skill_tracker", "_statistic_tracker"):
-        try:
-            tracker = getattr(sim_info, attr_name, None)
-            if tracker is not None:
-                candidate_trackers.append(tracker)
-        except Exception:
-            continue
-
-    if not candidate_trackers:
-        return skills
-
-    def _iter_stats(tracker):
-        # Try the public generator first (most stable across patches),
-        # then fall back to several attribute/method names.
-        for accessor in (
-            lambda: list(tracker.get_all_statistics_gen()),
-            lambda: list(tracker.get_all_skills_gen()),
-            lambda: list(tracker._statistics.values()),
-            lambda: list(tracker.statistics.values()),
-            lambda: list(tracker.get_all_skills()),
-            lambda: list(tracker._all_skills()),
-            lambda: list(tracker.all_skills()),
-        ):
-            try:
-                items = accessor()
-                if items:
-                    return items
-            except Exception:
-                continue
-        return []
-
-    for tracker in candidate_trackers:
-        stat_items = _iter_stats(tracker)
-        for stat_inst in stat_items:
+    try:
+        # Direct API: iterate the sim's actual skill stats.
+        if not hasattr(sim_info, "all_skills"):
+            return skills
+        for stat_inst in sim_info.all_skills():
             try:
                 cls_name = type(stat_inst).__name__
-                # Strict: real skills are class-named "Skill_*". Anything
-                # else (Statistic_*, Statistic_Skill_*, Commodity_*, etc.)
-                # is either a motive, a tracking commodity, or some other
-                # non-skill stat that just happens to have "Skill" in its
-                # name. Reject anything that doesn't START with "Skill_".
-                if not cls_name.startswith("Skill_"):
+                # CC-mod skills use a namespace prefix like "TURBODRIVER:" --
+                # skip them entirely. They're not standard game skills and
+                # often surface inappropriate content for family/friend chat.
+                if ":" in cls_name:
                     continue
-                # Hidden internal skills (e.g. Skill_Hidden_*) clutter
-                # the prompt without being interesting -- skip them.
-                if "Hidden" in cls_name:
+                if "hidden" in cls_name.lower():
                     continue
-                # Minor skills (Chopsticks, Spicy Food, Foosball, Juicekeg
-                # Tapping, Bowling, etc.) are fun trivia but tend to crowd
-                # out the real skills (Cooking, Painting, Logic). Filter
-                # them so "top skills" surfaces things worth chatting about.
-                if "Minor" in cls_name:
+                if "minor" in cls_name.lower():
                     continue
-                level = int(stat_inst.get_value())
+                # get_user_value returns the displayed 1-10 level; get_value
+                # returns raw XP, which doesn't match what the game UI shows.
+                if hasattr(stat_inst, "get_user_value"):
+                    level = int(stat_inst.get_user_value())
+                else:
+                    level = int(stat_inst.get_value())
                 if level < min_level:
                     continue
-                cleaned = (cls_name
-                    .replace("Skill_Adult_", "")
-                    .replace("Skill_Child_", "")
-                    .replace("Skill_Toddler_", "")
-                    .replace("Skill_Teen_", "")
-                    .replace("Skill_", "")
-                    .replace("_", " ")
-                    .title())
-                # Keep the highest level if we see the same skill twice
-                # (could happen if two trackers expose it).
+                # Strip Sims 4's tuning-class prefix words by splitting on
+                # underscores and dropping leading parts that match known
+                # prefixes. More forgiving than a regex anchor -- works
+                # even if there's leading whitespace, different separators,
+                # or unexpected prefix variants.
+                _PREFIX_PARTS = {
+                    "Statistic", "Skill",
+                    "Adult", "Child", "Teen", "Toddler",
+                    "Major", "Minor",
+                    "AdultMajor", "AdultMinor",
+                    "ChildMajor", "ChildMinor",
+                    "TeenMajor", "TeenMinor",
+                    "ToddlerMajor", "ToddlerMinor",
+                }
+                # Sims 4 returns __name__ with SPACES on these stat classes,
+                # not underscores (verified by tracing what reached the
+                # output). Split on whitespace + underscore, then drop
+                # leading prefix-words.
+                # Case-INSENSITIVE prefix match -- actual Sims 4 class names
+                # have lowercase "statistic" (verified by runtime debug),
+                # not capitalized as the tuning files suggest.
+                _PREFIX_LOWER = {p.lower() for p in _PREFIX_PARTS}
+                _parts = cls_name.replace("_", " ").split()
+                while _parts and _parts[0].lower() in _PREFIX_LOWER:
+                    _parts.pop(0)
+                cleaned = " ".join(_parts).strip()
+                # Capitalize each word but preserve internal casing
+                # ("DJ Mixing" stays "DJ Mixing", not "Dj Mixing").
+                cleaned = " ".join(w[:1].upper() + w[1:] if w else w for w in cleaned.split())
+                if not cleaned:
+                    continue
                 if cleaned not in skills or skills[cleaned] < level:
                     skills[cleaned] = level
             except Exception:
                 continue
-        if skills:
-            break  # found a tracker that worked; don't double-up
-
+    except Exception:
+        pass
     return dict(sorted(skills.items(), key=lambda x: -x[1])[:limit])
 
 
@@ -656,12 +638,38 @@ def get_sim_relationships(sim_info, limit=8):
 
 
 def get_sim_career(sim_info):
-    """Return the sim's career name if employed."""
+    """Return the sim's career name if employed, e.g. "Astronaut" or
+    "Tech Guru" -- with the internal Career_Adult_Active_ prefix
+    stripped. Returns None when the sim has no current career.
+    """
     try:
         career_tracker = sim_info.career_tracker
-        if career_tracker:
-            for career in career_tracker.careers.values():
-                return career.__class__.__name__.replace("_", " ").title()
+        if not career_tracker:
+            return None
+        # careers is a dict career_uid -> TrackedCareer. Iterate the
+        # values defensively in case the dict-API shifts.
+        careers = getattr(career_tracker, "careers", None)
+        if not careers:
+            return None
+        career_iter = careers.values() if hasattr(careers, "values") else careers
+        for career in career_iter:
+            try:
+                raw = career.__class__.__name__
+            except Exception:
+                continue
+            import re as _re
+            # Strip "Career_" + optional age tier (Adult/Teen/Child) +
+            # optional Active/Standard/Part_Time/etc. so we get a clean
+            # human-readable career name.
+            cleaned = _re.sub(
+                r'^Career_(?:(?:Adult|Teen|Child)_?)?(?:Active_|PartTime_|Part_Time_)?',
+                '',
+                raw,
+            ).replace("_", " ").strip()
+            # Preserve internal capitalization on words like "DJ"
+            cleaned = " ".join(w[:1].upper() + w[1:] if w else w for w in cleaned.split())
+            if cleaned:
+                return cleaned
     except Exception:
         pass
     return None

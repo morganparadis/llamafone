@@ -170,22 +170,52 @@ def install(script_file):
 
     print(f"\nInstalling to: {mods_folder}")
 
+    def _verified_copy(src, dest, label):
+        """Copy src to dest, then verify the destination file actually
+        matches by size + recent mtime. Prints clear success / failure.
+        Catches the case where shutil.copy2 silently succeeds but Sims 4
+        holds the file open and the new bytes don't actually land."""
+        try:
+            src_size = os.path.getsize(src)
+        except Exception as e:
+            print(f"  ERROR: source missing for {label}: {e}")
+            return False
+        try:
+            shutil.copy2(src, dest)
+        except PermissionError:
+            print(f"  ERROR: could not write {dest} -- close The Sims 4 and try again")
+            return False
+        except Exception as e:
+            print(f"  ERROR: copy {label} failed: {type(e).__name__}: {e}")
+            return False
+        # Verify the destination actually reflects the new file.
+        try:
+            dest_size = os.path.getsize(dest)
+            dest_mtime = os.path.getmtime(dest)
+        except Exception as e:
+            print(f"  ERROR: cannot stat dest after copy: {e}")
+            return False
+        now = time.time()
+        if dest_size != src_size:
+            print(f"  ERROR: {label} size mismatch after copy "
+                  f"(src={src_size}, dest={dest_size}) -- the file is probably locked. Close The Sims 4.")
+            return False
+        if now - dest_mtime > 5:
+            print(f"  ERROR: {label} mtime didn't update (still "
+                  f"{int(now - dest_mtime)}s old) -- the copy didn't actually land. Close The Sims 4.")
+            return False
+        print(f"  Installed: {label} ({dest_size:,} bytes)")
+        return True
+
+    import time
     dest_script = os.path.join(mods_folder, os.path.basename(script_file))
-    try:
-        shutil.copy2(script_file, dest_script)
-        print(f"  Installed: {os.path.basename(dest_script)}")
-    except PermissionError:
-        print(f"  ERROR: could not write {dest_script} -- close The Sims 4 and try again")
+    _verified_copy(script_file, dest_script, os.path.basename(dest_script))
 
     # Companion .package -- tuning resources for the pie-menu interactions.
     # Built from package_src/ by tools/package_builder.py.
     if os.path.exists(PACKAGE_FILE):
         dest_package = os.path.join(mods_folder, os.path.basename(PACKAGE_FILE))
-        try:
-            shutil.copy2(PACKAGE_FILE, dest_package)
-            print(f"  Installed: {os.path.basename(dest_package)}")
-        except PermissionError:
-            print(f"  ERROR: could not write {dest_package} -- close The Sims 4 and try again")
+        _verified_copy(PACKAGE_FILE, dest_package, os.path.basename(dest_package))
     else:
         print(f"  Skipped package (no Llamafone.package at repo root)")
 

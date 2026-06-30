@@ -16,7 +16,6 @@ import os
 from . import config
 
 _JOURNAL_FILENAME = "Llamafone_Journal.json"
-_MAX_ENTRIES = 150          # entries kept on disk before oldest are pruned
 _PROMPT_ENTRIES = 6         # how many recent entries to include in prompts
 _PREVIEW_CHARS = 220        # max chars per entry shown in prompts
 
@@ -31,8 +30,25 @@ def _journal_path():
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", _JOURNAL_FILENAME)
 
 
+def _log(message):
+    """Diagnostic to Llamafone_Log.txt -- only fires on load/save failures
+    so we can see if a user's journal ever has trouble."""
+    try:
+        log_path = os.path.join(os.path.expanduser("~"), "Documents", "Llamafone_Log.txt")
+        with open(log_path, "a", encoding="utf-8") as f:
+            ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"[{ts}] [journal] {message}\n")
+    except Exception:
+        pass
+
+
 def _load():
-    """Load from disk only if cache is empty, otherwise return cache."""
+    """Load from disk if cache is empty, else return cache.
+
+    SAFETY RULE: never silently delete a journal. If parsing fails,
+    rename the bad file to a timestamped .bak so the user can recover
+    it manually -- never overwrite a corrupt journal blindly.
+    """
     global _cache
     if _cache is not None:
         return _cache
@@ -42,24 +58,51 @@ def _load():
         return _cache
     try:
         with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            _cache = data if isinstance(data, list) else []
-    except Exception:
+            _cache = json.load(f)
+        if not isinstance(_cache, list):
+            _log(f"Journal at {path} parsed but isn't a list; preserving as .bak")
+            try:
+                ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                os.rename(path, f"{path}.notlist-{ts}.bak")
+            except Exception:
+                pass
+            _cache = []
+    except Exception as e:
+        try:
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            bak = f"{path}.corrupt-{ts}.bak"
+            os.rename(path, bak)
+            _log(f"Could not parse journal ({type(e).__name__}: {e}); preserved as {bak}")
+        except Exception as e2:
+            _log(f"Journal parse failed AND backup failed: {e} / {e2}")
         _cache = []
     return _cache
 
 
 def _save(entries):
-    """Write to disk and update cache."""
+    """Atomic write -- write to .tmp, then os.replace() onto the real
+    path. The original journal file is never partially-overwritten, so
+    a crash mid-write can't corrupt it. No trimming: unbounded growth."""
     global _cache
-    trimmed = entries[-_MAX_ENTRIES:]
-    _cache = trimmed
+    _cache = entries
     path = _journal_path()
+    tmp = path + ".tmp"
     try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(trimmed, f, indent=2, ensure_ascii=False)
-    except Exception:
-        pass
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(entries, f, indent=2, ensure_ascii=False)
+            f.flush()
+            try:
+                os.fsync(f.fileno())
+            except Exception:
+                pass  # not all platforms; best-effort
+        os.replace(tmp, path)  # atomic on POSIX + Windows (same volume)
+    except Exception as e:
+        _log(f"_save failed ({type(e).__name__}: {e}); journal on disk untouched")
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------

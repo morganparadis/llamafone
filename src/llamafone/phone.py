@@ -273,7 +273,12 @@ Look at the caller's world vs the player's world (both listed in the context).
   "let's hang out", "let's grab drinks"). NEVER claim to have "run into" or "bumped into" \
   the player. Long-distance is the default — frame everything as a phone call, text, video \
   chat, or a PLANNED future visit ("when I come visit next month"). Same rule applies to \
-  mentions of mutual contacts: only "ran into X" if X lives in the CALLER's world.
+  mentions of mutual contacts: only "ran into X" / "saw X" / "bumped into X" / \
+  "got talking with X" if X's listed world matches the CALLER's world EXACTLY. \
+  Each mutual entry includes "lives in <world>" -- check that string against \
+  the caller's world before claiming any in-person encounter. If they don't \
+  match, no in-person encounter happened; only phone/text/online contact, or \
+  a recent visit you can explicitly justify ("when I was in Sulani last week").
 - HOUSEHOLD / CLOSE RELATIONSHIPS: if the caller lives in the same household as the player \
   (spouse, partner, parent/child, sibling all in the same household), or is the player's \
   romantic partner regardless of address, they NEVER "run into" the player by chance. \
@@ -282,6 +287,14 @@ Look at the caller's world vs the player's world (both listed in the context).
   happened. Same rule for mentions of mutual sims: don't say "ran into your dad" if your \
   dad is your husband — you're married to him. Cohabiting sims share a life, not a \
   coincidental encounter.
+- "WHEN YOU'RE BACK" / "when you get home" / "when you return" / "when you're in town" \
+  framing ONLY makes sense if a [CURRENT LOCATION: ...] tag is present saying the \
+  recipient is traveling away from home. And "back" / "home" means BACK TO THEIR OWN \
+  HOME WORLD, never back to the caller's world. The recipient is not "returning" or \
+  "coming back" to wherever the caller is unless they share a home world. If there's \
+  no [CURRENT LOCATION] tag, the recipient is already at home -- don't use return- \
+  framing at all. If there IS a [CURRENT LOCATION] tag and you and the recipient are \
+  in different home worlds, you're still not the destination they're returning to.
 
 # Sims 4 time
 Sims 4 runs much faster than real life. By default ONE in-game week equals \
@@ -338,6 +351,23 @@ the week count.
   anything for the holiday?", "you back in time for the wedding?", "see you at the \
   funeral later". Holidays and season changes especially are obviously known — \
   nobody "just hears" Summer is starting in 4 days.
+- ASPIRATIONS are background context, NOT names sims would say out loud. The \
+  aspiration string ("Renaissance Sim", "Track Knowledge", "Bestselling Author", \
+  "Friend of the Animals", etc.) is a game-tuning label that real people would never \
+  use in conversation. NEVER say "the [aspiration name] aspiration", "your [aspiration \
+  name] aspiration", "working on Track Knowledge", "doing my Bestselling Author thing". \
+  Instead, talk around it in natural language about the underlying goal -- "the book \
+  you're working on", "your research", "how the studying is going", "your music \
+  project", "the gardening business you're building". The aspiration tells you WHAT \
+  the sim cares about; translate it into how a person would actually describe their \
+  goals. Same goes for the CALLER's own aspiration -- never name-drop it as a label.
+- MUTUAL PLAUSIBILITY -- if you're tempted to ask the recipient whether a mutual would \
+  be into your topic ("would Francesca want to look at this?", "is this too far out of \
+  her wheelhouse?", "do you think Apollo would care about...?"), that's a tell that \
+  the mutual does NOT plausibly fit the topic and you know it. In that case, just \
+  don't bring them up at all -- pick a mutual whose traits/career/age actually fit, \
+  or skip the gossip and stay on your own topic. Never advertise the bad fit by \
+  hedging in front of the recipient.
 
 # Output format (STRICT)
 PLAIN TEXT ONLY. No markdown. No `**bold**`, no `*italics*`, no `_emphasis_`, no headings, \
@@ -458,7 +488,10 @@ Look at the sender's world vs the player's world (both listed in the context).
 - DIFFERENT worlds: NEVER suggest casual in-person meetups ("come over", "stop by", \
   "let's hang out"). NEVER claim to have "run into" the player. Frame everything as long- \
   distance — texts, video chats, social media, or a PLANNED future visit. Same rule for \
-  mentions of mutuals: only "ran into X" if X lives in the SENDER's world.
+  mentions of mutuals: only "ran into X" / "saw X" / "bumped into X" if X's \
+  listed world matches the SENDER's world EXACTLY. Each mutual entry includes \
+  "lives in <world>" -- check that against the sender's world before claiming \
+  any in-person encounter with the mutual.
 - HOUSEHOLD / CLOSE RELATIONSHIPS: cohabiting sims (same household) and romantic partners \
   NEVER "run into" each other or "bump into" each other — they live shared lives. Frame \
   their texts as coordinating the day, asking what's for dinner, reacting to something \
@@ -515,6 +548,23 @@ the week count.
   anything for the holiday?", "you back in time for the wedding?", "see you at the \
   funeral later". Holidays and season changes especially are obviously known — \
   nobody "just hears" Summer is starting in 4 days.
+- ASPIRATIONS are background context, NOT names sims would say out loud. The \
+  aspiration string ("Renaissance Sim", "Track Knowledge", "Bestselling Author", \
+  "Friend of the Animals", etc.) is a game-tuning label that real people would never \
+  use in conversation. NEVER say "the [aspiration name] aspiration", "your [aspiration \
+  name] aspiration", "working on Track Knowledge", "doing my Bestselling Author thing". \
+  Instead, talk around it in natural language about the underlying goal -- "the book \
+  you're working on", "your research", "how the studying is going", "your music \
+  project", "the gardening business you're building". The aspiration tells you WHAT \
+  the sim cares about; translate it into how a person would actually describe their \
+  goals. Same goes for the CALLER's own aspiration -- never name-drop it as a label.
+- MUTUAL PLAUSIBILITY -- if you're tempted to ask the recipient whether a mutual would \
+  be into your topic ("would Francesca want to look at this?", "is this too far out of \
+  her wheelhouse?", "do you think Apollo would care about...?"), that's a tell that \
+  the mutual does NOT plausibly fit the topic and you know it. In that case, just \
+  don't bring them up at all -- pick a mutual whose traits/career/age actually fit, \
+  or skip the gossip and stay on your own topic. Never advertise the bad fit by \
+  hedging in front of the recipient.
 
 # Output format (STRICT)
 PLAIN TEXT ONLY. No markdown. No `**bold**`, no `*italics*`, no `_emphasis_`, no headings, \
@@ -2856,7 +2906,9 @@ def generate_call(callback=None, output=None):
     events_text = events.format_shared_events_for_prompt(recipient, contact.get("sim_info"))
     events_block = f"\n\n{events_text}" if events_text else ""
 
+    from . import LOAD_TIMESTAMP as _LT
     prompt = (
+        f"[llamafone build loaded at {_LT}]\n\n"
         f"Caller info:\n{rel_desc}{history_block}{mutual_block}\n\n"
         f"{recipient_block}{events_block}\n\n"
         f"They are calling {recipient_name}{_location_context(recipient, contact)}.{_season_context()}{_weather_context(recipient, contact)}\n\n"

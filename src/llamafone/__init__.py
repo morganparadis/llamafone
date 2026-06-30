@@ -17,6 +17,12 @@ Commands (open cheat console with Ctrl+Shift+C):
 MOD_NAME = "Llamafone"
 MOD_VERSION = "3.1.0"
 
+# Captured at module-load time -- the moment Sims 4 imported this build.
+# Used in prompts so a llama.dumpprompt definitively shows which load
+# generated the prompt (no more "did the new code load" guessing games).
+import datetime as _dt
+LOAD_TIMESTAMP = _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
 
 def _log(message):
     """Write to a log file in Documents -- the only reliable way to surface errors."""

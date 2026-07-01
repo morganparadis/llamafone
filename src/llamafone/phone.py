@@ -11,6 +11,23 @@ import threading
 
 from . import api_client, sim_context, config, journal, notifications, moodlets, events, interactions, past_events
 
+
+def _log_error(message):
+    """Log a reply-chain error to Llamafone_Log.txt. Used in place of
+    silent `except Exception: pass` in the reply/text-input dialog
+    callbacks -- a swallowed NameError there is exactly what hid the
+    v3.2.0 -> v3.3.1 reply-chain bug (single typo, no user-visible
+    error, mod appeared frozen after the first reply)."""
+    import os as _os, datetime as _dt
+    try:
+        path = _os.path.join(_os.path.expanduser("~"), "Documents", "Llamafone_Log.txt")
+        with open(path, "a", encoding="utf-8") as f:
+            ts = _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"[{ts}] [phone] {message}\n")
+    except Exception:
+        pass
+
+
 # Conversations keyed by recipient sim_id, so concurrent texts/calls to different
 # household sims don't overwrite each other.
 # Each value: {"contact": contact_dict, "recipient": sim_info,
@@ -120,8 +137,11 @@ def _show_reply_input_dialog(caller_sim_info, anchor_sim):
                     return
                 _mark_reply_intent(anchor_sim)
                 generate_reply(reply_text)
-            except Exception:
-                pass
+            except Exception as e:
+                # Log instead of silent pass -- a swallowed NameError
+                # here is what caused the reply chain to appear frozen
+                # after the first exchange in v3.2.0.
+                _log_error(f"_on_input_response raised: {type(e).__name__}: {e}")
 
         dialog.add_listener(_on_input_response)
         icon = IconInfoData(obj_instance=caller_sim_info) if caller_sim_info else None
@@ -137,7 +157,16 @@ def _show_reply_input_dialog(caller_sim_info, anchor_sim):
 def _show_phone_dialog(caller_sim_info, title, message, ring=True, recipient_sim_info=None):
     """
     Show a phone dialog with the caller's portrait and Reply/Dismiss buttons.
-    Anchored to recipient_sim_info if provided, else the protagonist, else active sim.
+    Anchored to `recipient_sim_info` -- the sim the call/text is FOR.
+    If recipient_sim_info is None, refuses to show and returns False; callers
+    then fall back to a plain notification (no anchoring, no phone ring).
+
+    Why no fallback to active_sim_info: a household's currently-selected sim
+    is often not the recipient. If the player has a toddler selected when a
+    call arrives for the adult sim, falling back to the toddler makes the
+    toddler's (non-clickable) phone "ring" and the message is lost. Every
+    call site now passes recipient_sim_info explicitly; a None here means
+    a caller bug worth surfacing rather than silently papering over.
     """
     try:
         from sims4.localization import LocalizationHelperTuning
@@ -151,10 +180,7 @@ def _show_phone_dialog(caller_sim_info, title, message, ring=True, recipient_sim
 
         anchor_sim = recipient_sim_info
         if not anchor_sim:
-            anchor_sim = sim_context.get_main_sim_info()
-        if not anchor_sim:
-            anchor_sim = client.active_sim_info
-        if not anchor_sim:
+            _log_error("_show_phone_dialog: no recipient_sim_info -- refusing to show; caller should fall back to notifications.show")
             return False
 
         loc_text = LocalizationHelperTuning.get_raw_text(message)
@@ -3294,7 +3320,7 @@ def generate_reply(player_message, callback=None, output=None):
 
     events_text = events.format_shared_events_for_prompt(recipient, contact.get("sim_info"))
     events_block = f"\n\n{events_text}" if events_text else ""
-    past_events_text = past_events.format_for_prompt(contact_id, recipient_sim_id)
+    past_events_text = past_events.format_for_prompt(contact_id, main_sim_id)
     past_events_block = f"\n\n{past_events_text}" if past_events_text else ""
 
     geo_main = recipient if recipient else sim_context.get_main_sim_info()
@@ -3337,29 +3363,36 @@ def generate_reply(player_message, callback=None, output=None):
         delay = 0 if kind == "call" else _calculate_reply_delay(contact)
 
         def _show_reply():
-            history.append({"role": "them", "text": text_clean})
-            journal.add_entry(
-                kind,
-                f"Conversation with {other_name}:\n"
-                f"{main_name}: {player_message}\n"
-                f"{other_name}: {text_clean}",
-                sim_name=other_name,
-                recipient_name=main_name,
-                sim_id=contact_id,
-                recipient_id=main_sim_id,
-            )
-            title = f"Reply from {other_name}"
-            sender_si = contact.get("sim_info")
-            shown = False
-            if sender_si:
-                # Calls ring; texts buzz quietly. Mirrors how the original
-                # incoming-call vs incoming-text dialogs feel.
-                ring = (kind == "call")
-                shown = _show_phone_dialog(sender_si, title, text_clean, ring=ring, recipient_sim_info=recipient)
-            if not shown:
-                notifications.show(title, text_clean, output=output)
-            if callback:
-                callback(text_clean, None)
+            # Wrapped in try/except so an exception on this Timer thread
+            # doesn't silently kill the reply-delay callback -- Python's
+            # threading.Timer swallows exceptions from its target and
+            # provides no visibility. Log any raise so we see it.
+            try:
+                history.append({"role": "them", "text": text_clean})
+                journal.add_entry(
+                    kind,
+                    f"Conversation with {other_name}:\n"
+                    f"{main_name}: {player_message}\n"
+                    f"{other_name}: {text_clean}",
+                    sim_name=other_name,
+                    recipient_name=main_name,
+                    sim_id=contact_id,
+                    recipient_id=main_sim_id,
+                )
+                title = f"Reply from {other_name}"
+                sender_si = contact.get("sim_info")
+                shown = False
+                if sender_si:
+                    # Calls ring; texts buzz quietly. Mirrors how the original
+                    # incoming-call vs incoming-text dialogs feel.
+                    ring = (kind == "call")
+                    shown = _show_phone_dialog(sender_si, title, text_clean, ring=ring, recipient_sim_info=recipient)
+                if not shown:
+                    notifications.show(title, text_clean, output=output)
+                if callback:
+                    callback(text_clean, None)
+            except Exception as _e:
+                _log_error(f"generate_reply._show_reply raised: {type(_e).__name__}: {_e}")
 
         if delay > 0:
             t = threading.Timer(delay, _show_reply)
@@ -3474,7 +3507,7 @@ def send_text(contact, player_message, callback=None, output=None):
             sender_si = contact.get("sim_info")
             shown = False
             if sender_si:
-                shown = _show_phone_dialog(sender_si, title, text_clean, ring=False)
+                shown = _show_phone_dialog(sender_si, title, text_clean, ring=False, recipient_sim_info=main_si)
             if not shown:
                 notifications.show(title, text_clean, output=output)
             if callback:
@@ -3583,7 +3616,7 @@ def send_call(contact, player_topic, callback=None, output=None):
             caller_si = contact.get("sim_info")
             shown = False
             if caller_si:
-                shown = _show_phone_dialog(caller_si, title, text)
+                shown = _show_phone_dialog(caller_si, title, text, recipient_sim_info=main_si)
             if not shown:
                 notifications.show(title, text, output=output)
         elif error:

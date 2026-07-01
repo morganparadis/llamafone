@@ -47,7 +47,7 @@
     "description": "A free phone-first script mod for The Sims 4 that generates AI-powered phone calls and text messages (bring your own AI -- Claude, OpenAI, Gemini, or local Ollama). Random sims call and text you in character, shaped by their traits, mood, relationships, and what's actually happening in your save.",
     "url": "https://morganparadis.github.io/llamafone/",
     "downloadUrl": "https://github.com/morganparadis/llamafone/releases/latest",
-    "softwareVersion": "3.3.0",
+    "softwareVersion": "3.3.1",
     "image": "https://morganparadis.github.io/llamafone/img/llamafonelogo-square.PNG",
     "author": { "@type": "Person", "name": "morganparadis" },
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
@@ -644,6 +644,19 @@ api_key  = </code></pre>
   <p class="muted">Recent changes from the dev branch — the mod's actively maintained.</p>
 
   <ol class="changelog-list">
+
+    <li class="changelog-entry">
+      <div class="changelog-date">July 1, 2026</div>
+      <div class="changelog-body">
+        <h3>Hotfix: reply chain + phone anchor (v3.3.1)</h3>
+        <p>Two bugs reported by users. Drop-in over v3.3.0.</p>
+        <ul>
+          <li><strong>Reply chain no longer dies after one response.</strong> A one-character typo in v3.2.0's <code>generate_reply</code> (variable named <code>recipient_sim_id</code> instead of <code>main_sim_id</code>) was raising a <code>NameError</code> on every Reply-button reply. The exception was being swallowed silently by <code>except Exception: pass</code> in the text-input dialog callback, so the mod appeared frozen — first reply worked (different code path), every subsequent one just did nothing. Fixed the typo. Also replaced the silent <code>except: pass</code> with actual error logging so the next silent-failure bug can't hide for weeks.</li>
+          <li><strong>Incoming calls/texts now ring the right sim's phone.</strong> The dialog anchor used to fall back to the currently-selected sim if the mod couldn't figure out the recipient — which produced the reported case of a toddler's (non-clickable) phone ringing when a message was actually for the adult. Every code path now passes the recipient explicitly; the fallback to "whoever is selected" is gone. If we truly don't know the recipient, we fall back to a plain in-corner notification (no phone ring, but the message still shows) instead of ringing the wrong sim.</li>
+          <li><strong>Timer callbacks now log their errors.</strong> The reply-delay Timer (the "sim is thinking" pause before their response appears) runs on a background thread. Python's <code>threading.Timer</code> silently swallows any exception on that thread — so if the reply generator raised, the response just never came. Wrapped the callback body in try/except with logging so future Timer-side bugs surface instead of vanishing.</li>
+        </ul>
+      </div>
+    </li>
 
     <li class="changelog-entry">
       <div class="changelog-date">June 30, 2026</div>

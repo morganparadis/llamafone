@@ -584,15 +584,53 @@ def get_shared_upcoming_events(recipient_sim_info, contact_sim_info, max_events=
             except Exception:
                 pass
 
-            # Past events are irrelevant -- once the event has started,
-            # both sims should be at the lot together and would not be
-            # texting each other across it.
+            # Past events are irrelevant for non-holidays -- once the
+            # event has started, both sims should be at the lot together
+            # and would not be texting each other across it.
+            #
+            # HOLIDAYS are different: they run the whole in-game day,
+            # nobody "attends" them, and if today IS the holiday the
+            # AI absolutely needs to know. So we keep holidays whose
+            # start was in the last 24 in-game hours (~144000 ticks).
+            # Non-holidays keep the strict "past = drop" rule.
+            _HOLIDAY_ACTIVE_TICKS = 24 * 60 * 100  # 24 hours * 60 mins * 100 ticks/min
             try:
                 if start < now:
-                    counts["past"] += 1
-                    continue
+                    if is_holiday:
+                        try:
+                            # DateAndTime subtraction returns a TimeSpan;
+                            # we want raw absolute-tick delta. Fall back
+                            # to str-repr parsing if the subtraction API
+                            # differs across game versions.
+                            hours_since = None
+                            try:
+                                diff = now - start
+                                for attr in ("in_ticks", "absolute_ticks", "value", "ticks"):
+                                    fn = getattr(diff, attr, None)
+                                    if callable(fn):
+                                        hours_since = int(fn())
+                                        break
+                                    if fn is not None:
+                                        hours_since = int(fn)
+                                        break
+                            except Exception:
+                                hours_since = None
+                            if hours_since is None or hours_since > _HOLIDAY_ACTIVE_TICKS:
+                                counts["past"] += 1
+                                continue
+                            # Mark this holiday as currently-active so
+                            # the prompt can label it "TODAY".
+                            _active_today = True
+                        except Exception:
+                            counts["past"] += 1
+                            continue
+                    else:
+                        counts["past"] += 1
+                        continue
+                else:
+                    _active_today = False
             except Exception:
-                pass
+                _active_today = False
 
             if not is_holiday:
                 try:
@@ -631,6 +669,7 @@ def get_shared_upcoming_events(recipient_sim_info, contact_sim_info, max_events=
                 "is_holiday": is_holiday,
                 "season": season,
                 "honored": honored,
+                "active_today": _active_today,
             })
     except Exception as e:
         _log(f"Iter error: {type(e).__name__}: {e}")
@@ -723,10 +762,20 @@ def format_shared_events_for_prompt(recipient_sim_info, contact_sim_info):
         "beyond what is explicitly stated below). Match the tone hint "
         "when one is given:"
     ]
+    # Sort: today's active holidays first (highest priority), then
+    # future events by soonest. Ongoing holidays are the AI's most
+    # relevant calendar signal -- "you know it's Talk Like A Pirate
+    # Day right now" beats "there's a wedding in 3 weeks."
+    events = sorted(events, key=lambda e: (0 if e.get("active_today") else 1, e.get("when") or ""))
     for ev in events:
         hint = _tone_hint(ev["name"])
         hint_part = f" {hint}" if hint else ""
-        kind = "holiday" if ev.get("is_holiday") else "event you are both attending"
+        if ev.get("active_today"):
+            kind = "holiday HAPPENING TODAY"
+            when_str = "today, currently ongoing"
+        else:
+            kind = "holiday" if ev.get("is_holiday") else "event you are both attending"
+            when_str = ev["when"]
         season = ev.get("season")
         # Include the season the event falls in. In Sims 4 a "week" is
         # one in-game season, so "in 2 weeks" can mean "two seasons from
@@ -734,6 +783,6 @@ def format_shared_events_for_prompt(recipient_sim_info, contact_sim_info):
         season_part = f", {season}" if season else ""
         honored_part = _format_honored(ev.get("honored"))
         lines.append(
-            f"  - {ev['name']} ({kind}, {ev['when']}{season_part}){honored_part}{hint_part}"
+            f"  - {ev['name']} ({kind}, {when_str}{season_part}){honored_part}{hint_part}"
         )
     return "\n".join(lines)

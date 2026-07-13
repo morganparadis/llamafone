@@ -9,7 +9,7 @@ Players can reply with llama.reply <message> to continue the conversation.
 import random
 import threading
 
-from . import api_client, sim_context, config, journal, notifications, moodlets, events, interactions, past_events
+from . import api_client, sim_context, config, journal, notifications, moodlets, events, interactions, past_events, group_texts, contact_prefs
 
 
 def _log_error(message):
@@ -28,16 +28,90 @@ def _log_error(message):
         pass
 
 
-# Conversations keyed by recipient sim_id, so concurrent texts/calls to different
-# household sims don't overwrite each other.
+def _contact_prefs_block(household_sim, contact_sim_info, contact_name):
+    """Render the per-pair contact prefs (state + note) as a prompt
+    block ready to append to the END of a user prompt. Empty string
+    when nothing is set.
+
+    Placed at the END of the prompt (not inside _describe_relationship)
+    so the AI sees this as the most-recent context before writing --
+    recency is doing real work here. A 'paused' state or a player note
+    should be able to override friendly tone from earlier blocks."""
+    try:
+        household_id = getattr(household_sim, "sim_id", None) if household_sim else None
+        household_name = household_sim.first_name if household_sim else None
+        contact_id = getattr(contact_sim_info, "sim_id", None) if contact_sim_info else None
+        if not household_id or not contact_id:
+            return ""
+        block = contact_prefs.format_for_prompt(
+            household_id, contact_id,
+            other_name=contact_name, household_name=household_name,
+        )
+        if not block:
+            return ""
+        # Wrap with a leading blank line + header so this section
+        # visually breaks from whatever came before it.
+        return f"\n\n{block}"
+    except Exception:
+        return ""
+
+
+def _maybe_auto_prefs_from_message(household_sim_id, other_sim_id, other_name, text, source_label=""):
+    """Reactively set contact prefs based on distance signals in a
+    message. Scoped to a specific (household_sim, other_sim) pair --
+    Alice muting her ex must NOT bleed into Bob's phone activity with
+    that same ex.
+
+    Wrapped in a try because auto-prefs is convenience -- it should
+    never break the message flow if it errors."""
+    try:
+        if not household_sim_id or not other_sim_id or not text:
+            return
+        applied = contact_prefs.maybe_auto_apply(
+            household_sim_id, other_sim_id, other_name or "them",
+            text, source_label=source_label,
+        )
+        if not applied:
+            return
+        if applied == "muted":
+            body = (
+                f"Auto-muted {other_name} based on that message. "
+                f"They won't send you unprompted calls or texts. "
+                f"Phone > Social > Llamafone Settings > Manage contacts "
+                f"to review or undo."
+            )
+        else:  # paused
+            body = (
+                f"Auto-paused {other_name} based on that message. "
+                f"They'll contact you much less, and the AI knows you "
+                f"asked for space. Phone > Social > Llamafone Settings "
+                f"> Manage contacts to review or undo."
+            )
+        try:
+            notifications.show("Llamafone", body)
+        except Exception:
+            pass
+    except Exception as _e:
+        _log_error(f"_maybe_auto_prefs_from_message failed: {type(_e).__name__}: {_e}")
+
+
+# Conversations keyed by a (anchor_sim_id, contact_sim_id) TUPLE so:
+#   - Concurrent chats between different household members and different
+#     contacts don't overwrite each other.
+#   - Adelheid texting Francesca while a Daniel<->Francesca thread is
+#     ongoing no longer clobbers Daniel's slot -- both coexist.
 # Each value: {"contact": contact_dict, "recipient": sim_info,
 #              "history": [{"role": "them"|"you", "text": str}, ...]}
 _conversations = {}
-# Most recent recipient that received a message (fallback if no specific signal)
-_last_active_recipient_id = None
-# Set when the player clicks the Reply button on a phone dialog — tells the next
-# llama.reply which conversation to continue.
-_pending_reply_recipient_id = None
+# Most-recent (anchor_id, contact_id) tuple -- fallback when no explicit
+# reply signal exists. Was a bare recipient id in v3.3.x; now a tuple to
+# match the _conversations key shape.
+_last_active_key = None
+# Set when the player clicks the Reply button on a phone dialog -- tells
+# the next llama.reply which (anchor, contact) conversation to continue.
+# Was a bare recipient id in v3.3.x; now a tuple so replies route to the
+# right contact even when a different sim has texted more recently.
+_pending_reply_key = None
 
 # Pending reply-delay Timers. Each Timer fires _show_reply after the
 # "sim is thinking" delay. We track them so we can cancel any that are
@@ -46,6 +120,25 @@ _pending_reply_recipient_id = None
 # the wrong conversation. See save_id._on_save_loaded.
 _active_timers = []
 _active_timers_lock = threading.Lock()
+
+# Ephemeral per-group runtime state -- lives in memory only, rebuilt on
+# demand as rounds run. Persisted state (participants, briefing, history)
+# lives in group_texts.py's JSON file. Keeping these separate means a
+# save-switch or crash mid-round loses the round-in-progress state but
+# NEVER loses the thread history.
+#
+# Shape: _group_runtime_state[group_id] = {
+#     "round_num": int,
+#     "in_progress": bool,          # True while a round is generating replies
+#     "queued_player_msg": str|None,  # message queued while in_progress
+# }
+_group_runtime_state = {}
+_group_runtime_lock = threading.Lock()
+
+# Which group thread the reply button should route to (if the player hits
+# reply on a group dialog). Set when a group dialog surfaces; used by
+# _take_conversation_for_reply. None => reply routes to 1:1 as before.
+_last_active_group_id = None
 
 
 def _track_timer(timer):
@@ -59,7 +152,10 @@ def _track_timer(timer):
 def _cancel_all_timers():
     """Cancel every pending reply-delay Timer. Called from save_id on
     save load so a Timer queued before the switch doesn't fire against
-    the new save's _conversations dict."""
+    the new save's _conversations dict.
+
+    Also clears the ephemeral group-text runtime state so a mid-round
+    cascade queued in save A doesn't try to keep running in save B."""
     with _active_timers_lock:
         for t in _active_timers:
             try:
@@ -67,16 +163,65 @@ def _cancel_all_timers():
             except Exception:
                 pass
         _active_timers.clear()
+    try:
+        with _group_runtime_lock:
+            _group_runtime_state.clear()
+    except Exception:
+        pass
 
 
 _REPLY_TEXT_INPUT_NAME = "reply_text"
 
 
-def _show_reply_input_dialog(caller_sim_info, anchor_sim):
+def _format_group_names(names):
+    """Render a list of first names as a natural-English roster:
+      1 name: 'Sarah'
+      2 names: 'Sarah and Bob'
+      3+: 'Sarah, Bob, Alice, and Kate'
+    Used in group-text dialog titles/bodies so the player sees WHO the
+    group is composed of on every message and every reply prompt."""
+    names = [n for n in (names or []) if n]
+    if not names:
+        return ""
+    if len(names) == 1:
+        return names[0]
+    if len(names) == 2:
+        return f"{names[0]} and {names[1]}"
+    return ", ".join(names[:-1]) + f", and {names[-1]}"
+
+
+def _group_roster_names(group_id):
+    """Return the list of participant first names for a group_id, or
+    [] if the group can't be resolved. Used by dialog titles + reply
+    dialog subtitles so the player always sees the whole roster."""
+    try:
+        g = group_texts.get_group(group_id)
+        if not g:
+            return []
+        # Prefer snapshot names (stable across sim_info reloads); fall
+        # back to live sim_info lookup if snapshot is missing/stale.
+        snap = list(g.get("participant_names") or [])
+        p_ids = list(g.get("participant_sim_ids") or [])
+        # If snapshot has enough entries, use it. Otherwise resolve fresh.
+        if len(snap) >= len(p_ids):
+            return snap
+        out = list(snap)
+        while len(out) < len(p_ids):
+            sid = p_ids[len(out)]
+            si = _resolve_sim_info(sid)
+            out.append(si.first_name if si else "?")
+        return out
+    except Exception:
+        return []
+
+
+def _show_reply_input_dialog(caller_sim_info, anchor_sim, group_id=None):
     """
     Open a text-input dialog so the player can type a reply inline,
     instead of having to use the cheat console.
-    On submit, calls generate_reply() with the typed text.
+    On submit, calls generate_reply() with the typed text (or
+    generate_group_reply if group_id is set -- reply-button routing
+    for group threads).
     """
     try:
         from sims4.localization import LocalizationHelperTuning
@@ -89,12 +234,24 @@ def _show_reply_input_dialog(caller_sim_info, anchor_sim):
         except Exception:
             pass
 
-        loc_title = LocalizationHelperTuning.get_raw_text(
-            f"Reply to {other_name}" if other_name else "Reply"
-        )
-        loc_text = LocalizationHelperTuning.get_raw_text(
-            "Type what you want to say. Llamafone will craft a reply."
-        )
+        # Group threads: title + body call out that the reply fans out
+        # to every group member, so the player never thinks they're
+        # replying only to whoever just spoke. All active participants
+        # get a chance to respond.
+        if group_id:
+            roster = _group_roster_names(group_id)
+            roster_str = _format_group_names(roster) or "the group"
+            title_str = f"Reply to group: {roster_str}"
+            text_str = (
+                f"Your reply goes to the whole group: {roster_str}. "
+                f"Each of them may respond in character."
+            )
+        else:
+            title_str = f"Reply to {other_name}" if other_name else "Reply"
+            text_str = "Type what you want to say. Llamafone will craft a reply."
+
+        loc_title = LocalizationHelperTuning.get_raw_text(title_str)
+        loc_text = LocalizationHelperTuning.get_raw_text(text_str)
         loc_send = LocalizationHelperTuning.get_raw_text("Send")
         loc_cancel = LocalizationHelperTuning.get_raw_text("Cancel")
 
@@ -135,8 +292,19 @@ def _show_reply_input_dialog(caller_sim_info, anchor_sim):
                 ).strip()
                 if not reply_text:
                     return
-                _mark_reply_intent(anchor_sim)
-                generate_reply(reply_text)
+                if group_id:
+                    # Group thread reply -- route to the group engine
+                    # which handles round accounting, drop-off, and
+                    # in-progress queueing.
+                    generate_group_reply(reply_text, group_id=group_id)
+                else:
+                    # Pass caller_sim_info so the intent locks onto
+                    # the specific (anchor, contact) pair -- prevents
+                    # the "replied to Daniel but got Adelheid" bug
+                    # when a different contact texted the same anchor
+                    # after Daniel's message.
+                    _mark_reply_intent(anchor_sim, caller_sim_info=caller_sim_info)
+                    generate_reply(reply_text)
             except Exception as e:
                 # Log instead of silent pass -- a swallowed NameError
                 # here is what caused the reply chain to appear frozen
@@ -154,12 +322,16 @@ def _show_reply_input_dialog(caller_sim_info, anchor_sim):
         return False
 
 
-def _show_phone_dialog(caller_sim_info, title, message, ring=True, recipient_sim_info=None):
+def _show_phone_dialog(caller_sim_info, title, message, ring=True, recipient_sim_info=None, group_id=None):
     """
     Show a phone dialog with the caller's portrait and Reply/Dismiss buttons.
     Anchored to `recipient_sim_info` -- the sim the call/text is FOR.
     If recipient_sim_info is None, refuses to show and returns False; callers
     then fall back to a plain notification (no anchoring, no phone ring).
+
+    If `group_id` is set, the Reply button routes to generate_group_reply
+    for that group thread instead of the 1:1 generate_reply. Callers for
+    1:1 texts/calls omit it and get identical behavior to prior versions.
 
     Why no fallback to active_sim_info: a household's currently-selected sim
     is often not the recipient. If the player has a toddler selected when a
@@ -201,11 +373,15 @@ def _show_phone_dialog(caller_sim_info, title, message, ring=True, recipient_sim
             try:
                 if not response_dialog.accepted:
                     return
-                # Lock in which conversation the next reply belongs to BEFORE
-                # opening the text-input dialog. Without this, a text/call
-                # arriving between Reply click and submit could steal context.
-                _mark_reply_intent(anchor_sim)
-                if not _show_reply_input_dialog(caller_sim_info, anchor_sim):
+                # Lock in which specific (anchor, contact) conversation
+                # the next reply belongs to BEFORE opening the text-input
+                # dialog. caller_sim_info is the contact whose message
+                # this dialog is showing -- pinning both anchor + contact
+                # ensures the reply routes to THIS thread even if another
+                # sim texts the same anchor between Reply click and submit.
+                if not group_id:
+                    _mark_reply_intent(anchor_sim, caller_sim_info=caller_sim_info)
+                if not _show_reply_input_dialog(caller_sim_info, anchor_sim, group_id=group_id):
                     # Fallback to the cheat-console path if the text dialog
                     # fails to construct for any reason.
                     import sims4.commands
@@ -1369,6 +1545,19 @@ def _pick_random_relationship_sim(recipient=None):
     else:
         chosen_pool = contacts_off_lot
 
+    # Contact preferences (per-pair): drop contacts THIS household sim
+    # has muted, and apply weight multipliers for paused (0.2) or
+    # priority (2.0). Uses (recipient_sim_id, contact_sim_id) so Alice's
+    # muted ex doesn't affect Bob's phone activity with that same sim.
+    def _sid(c):
+        si = c.get("sim_info")
+        return getattr(si, "sim_id", None) if si else None
+    _recipient_sid = getattr(base_si, "sim_id", None) if base_si else None
+    chosen_pool = [
+        c for c in chosen_pool
+        if not contact_prefs.is_muted(_recipient_sid, _sid(c))
+    ]
+
     if not chosen_pool:
         _log_picker(
             f"{recipient_name}: 0 strict contacts (initial {initial_count}). "
@@ -1379,8 +1568,15 @@ def _pick_random_relationship_sim(recipient=None):
     weights = []
     for contact in chosen_pool:
         score = abs(contact.get("friendship") or 0) + abs(contact.get("romance") or 0)
-        weights.append(max(score, 10))
+        base = max(score, 10)
+        mult = contact_prefs.auto_event_multiplier(_recipient_sid, _sid(contact))
+        weights.append(base * mult)
 
+    # If every remaining weight is 0 (unlikely once muted are filtered
+    # out, but defensively) fall back to uniform pick so we don't hand
+    # random.choices an all-zero weight list.
+    if not any(w > 0 for w in weights):
+        return random.choice(chosen_pool)
     return random.choices(chosen_pool, weights=weights, k=1)[0]
 
 
@@ -2942,6 +3138,31 @@ def _describe_relationship(contact, recipient=None):
         except Exception:
             pass
 
+    # (Contact preferences used to be injected here, but were moved
+    # to the END of the user prompt via _contact_prefs_block so recency
+    # gives the AI maximum incentive to respect them. See callers of
+    # _contact_prefs_block in generate_text / generate_call / etc.)
+
+    # Shared group text context: if both this household sim AND the
+    # contact were recently in the same group thread, surface an
+    # excerpt so the AI can reference it naturally ('we were both in
+    # that thread with Bob yesterday'). Cross-thread continuity is
+    # exactly what makes 1:1 replies feel like real relationships.
+    if si:
+        try:
+            main_si = recipient or sim_context.get_main_sim_info()
+            household_id = getattr(main_si, "sim_id", None) if main_si else None
+            household_name = main_si.first_name if main_si else None
+            other_id = getattr(si, "sim_id", None)
+            shared_block = group_texts.format_shared_for_prompt(
+                household_id, other_id,
+                sim_a_name=household_name, sim_b_name=name,
+            )
+            if shared_block:
+                parts.append(shared_block)
+        except Exception:
+            pass
+
     return "\n".join(parts)
 
 
@@ -3007,77 +3228,123 @@ def _format_conversation_history(history, main_name, other_name):
     return "\n".join(lines)
 
 
+def _conv_key(recipient_sim, contact):
+    """Compute the (anchor_sim_id, contact_sim_id) tuple used to key
+    _conversations. Returns a stable tuple even when either input is
+    partially resolvable -- falls back to 0 for the missing slot so
+    the entry can still be inserted / looked up consistently."""
+    anchor_id = getattr(recipient_sim, "sim_id", None) if recipient_sim else None
+    contact_si = (contact or {}).get("sim_info")
+    contact_id = getattr(contact_si, "sim_id", None) if contact_si else None
+    return (int(anchor_id) if anchor_id else 0, int(contact_id) if contact_id else 0)
+
+
 def _start_conversation(contact, first_message, recipient_sim=None, kind="text"):
-    """Store a new conversation, keyed by recipient sim_id.
+    """Store a new conversation, keyed by (anchor_sim_id, contact_sim_id).
 
     `kind` is "call" or "text" -- generate_reply() uses it to decide
     whether to apply the artificial "sim is thinking" reply_delay. Texts
     feel weirder when they appear instantly, so they get the delay;
     calls are a live conversation, so they should hit the popup as
     soon as the AI returns."""
-    global _last_active_recipient_id
-    if recipient_sim is None or not getattr(recipient_sim, "sim_id", None):
-        # No recipient — fall back to a sentinel key so this still works (e.g. send_text)
-        rid = 0
-    else:
-        rid = recipient_sim.sim_id
-    _conversations[rid] = {
+    global _last_active_key
+    ckey = _conv_key(recipient_sim, contact)
+    import datetime as _dt
+    _conversations[ckey] = {
         "contact": contact,
         "recipient": recipient_sim,
         "kind": kind,
         "history": [{"role": "them", "text": first_message}],
+        # Timestamp when this conversation began. Used by reply flows to
+        # ask the journal for entries STRICTLY BEFORE this time -- so the
+        # 'Past interactions' block doesn't duplicate what's already in
+        # 'Conversation so far'. Every turn we send/receive gets logged
+        # to the journal in real time, so without this filter, the last
+        # 3-4 turns would show up in both blocks.
+        "started_at": _dt.datetime.now().isoformat(),
     }
-    _last_active_recipient_id = rid
+    _last_active_key = ckey
 
 
-def _mark_reply_intent(recipient_sim):
+def _mark_reply_intent(recipient_sim, caller_sim_info=None):
     """Called when the player clicks the Reply button on a phone dialog.
-    Locks in which conversation the next llama.reply should target."""
-    global _pending_reply_recipient_id
-    if recipient_sim and getattr(recipient_sim, "sim_id", None):
-        _pending_reply_recipient_id = recipient_sim.sim_id
+    Locks in which SPECIFIC (anchor, contact) conversation the next
+    llama.reply should target.
+
+    Before v3.4.1 this only stored the anchor -- which broke when two
+    contacts had texted the same household member in sequence
+    (the more-recent contact's conversation clobbered the earlier one,
+    so replying to the earlier one silently routed to the newer contact).
+    Now the pair is stored so the correct thread is selected regardless
+    of which one is "the most recent" in memory."""
+    global _pending_reply_key
+    anchor_id = getattr(recipient_sim, "sim_id", None) if recipient_sim else None
+    contact_id = getattr(caller_sim_info, "sim_id", None) if caller_sim_info else None
+    if not anchor_id:
+        return
+    _pending_reply_key = (int(anchor_id), int(contact_id) if contact_id else 0)
 
 
 def _take_conversation_for_reply():
     """Pick the right conversation when the player runs llama.reply.
     Priority:
-      1. Conversation flagged by the most recent Reply-button click (cleared after use).
-      2. Conversation for the currently selected/active sim.
-      3. Most-recently-started conversation.
+      1. Exact (anchor, contact) pair from the most recent Reply-button
+         click (cleared after use). This is the strong signal -- the
+         player pointed at a specific message.
+      2. If Reply-button intent has only the anchor (contact unknown or
+         legacy), fall back to any conversation for that anchor.
+      3. Conversation for the currently selected/active sim (matches any
+         contact for that anchor).
+      4. Most-recently-started conversation across all pairs.
     """
-    global _pending_reply_recipient_id
-    if _pending_reply_recipient_id and _pending_reply_recipient_id in _conversations:
-        convo = _conversations[_pending_reply_recipient_id]
-        _pending_reply_recipient_id = None
+    global _pending_reply_key
+    if _pending_reply_key and _pending_reply_key in _conversations:
+        convo = _conversations[_pending_reply_key]
+        _pending_reply_key = None
         return convo
+    # If we have an anchor but no matching contact key, search for
+    # any conversation with that anchor (best-effort fallback).
+    if _pending_reply_key:
+        anchor_id = _pending_reply_key[0]
+        _pending_reply_key = None
+        for k, v in _conversations.items():
+            if k[0] == anchor_id:
+                return v
     try:
         active = sim_context.get_active_sim()
         if active and active.sim_info:
-            rid = active.sim_info.sim_id
-            if rid in _conversations:
-                return _conversations[rid]
+            aid = active.sim_info.sim_id
+            for k, v in _conversations.items():
+                if k[0] == aid:
+                    return v
     except Exception:
         pass
-    if _last_active_recipient_id is not None and _last_active_recipient_id in _conversations:
-        return _conversations[_last_active_recipient_id]
+    if _last_active_key is not None and _last_active_key in _conversations:
+        return _conversations[_last_active_key]
     return None
 
 
 def get_active_conversation():
     """Return the conversation that llama.reply would currently target, or None.
     NOTE: does not consume the pending-reply flag."""
-    if _pending_reply_recipient_id and _pending_reply_recipient_id in _conversations:
-        return _conversations[_pending_reply_recipient_id]
+    if _pending_reply_key and _pending_reply_key in _conversations:
+        return _conversations[_pending_reply_key]
+    if _pending_reply_key:
+        anchor_id = _pending_reply_key[0]
+        for k, v in _conversations.items():
+            if k[0] == anchor_id:
+                return v
     try:
         active = sim_context.get_active_sim()
         if active and active.sim_info:
-            rid = active.sim_info.sim_id
-            if rid in _conversations:
-                return _conversations[rid]
+            aid = active.sim_info.sim_id
+            for k, v in _conversations.items():
+                if k[0] == aid:
+                    return v
     except Exception:
         pass
-    if _last_active_recipient_id is not None and _last_active_recipient_id in _conversations:
-        return _conversations[_last_active_recipient_id]
+    if _last_active_key is not None and _last_active_key in _conversations:
+        return _conversations[_last_active_key]
     return None
 
 
@@ -3137,7 +3404,8 @@ def generate_call(callback=None, output=None):
         f"[llamafone build loaded at {_LT}]\n\n"
         f"Caller info:\n{rel_desc}{history_block}{mutual_block}\n\n"
         f"{recipient_block}{events_block}{past_events_block}\n\n"
-        f"They are calling {recipient_name}{_location_context(recipient, contact)}.{_season_context()}{_weather_context(recipient, contact)}{interaction_tag}\n\n"
+        f"They are calling {recipient_name}{_location_context(recipient, contact)}.{_season_context()}{_weather_context(recipient, contact)}{interaction_tag}"
+        f"{_contact_prefs_block(recipient, contact.get('sim_info'), contact['name'])}\n\n"
         f"Write what {contact['name']} says during this phone call."
     )
 
@@ -3153,6 +3421,10 @@ def generate_call(callback=None, output=None):
                 recipient_name=recipient_name,
                 sim_id=contact_id,
                 recipient_id=recipient_sim_id,
+            )
+            _maybe_auto_prefs_from_message(
+                recipient_sim_id, contact_id, contact["name"], text,
+                source_label="they called",
             )
             caller_si = contact.get("sim_info")
             shown = False
@@ -3227,7 +3499,8 @@ def generate_text(callback=None, output=None):
     prompt = (
         f"Sender info:\n{rel_desc}{history_block}{mutual_block}\n\n"
         f"{recipient_block}{events_block}{past_events_block}\n\n"
-        f"They are texting {recipient_name}{_location_context(recipient, contact)}.{_season_context()}{_weather_context(recipient, contact)}{interaction_tag}\n\n"
+        f"They are texting {recipient_name}{_location_context(recipient, contact)}.{_season_context()}{_weather_context(recipient, contact)}{interaction_tag}"
+        f"{_contact_prefs_block(recipient, contact.get('sim_info'), contact['name'])}\n\n"
         f"Write 1-2 short text messages from {contact['name']}."
     )
 
@@ -3243,6 +3516,10 @@ def generate_text(callback=None, output=None):
                 recipient_name=recipient_name,
                 sim_id=contact_id,
                 recipient_id=recipient_sim_id,
+            )
+            _maybe_auto_prefs_from_message(
+                recipient_sim_id, contact_id, contact["name"], text,
+                source_label="they texted",
             )
             sender_si = contact.get("sim_info")
             shown = False
@@ -3284,6 +3561,19 @@ def generate_reply(player_message, callback=None, output=None):
     # Add the player's message to history
     history.append({"role": "you", "text": player_message})
 
+    # Auto-detect distance signals in what the PLAYER just typed.
+    # Scoped to (household_sim, contact_sim): the "recipient" on the
+    # conversation dict is the household side; fall back to main sim
+    # if the conversation didn't stash one.
+    _contact_id_for_auto = getattr(contact.get("sim_info"), "sim_id", None) if contact else None
+    _household_for_auto = recipient or sim_context.get_main_sim_info()
+    _household_id_for_auto = getattr(_household_for_auto, "sim_id", None) if _household_for_auto else None
+    _maybe_auto_prefs_from_message(
+        _household_id_for_auto, _contact_id_for_auto,
+        contact.get("name", "them"), player_message,
+        source_label="you replied",
+    )
+
     # The "main_name" here is the household member who received the original message
     if recipient:
         main_name = recipient.first_name
@@ -3306,12 +3596,18 @@ def generate_reply(player_message, callback=None, output=None):
     main_sim_id = getattr(recipient, "sim_id", None) if recipient else (
         getattr(sim_context.get_main_sim_info(), "sim_id", None)
     )
+    # Filter journal entries to those STRICTLY BEFORE this conversation
+    # started -- otherwise the ongoing turns (logged live as each reply
+    # generates) get duplicated between 'Past interactions' and
+    # 'Conversation so far'.
+    _convo_start = conversation.get("started_at")
     sim_history = journal.format_sim_history_for_prompt(
         other_name,
         recipient_name=main_name,
         trailing_note=_journal_obsolescence_note(contact),
         sim_id=contact_id,
         recipient_id=main_sim_id,
+        before_iso=_convo_start,
     )
     history_block = f"\n\n{sim_history}" if sim_history else ""
 
@@ -3336,7 +3632,8 @@ def generate_reply(player_message, callback=None, output=None):
     prompt = (
         f"Relationship info:\n{rel_desc}{history_block}{mutual_block}{events_block}{past_events_block}\n\n"
         f"Conversation so far:\n{convo_text}"
-        f"{context_tags}\n\n"
+        f"{context_tags}"
+        f"{_contact_prefs_block(recipient, contact.get('sim_info'), other_name)}\n\n"
         f"Write {other_name}'s reply (1-3 short text messages)."
     )
 
@@ -3379,6 +3676,13 @@ def generate_reply(player_message, callback=None, output=None):
                     sim_id=contact_id,
                     recipient_id=main_sim_id,
                 )
+                # Auto-detect distance signals in this reply. Scoped
+                # to (household_sim, contact_sim). main_sim_id is the
+                # household side computed earlier in this function.
+                _maybe_auto_prefs_from_message(
+                    main_sim_id, contact_id, other_name, text_clean,
+                    source_label=f"they {kind}ed",
+                )
                 title = f"Reply from {other_name}"
                 sender_si = contact.get("sim_info")
                 shown = False
@@ -3419,10 +3723,20 @@ def send_text(contact, player_message, callback=None, output=None):
     main_name = main_si.first_name if main_si else "your Sim"
     other_name = contact["name"]
 
+    # Auto-detect distance signals in the player's outgoing message.
+    # Scoped to (main_si, contact_sim) so Alice's prefs don't affect
+    # Bob's phone activity.
+    _contact_id_auto = getattr(contact.get("sim_info"), "sim_id", None) if contact else None
+    _main_id_auto = getattr(main_si, "sim_id", None) if main_si else None
+    _maybe_auto_prefs_from_message(
+        _main_id_auto, _contact_id_auto, other_name, player_message,
+        source_label="you texted",
+    )
+
     # Seed the conversation with the player's outgoing message as turn 1
     _start_conversation(contact, "", recipient_sim=main_si)
-    rid = main_si.sim_id if (main_si and getattr(main_si, "sim_id", None)) else 0
-    _conversations[rid]["history"] = [{"role": "you", "text": player_message}]
+    ckey = _conv_key(main_si, contact)
+    _conversations[ckey]["history"] = [{"role": "you", "text": player_message}]
 
     _refresh_milestones_for(contact, main_si)
 
@@ -3470,7 +3784,8 @@ def send_text(contact, player_message, callback=None, output=None):
         f"Relationship info:\n{rel_desc}{history_block}{mutual_block}\n\n"
         f"{recipient_block}{events_block}{past_events_block}\n\n"
         f"{main_name} just texted {other_name}: \"{player_message}\""
-        f"{context_tags}\n\n"
+        f"{context_tags}"
+        f"{_contact_prefs_block(main_si, contact.get('sim_info'), other_name)}\n\n"
         f"Write {other_name}'s reply (1-3 short text messages). "
         f"If {main_name} mentions people or events you don't have details about, "
         f"improvise naturally as {other_name} would — react in character, never refuse."
@@ -3491,8 +3806,8 @@ def send_text(contact, player_message, callback=None, output=None):
         delay = _calculate_reply_delay(contact)
 
         def _show_reply():
-            if rid in _conversations:
-                _conversations[rid]["history"].append({"role": "them", "text": text_clean})
+            if ckey in _conversations:
+                _conversations[ckey]["history"].append({"role": "them", "text": text_clean})
             journal.add_entry(
                 "text",
                 f"Text conversation with {other_name}:\n"
@@ -3502,6 +3817,10 @@ def send_text(contact, player_message, callback=None, output=None):
                 recipient_name=main_name,
                 sim_id=contact_id,
                 recipient_id=main_sim_id,
+            )
+            _maybe_auto_prefs_from_message(
+                main_sim_id, contact_id, other_name, text_clean,
+                source_label="they replied",
             )
             title = f"Reply from {other_name}"
             sender_si = contact.get("sim_info")
@@ -3538,9 +3857,18 @@ def send_call(contact, player_topic, callback=None, output=None):
     main_name = main_si.first_name if main_si else "your Sim"
     other_name = contact["name"]
 
+    # Auto-detect: if the player's topic contains a distance signal,
+    # apply the state before spending an API call. Scoped per-pair.
+    _contact_id_auto = getattr(contact.get("sim_info"), "sim_id", None) if contact else None
+    _main_id_auto = getattr(main_si, "sim_id", None) if main_si else None
+    _maybe_auto_prefs_from_message(
+        _main_id_auto, _contact_id_auto, other_name, player_topic,
+        source_label="you called",
+    )
+
     _start_conversation(contact, "", recipient_sim=main_si, kind="call")
-    rid = main_si.sim_id if (main_si and getattr(main_si, "sim_id", None)) else 0
-    _conversations[rid]["history"] = [{"role": "you", "text": player_topic}]
+    ckey = _conv_key(main_si, contact)
+    _conversations[ckey]["history"] = [{"role": "you", "text": player_topic}]
 
     _refresh_milestones_for(contact, main_si)
 
@@ -3592,7 +3920,8 @@ def send_call(contact, player_topic, callback=None, output=None):
         f"Person being called:\n{rel_desc}{history_block}{mutual_block}\n\n"
         f"{recipient_block}{events_block}{past_events_block}\n\n"
         f"{main_name} is calling {other_name}. {main_name} says: \"{player_topic}\""
-        f"{context_tags}\n\n"
+        f"{context_tags}"
+        f"{_contact_prefs_block(main_si, contact.get('sim_info'), other_name)}\n\n"
         f"Write what {other_name} says in response (3-5 lines of dialogue). "
         f"They should react naturally to what {main_name} said."
     )
@@ -3600,8 +3929,8 @@ def send_call(contact, player_topic, callback=None, output=None):
     def _on_send_call_result(text, error):
         if text:
             text = _apply_mood_from_text(text, recipient=main_si, is_incoming=False)
-            if rid in _conversations:
-                _conversations[rid]["history"].append({"role": "them", "text": text})
+            if ckey in _conversations:
+                _conversations[ckey]["history"].append({"role": "them", "text": text})
             journal.add_entry(
                 "call",
                 f"Call with {other_name}:\n"
@@ -3611,6 +3940,10 @@ def send_call(contact, player_topic, callback=None, output=None):
                 recipient_name=main_name,
                 sim_id=contact_id,
                 recipient_id=main_sim_id,
+            )
+            _maybe_auto_prefs_from_message(
+                main_sim_id, contact_id, other_name, text,
+                source_label="they said on call",
             )
             title = f"Call with {other_name}"
             caller_si = contact.get("sim_info")
@@ -3630,3 +3963,789 @@ def send_call(contact, player_topic, callback=None, output=None):
         use_fast_model=True,
         callback=_on_send_call_result,
     )
+
+
+# ===========================================================================
+# GROUP TEXTS
+# ===========================================================================
+# Two-phase design:
+#   Phase 1 (once per group, at creation): a "briefing" call using the
+#     DEFAULT model synthesizes each participant's voice + the web of
+#     relationships between them. Cached on the group forever.
+#   Phase 2 (once per participant per round): a "reply" call using the
+#     FAST model generates that participant's next messages. Prompt is
+#     trimmed vs 1:1 texts -- no journal history, no per-pair past
+#     events -- because private context leaking into a group text is
+#     socially wrong. Shared context (weather / season / group-attended
+#     past events) is added at the GROUP tier instead of per-pair.
+#
+# Serial-not-parallel: each participant N's prompt includes what
+# participants 1..N-1 already said this round, so replies stay distinct.
+#
+# Gentle drop-off: after round 1, each participant has a small chance
+# of "not replying this round" -- realistic AND cost-saving.
+#
+# Persisted state (participants, briefing, history): group_texts.py
+# In-memory-only state (round in progress, queue): _group_runtime_state
+
+
+# ---- System prompts --------------------------------------------------------
+
+_GROUP_BRIEFING_SYSTEM = """You are helping a Sims 4 mod build context for a \
+group-text roleplay. The player has just started a group chat between one of \
+their household sims (the "anchor") and 2-4 other sims (the "participants"). \
+Write a compact briefing (under 200 words) that will be reused as context for \
+every reply in this thread. Write in {language}.
+
+Structure the briefing as terse bullet points:
+- One 1-2 sentence bullet per participant: their voice/register (age, personality, \
+family role if any), their relationship to the anchor, and the ONE thing that \
+would most distinguish their texts from the others'.
+- One "Between them:" section noting any interesting cross-relationships \
+between participants (best friends, exes, rivals, coworkers, family).
+
+Rules:
+- No commentary, no preamble, no closing. Just the briefing.
+- Never invent facts not present in the input.
+- Do not describe the anchor themselves -- they are the "you" the participants \
+are texting.
+- If a participant is a family member of the anchor, LEAD with that family role."""
+
+
+_GROUP_REPLY_SYSTEM = """You are {name} in a group text with {other_names} and \
+{anchor_name}. Write in {language}.
+
+STRICT RULES:
+- Reply ONLY as {name}. Never write dialogue for {other_names} or {anchor_name}.
+- Never prefix your reply with a name -- no "{name}:" at the start.
+- Never quote or paraphrase what others just said as if you're voicing them.
+- Write 1-2 SHORT text messages, max 30 words each.
+- Do not repeat what others just said. Say something distinct.
+- If it fits, you may briefly react to what someone else in the group just said, \
+but from {name}'s perspective only.
+
+Voice: {name}'s traits, mood, career, and family role to {anchor_name} define \
+how {name} texts. FAMILY ROLE OVERRIDES traits -- a parent texting their kid \
+never uses peer slang.
+
+Age register (match {name}'s age):
+- Teen: lowercase, abbreviations, dramatic slang
+- Young Adult: casual but articulate
+- Adult: complete sentences, proper capitalization, no youth slang
+- Elder: fuller sentences, proper punctuation, warmth
+
+Never invent facts about {anchor_name}'s life or the other participants' lives \
+beyond what the briefing lists."""
+
+
+# ---- Prompt builders -------------------------------------------------------
+
+def _build_group_briefing_prompt(anchor_si, participant_contacts):
+    """Compose the user prompt for briefing generation.
+
+    anchor_si: the household sim who's initiating the group (referenced
+      by name; briefing does NOT describe them, they are 'you').
+    participant_contacts: list of contact dicts (same shape as elsewhere).
+    """
+    anchor_name = anchor_si.first_name if anchor_si else "the player"
+    parts = [f"=== Anchor sim (they are texting the group -- do not describe them, they are 'you'): {anchor_name} ==="]
+
+    # Compact per-participant descriptions -- rely on the same helpers 1:1
+    # texts use, but rendered as a group-context bundle rather than a lone
+    # sender description.
+    parts.append("\n=== Participants ===")
+    for contact in participant_contacts:
+        try:
+            desc = _describe_relationship(contact, recipient=anchor_si)
+            parts.append(desc)
+        except Exception as _e:
+            _log_error(f"_build_group_briefing_prompt: _describe_relationship raised: {type(_e).__name__}: {_e}")
+            # Fall back to name + status so the briefing still gets *something*
+            parts.append(f"=== Character: {contact.get('name', '?')} ===\nStatus: {contact.get('status', 'unknown')}")
+
+    # Cross-relationships between participants. This is the highest-signal
+    # information for group dynamics -- who knows whom, who has beef with
+    # whom -- and it's ONLY visible in group context.
+    cross_lines = _build_participant_cross_relations(participant_contacts)
+    if cross_lines:
+        parts.append("\n=== Cross-relationships between participants ===")
+        parts.extend(cross_lines)
+
+    # Group-level shared context: season/weather. Location context is
+    # anchor-specific and gets omitted (participants may be scattered
+    # across worlds). Past events shared by the WHOLE group would be
+    # ideal but past_events is pair-indexed; skip for v1.
+    parts.append(f"\n=== World context ==={_season_context()}{_weather_context(anchor_si, {})}")
+
+    parts.append(f"\nWrite the briefing for this group of {len(participant_contacts)} participants.")
+    return "\n".join(p for p in parts if p)
+
+
+def _build_participant_cross_relations(participant_contacts):
+    """For every unordered pair of participants, describe their
+    relationship if known. Uses Sims 4's Relationship service to look
+    up friendship + romance scores between two sim_ids. Returns a list
+    of one-line strings, or [] if nothing interesting."""
+    lines = []
+    n = len(participant_contacts)
+    if n < 2:
+        return lines
+    for i in range(n):
+        for j in range(i + 1, n):
+            a = participant_contacts[i]
+            b = participant_contacts[j]
+            a_si = a.get("sim_info")
+            b_si = b.get("sim_info")
+            if not a_si or not b_si:
+                continue
+            desc = _pair_relationship_summary(a_si, b_si)
+            if desc:
+                lines.append(f"- {a.get('name','?')} & {b.get('name','?')}: {desc}")
+    return lines
+
+
+def _pair_relationship_summary(a_si, b_si):
+    """Return a one-line label for how sim A relates to sim B, or None
+    if unremarkable. v1 keeps this simple: family (via genealogy) is
+    the only signal surfaced -- friendship/romance scores across an
+    arbitrary sim pair are cheap to fetch but noisy without threshold
+    tuning, so we skip them for now and rely on the briefing model to
+    pick up on group dynamics from the raw participant descriptions."""
+    try:
+        # Use the game's family relationship helper with b as the frame
+        # of reference. Returns None for non-family pairs.
+        return _get_family_relationship(a_si, {"sim_info": a_si}, recipient=b_si)
+    except Exception:
+        return None
+
+
+def _build_group_reply_prompt(group, participant_index, this_round_replies):
+    """Compose the user prompt for a single participant's reply this round.
+
+    group: the persisted group dict from group_texts.get_group.
+    participant_index: index into group["participant_sim_ids"] of the
+      participant whose reply we're generating.
+    this_round_replies: list of {"from_name": ..., "text": ...} for
+      replies already generated in this round (participant_index goes
+      in order 0..N-1). Used to steer the model away from parroting.
+    """
+    briefing = group.get("briefing") or ""
+    history = group.get("history") or []
+    p_ids = group.get("participant_sim_ids") or []
+    p_names = group.get("participant_names") or []
+
+    if participant_index >= len(p_ids):
+        return None
+
+    my_id = p_ids[participant_index]
+    my_name = p_names[participant_index] if participant_index < len(p_names) else "?"
+
+    # Resolve the participant's sim_info fresh -- name in group is a
+    # snapshot; traits/mood/career should come from live sim_info.
+    my_si = _resolve_sim_info(my_id)
+
+    parts = []
+    parts.append(f"=== Group briefing ===\n{briefing}" if briefing else "")
+
+    # Just your own live personality snapshot -- keeps voice tight without
+    # ballooning the prompt. Skip the full _describe_relationship treatment
+    # because the briefing already covers relationship-to-anchor.
+    if my_si:
+        traits = sim_context.get_sim_traits(my_si, limit=6)
+        mood = sim_context.get_sim_mood(my_si)
+        career = sim_context.get_sim_career(my_si)
+        aspiration = sim_context.get_sim_aspiration(my_si)
+        own = [f"=== You are: {my_name} ==="]
+        if traits:
+            own.append(f"traits: {', '.join(traits)}")
+        if mood:
+            own.append(f"current mood: {mood}")
+        if career:
+            own.append(f"career: {career}")
+        if aspiration:
+            own.append(f"aspiration: {aspiration}")
+        parts.append("\n".join(own))
+
+    # Thread history: render last N turns as "Name: text" lines. Cap
+    # so a long thread doesn't run away with prompt tokens.
+    THREAD_TAIL = 12
+    tail = history[-THREAD_TAIL:] if len(history) > THREAD_TAIL else history
+    thread_lines = ["=== Thread so far ==="]
+    for turn in tail:
+        if turn.get("role") == "you":
+            author = group.get("_anchor_name") or "Anchor"
+            thread_lines.append(f"{author}: {turn.get('text','')}")
+        else:
+            thread_lines.append(f"{turn.get('from_name','?')}: {turn.get('text','')}")
+    parts.append("\n".join(thread_lines))
+
+    # What others JUST said this round -- explicit call-out to steer
+    # the reply toward distinctness.
+    if this_round_replies:
+        just_said = ["=== Others just replied this round ==="]
+        for r in this_round_replies:
+            just_said.append(f"- {r.get('from_name','?')}: {r.get('text','')}")
+        just_said.append("Say something distinct -- don't parrot them.")
+        parts.append("\n".join(just_said))
+
+    parts.append(f"Now write {my_name}'s next 1-2 short messages.")
+    return "\n\n".join(p for p in parts if p)
+
+
+def _resolve_sim_info(sim_id):
+    """Lookup a sim_info by sim_id. Returns None if not resolvable
+    (moved out, deleted, or engine not ready)."""
+    if not sim_id:
+        return None
+    try:
+        import services
+        mgr = services.sim_info_manager()
+        if mgr is None:
+            return None
+        return mgr.get(int(sim_id))
+    except Exception:
+        return None
+
+
+# ---- Post-process guards ---------------------------------------------------
+
+import re as _re_group
+
+# Detects "Alice:" style speaker prefixes anywhere in a reply. The
+# model sometimes slips into narrating a whole exchange when it sees
+# a "Name: text" formatted thread history. If detected, we trim the
+# offending speaker's line and everything after -- keeping only the
+# intended participant's own message(s).
+def _strip_speaker_prefixes(text, other_names_lower):
+    """Trim the reply at the first occurrence of another participant's
+    name used as a speaker prefix. Returns (cleaned_text, was_stripped).
+    other_names_lower: pre-lowercased list of the other participants'
+    first names (including the anchor)."""
+    if not text or not other_names_lower:
+        return text, False
+    # Build one regex: any of the other names, colon at start of line
+    # (after optional space). Case-insensitive; captures line start.
+    pattern = r"(?im)^\s*(?:" + "|".join(_re_group.escape(n) for n in other_names_lower) + r")\s*:"
+    m = _re_group.search(pattern, text)
+    if not m:
+        return text, False
+    # Trim before the offending prefix. Strip trailing whitespace/newlines.
+    trimmed = text[:m.start()].rstrip()
+    return trimmed, True
+
+
+def _cap_reply_length(text, max_words=60):
+    """Truncate at nearest sentence boundary before max_words. Never
+    cuts mid-word; if no sentence boundary fits, hard-cuts at max_words."""
+    if not text:
+        return text
+    words = text.split()
+    if len(words) <= max_words:
+        return text
+    truncated = " ".join(words[:max_words])
+    # Prefer a sentence boundary just before the cutoff
+    for punct in (". ", "! ", "? ", "\n"):
+        idx = truncated.rfind(punct)
+        if idx > 0 and idx > len(truncated) * 0.5:
+            return truncated[:idx + 1].rstrip()
+    return truncated + "…"
+
+
+def _clean_group_reply(text, other_names):
+    """Full post-process pipeline for a participant's reply. Returns
+    (cleaned_text, notes) where notes is a list of what was fixed
+    (for logging)."""
+    notes = []
+    if not text:
+        return text, notes
+    other_names_lower = [n.lower() for n in (other_names or []) if n]
+    cleaned, stripped = _strip_speaker_prefixes(text, other_names_lower)
+    if stripped:
+        notes.append("stripped speaker-name leak")
+    if not cleaned.strip():
+        # Whole reply was "Alice: hey / Bob: hi" -- nothing left after strip.
+        # Fall back to a benign short line so the thread doesn't stall.
+        return "(no reply)", notes + ["reply was entirely voice-leak; substituted placeholder"]
+    capped = _cap_reply_length(cleaned)
+    if capped != cleaned:
+        notes.append("truncated to length cap")
+    return capped, notes
+
+
+# ---- Drop-off --------------------------------------------------------------
+
+def _dropoff_probability(round_num):
+    """Chance a participant silently doesn't reply this round. Round 1
+    always replies. Grows: round 2 = 20%, round 3 = 40%, round 4+ = 60%."""
+    if round_num <= 1:
+        return 0.0
+    if round_num == 2:
+        return 0.20
+    if round_num == 3:
+        return 0.40
+    return 0.60
+
+
+def _dropoff_enabled():
+    """Config toggle. Default on."""
+    try:
+        return bool(config.get_setting("group_text_dropoff_enabled", True))
+    except Exception:
+        return True
+
+
+# ---- Orchestration ---------------------------------------------------------
+
+def send_group_text(participant_contacts, player_message, callback=None, output=None):
+    """Player initiates a group text with N recipients (2..cap).
+
+    participant_contacts: list of contact dicts (already resolved by the
+      picker).
+    player_message: the opening text.
+
+    Flow: create persisted group -> record player's opening turn ->
+    generate briefing (main model) -> kick off round 1 of participant
+    replies (fast model, serial with staggered delays)."""
+    if not participant_contacts or len(participant_contacts) < 2:
+        msg = "Group texts need at least 2 recipients."
+        if callback:
+            callback(None, msg)
+        elif output:
+            notifications.show_error(msg, output=output)
+        return
+    if not player_message:
+        msg = "Group text needs a message."
+        if callback:
+            callback(None, msg)
+        elif output:
+            notifications.show_error(msg, output=output)
+        return
+
+    anchor_si = sim_context.get_main_sim_info()
+    if not anchor_si:
+        msg = "No active household sim to send from."
+        if callback:
+            callback(None, msg)
+        elif output:
+            notifications.show_error(msg, output=output)
+        return
+
+    anchor_id = getattr(anchor_si, "sim_id", None)
+    if not anchor_id:
+        msg = "Couldn't resolve the anchor sim's id."
+        if callback:
+            callback(None, msg)
+        elif output:
+            notifications.show_error(msg, output=output)
+        return
+
+    participant_ids = []
+    participant_names = []
+    for c in participant_contacts:
+        si = c.get("sim_info")
+        sid = getattr(si, "sim_id", None) if si else None
+        if not sid:
+            continue
+        participant_ids.append(int(sid))
+        participant_names.append(c.get("name") or (si.first_name if si else "?"))
+
+    if len(participant_ids) < 2:
+        msg = "Couldn't resolve enough participants to form a group."
+        if callback:
+            callback(None, msg)
+        elif output:
+            notifications.show_error(msg, output=output)
+        return
+
+    group_id = group_texts.create_group(anchor_id, participant_ids, participant_names)
+    if not group_id:
+        msg = "Couldn't create the group thread (no save loaded?)."
+        if callback:
+            callback(None, msg)
+        elif output:
+            notifications.show_error(msg, output=output)
+        return
+
+    # Record the anchor name on the group so the reply-prompt builder
+    # can render turn lines as "Anchor: ..." without another lookup.
+    # This is a minor extension to the group dict, harmless if absent.
+    try:
+        g = group_texts.get_group(group_id)
+        if g is not None:
+            g["_anchor_name"] = anchor_si.first_name
+    except Exception:
+        pass
+
+    # Register runtime state up front so a Timer that fires later can
+    # find its group.
+    with _group_runtime_lock:
+        _group_runtime_state[group_id] = {
+            "round_num": 1,
+            "in_progress": True,
+            "queued_player_msg": None,
+        }
+
+    group_texts.add_player_turn(group_id, player_message, round_num=1)
+
+    # If create_group RESUMED an existing thread, the cached briefing
+    # is still valid -- no need to spend another main-model API call
+    # regenerating it. Just skip straight to round 1.
+    existing_briefing = ""
+    try:
+        _existing_group = group_texts.get_group(group_id)
+        if _existing_group:
+            existing_briefing = (_existing_group.get("briefing") or "").strip()
+    except Exception:
+        existing_briefing = ""
+
+    if existing_briefing:
+        _log_error(
+            f"send_group_text: RESUMED group={group_id} participants={participant_names} "
+            f"anchor={anchor_si.first_name} (skipping briefing regeneration)"
+        )
+        _run_group_round(
+            group_id,
+            anchor_si=anchor_si,
+            participant_contacts=participant_contacts,
+            callback=callback,
+            output=output,
+        )
+        return
+
+    _log_error(f"send_group_text: NEW group={group_id} participants={participant_names} anchor={anchor_si.first_name}")
+
+    language = config.get_language()
+    briefing_system = _GROUP_BRIEFING_SYSTEM.format(language=language)
+    briefing_prompt = _build_group_briefing_prompt(anchor_si, participant_contacts)
+
+    def _on_briefing(text, error):
+        if error or not text:
+            _log_error(f"group briefing failed: {error!r}; falling back to bare cross-relations")
+            # Fallback briefing: no AI, just the raw participant list. Keeps
+            # the thread alive even if the briefing call blows up.
+            fallback = "Participants: " + ", ".join(participant_names)
+            group_texts.set_briefing(group_id, fallback)
+        else:
+            group_texts.set_briefing(group_id, text)
+        # Kick off round 1 immediately -- no reply-delay before the FIRST
+        # participant, so the player sees activity as soon as the briefing
+        # returns.
+        _run_group_round(
+            group_id,
+            anchor_si=anchor_si,
+            participant_contacts=participant_contacts,
+            callback=callback,
+            output=output,
+        )
+
+    api_client.call_ai_async(
+        [{"role": "user", "content": briefing_prompt}],
+        system=briefing_system,
+        # Briefing uses the DEFAULT (main) model per design decision --
+        # one call amortized across many replies; worth spending on.
+        use_fast_model=False,
+        callback=_on_briefing,
+    )
+
+
+def _run_group_round(group_id, anchor_si=None, participant_contacts=None,
+                     callback=None, output=None):
+    """Serially generate replies from each participant this round.
+    Each participant N's prompt includes what participants 1..N-1
+    said this round, so replies stay distinct.
+
+    anchor_si + participant_contacts are optional -- passed on the
+    first round to avoid re-resolving. On subsequent rounds we
+    re-resolve from group state."""
+    group = group_texts.get_group(group_id)
+    if not group:
+        _log_error(f"_run_group_round: no group_id={group_id}")
+        return
+
+    with _group_runtime_lock:
+        state = _group_runtime_state.get(group_id)
+        if not state:
+            state = {"round_num": 1, "in_progress": True, "queued_player_msg": None}
+            _group_runtime_state[group_id] = state
+        state["in_progress"] = True
+        round_num = state["round_num"]
+
+    # Resolve current participant sim_infos and names. Any that don't
+    # resolve (moved out / deleted / dead) are skipped this round.
+    p_ids = group.get("participant_sim_ids") or []
+    p_names_snap = group.get("participant_names") or []
+
+    active = []
+    for idx, sid in enumerate(p_ids):
+        si = _resolve_sim_info(sid)
+        if not si:
+            _log_error(f"_run_group_round: participant sim_id={sid} not resolvable; skipping this round")
+            continue
+        name = p_names_snap[idx] if idx < len(p_names_snap) else si.first_name
+        # Roll drop-off dice (only after round 1)
+        if _dropoff_enabled() and round_num > 1:
+            p = _dropoff_probability(round_num)
+            if random.random() < p:
+                _log_error(f"_run_group_round: participant {name} silently drops out this round (p={p:.2f})")
+                continue
+        active.append((idx, sid, name, si))
+
+    if not active:
+        _log_error(f"_run_group_round: no active participants for round {round_num}; ending round")
+        with _group_runtime_lock:
+            st = _group_runtime_state.get(group_id)
+            if st:
+                st["in_progress"] = False
+        if callback:
+            callback(None, None)
+        return
+
+    # Anchor sim + name for reply prompts + dialog anchoring
+    if anchor_si is None:
+        anchor_si = _resolve_sim_info(group.get("anchor_sim_id"))
+    anchor_name = anchor_si.first_name if anchor_si else "Anchor"
+
+    # Kick off the serial chain
+    _generate_next_group_reply(
+        group_id=group_id,
+        active=active,
+        cursor=0,
+        this_round_replies=[],
+        anchor_si=anchor_si,
+        anchor_name=anchor_name,
+        round_num=round_num,
+        callback=callback,
+        output=output,
+    )
+
+
+def _generate_next_group_reply(group_id, active, cursor, this_round_replies,
+                                anchor_si, anchor_name, round_num, callback, output):
+    """Generate reply for active[cursor] (the next participant this round).
+    On completion, schedules the following participant via Timer for a
+    naturalistic staggered feel."""
+    if cursor >= len(active):
+        # Round complete
+        _on_group_round_complete(group_id, anchor_si, callback, output)
+        return
+
+    _idx_in_group, sim_id, my_name, my_si = active[cursor]
+
+    # Fresh snapshot of the group after prior replies
+    group = group_texts.get_group(group_id)
+    if not group:
+        _log_error(f"_generate_next_group_reply: group vanished mid-round")
+        return
+
+    # Other names (for the "you are NOT them" system prompt)
+    other_names = [n for (_i, _sid, n, _si) in active if n != my_name]
+    # Include anchor in the not-you list so speaker-name leak strip
+    # catches "Bob:" AND "Anchor:" prefixes.
+    other_names_including_anchor = list(other_names) + [anchor_name]
+
+    language = config.get_language()
+    system = _GROUP_REPLY_SYSTEM.format(
+        language=language,
+        name=my_name,
+        other_names=", ".join(other_names) if other_names else "(nobody else)",
+        anchor_name=anchor_name,
+    )
+    user_prompt = _build_group_reply_prompt(
+        group=group,
+        participant_index=[i for (i, _sid, _n, _s) in [active[cursor]]][0],
+        this_round_replies=this_round_replies,
+    )
+    if not user_prompt:
+        _log_error(f"_generate_next_group_reply: prompt build returned None for cursor={cursor}")
+        _generate_next_group_reply(
+            group_id, active, cursor + 1, this_round_replies,
+            anchor_si, anchor_name, round_num, callback, output,
+        )
+        return
+
+    def _on_reply(text, error):
+        if error or not text:
+            _log_error(f"group reply from {my_name} failed: error={error!r}")
+            # Skip this participant this round; continue chain.
+            _schedule_next(group_id, active, cursor + 1, this_round_replies,
+                           anchor_si, anchor_name, round_num, callback, output)
+            return
+
+        cleaned, notes = _clean_group_reply(text, other_names_including_anchor)
+        if notes:
+            _log_error(f"group reply from {my_name} cleaned: {notes}")
+
+        # Apply mood side-effects (matches 1:1 texts)
+        try:
+            cleaned = _apply_mood_from_text(cleaned, recipient=anchor_si, is_incoming=True)
+        except Exception as _me:
+            _log_error(f"apply_mood on group reply failed: {type(_me).__name__}: {_me}")
+
+        # Persist the reply
+        group_texts.add_participant_reply(group_id, sim_id, my_name, cleaned, round_num=round_num)
+
+        # Record in this-round buffer so subsequent participants see it
+        this_round_replies.append({"from_name": my_name, "text": cleaned})
+
+        # Show the phone dialog for this reply. Anchor to the sender's
+        # portrait; ring=False (texts, not calls). Pass group_id so the
+        # Reply button routes to generate_group_reply for THIS thread.
+        #
+        # Title format: "Group text with Sarah, Bob, Alice, and Kate" so
+        # the player sees the whole roster on every message. The sender's
+        # portrait (from _show_phone_dialog anchoring) plus the message
+        # body tell them WHO just spoke; the title tells them the GROUP.
+        roster_names = [n for (_i, _sid, n, _s) in active]
+        # Include the anchor (household member) in the roster string
+        # so the player understands "the group" includes them.
+        full_roster = [anchor_name] + roster_names if anchor_name not in roster_names else list(roster_names)
+        roster_str = _format_group_names(full_roster)
+        title = f"Group text with {roster_str}" if roster_str else f"Group text: {my_name}"
+        # Prefix the message body with the sender's name so it's crystal
+        # clear who's speaking on this specific line -- the title now
+        # shows the group not the sender, so we surface the sender here.
+        display_text = f"{my_name}: {cleaned}"
+        shown = False
+        try:
+            shown = _show_phone_dialog(
+                my_si, title, display_text, ring=False,
+                recipient_sim_info=anchor_si, group_id=group_id,
+            )
+        except Exception as _de:
+            _log_error(f"group reply dialog failed for {my_name}: {type(_de).__name__}: {_de}")
+        if not shown:
+            notifications.show(title, display_text, output=output)
+
+        # Update the reply-button routing pointer so the next player
+        # reply routes to THIS group, not any lingering 1:1 conversation.
+        global _last_active_group_id
+        _last_active_group_id = group_id
+
+        # Group text turns are NOT written to the journal. They live in
+        # GroupTexts.json and get rendered into 1:1 prompts via
+        # group_texts.format_shared_for_prompt when applicable. Writing
+        # them to the journal too produced duplicated 'Past interactions'
+        # entries that overlapped with the SHARED GROUP TEXT block --
+        # same content, two sources.
+
+        # Schedule the next participant with the standard reply delay
+        _schedule_next(group_id, active, cursor + 1, this_round_replies,
+                       anchor_si, anchor_name, round_num, callback, output)
+
+    api_client.call_ai_async(
+        [{"role": "user", "content": user_prompt}],
+        system=system,
+        use_fast_model=True,
+        callback=_on_reply,
+    )
+
+
+def _schedule_next(group_id, active, cursor, this_round_replies,
+                    anchor_si, anchor_name, round_num, callback, output):
+    """After one participant replies, wait a randomized delay before
+    the NEXT participant's dialog surfaces. Delay uses the same
+    _calculate_reply_delay helper as 1:1 texts so the feel is consistent.
+    """
+    if cursor >= len(active):
+        _on_group_round_complete(group_id, anchor_si, callback, output)
+        return
+
+    # Use the standard reply delay so groups feel like real texts
+    # arriving one at a time. Use the NEXT participant's contact for
+    # the delay calc (traits/mood shape the delay).
+    next_name = active[cursor][2]
+    next_si = active[cursor][3]
+    try:
+        # _calculate_reply_delay takes a "contact" dict shape
+        delay = _calculate_reply_delay({"sim_info": next_si, "name": next_name})
+    except Exception:
+        delay = 0
+
+    def _fire():
+        try:
+            _generate_next_group_reply(group_id, active, cursor, this_round_replies,
+                                        anchor_si, anchor_name, round_num, callback, output)
+        except Exception as _e:
+            _log_error(f"_schedule_next fire raised: {type(_e).__name__}: {_e}")
+
+    if delay > 0:
+        t = threading.Timer(delay, _fire)
+        t.daemon = True
+        _track_timer(t)
+        t.start()
+    else:
+        _fire()
+
+
+def _on_group_round_complete(group_id, anchor_si, callback, output):
+    """Round finished. If the player queued a message mid-round, drain
+    the queue and start the next round. Otherwise mark idle."""
+    with _group_runtime_lock:
+        state = _group_runtime_state.get(group_id)
+        if not state:
+            return
+        state["in_progress"] = False
+        queued = state.get("queued_player_msg")
+        state["queued_player_msg"] = None
+        if queued:
+            state["round_num"] = state.get("round_num", 1) + 1
+            state["in_progress"] = True
+
+    if queued:
+        # Player sent a message while the previous round was still
+        # generating -- record it and kick off the next round.
+        group_texts.add_player_turn(group_id, queued, round_num=state["round_num"])
+        _run_group_round(group_id, anchor_si=anchor_si, callback=callback, output=output)
+        return
+
+    if callback:
+        callback(None, None)
+
+
+def generate_group_reply(player_message, group_id=None, callback=None, output=None):
+    """Called by the reply button when the active thread is a group.
+    If group_id is None, use the most-recently-active group."""
+    if group_id is None:
+        group_id = _last_active_group_id
+    if not group_id:
+        msg = "No active group text to reply to."
+        if callback:
+            callback(None, msg)
+        elif output:
+            notifications.show_error(msg, output=output)
+        return
+
+    group = group_texts.get_group(group_id)
+    if not group:
+        msg = "That group thread no longer exists."
+        if callback:
+            callback(None, msg)
+        elif output:
+            notifications.show_error(msg, output=output)
+        return
+
+    if not player_message:
+        msg = "Type a message to send to the group."
+        if callback:
+            callback(None, msg)
+        elif output:
+            notifications.show_error(msg, output=output)
+        return
+
+    # If a round is already running for this group, queue the player's
+    # message. It'll drain when the current round finishes -- prevents
+    # racing turns.
+    with _group_runtime_lock:
+        state = _group_runtime_state.setdefault(group_id, {
+            "round_num": 1, "in_progress": False, "queued_player_msg": None,
+        })
+        if state.get("in_progress"):
+            state["queued_player_msg"] = player_message
+            return
+        state["round_num"] = state.get("round_num", 1) + 1
+        state["in_progress"] = True
+        next_round = state["round_num"]
+
+    group_texts.add_player_turn(group_id, player_message, round_num=next_round)
+    anchor_si = _resolve_sim_info(group.get("anchor_sim_id"))
+    _run_group_round(group_id, anchor_si=anchor_si, callback=callback, output=output)

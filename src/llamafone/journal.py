@@ -36,6 +36,40 @@ _cached_for_save_id = None
 # both of which acquire the same lock -- RLock makes reentrant grabs safe.
 _lock = threading.RLock()
 
+# 100 ticks per in-game minute. Same convention past_events / contact_prefs
+# use. 1 in-game day = 24 * 60 * 100 = 144000 ticks.
+_TICKS_PER_DAY = 24 * 60 * 100
+_TICKS_PER_HOUR = 60 * 100
+
+
+def _now_ingame_ticks():
+    """Sim-world time as absolute ticks, or None if the time_service
+    isn't ready. Journal entries record this alongside real-time ISO
+    so 'hours ago' rendering can reflect sim time (not the player's
+    calendar). Otherwise a game shelved for a real week would look like
+    it happened a week ago even though only in-game minutes passed."""
+    try:
+        import services
+        ts = services.time_service()
+        now = getattr(ts, "sim_now", None) if ts else None
+        if now is None:
+            return None
+        for attr in ("absolute_ticks", "value", "ticks"):
+            fn = getattr(now, attr, None)
+            if callable(fn):
+                try:
+                    return int(fn())
+                except Exception:
+                    continue
+            if fn is not None:
+                try:
+                    return int(fn)
+                except Exception:
+                    continue
+    except Exception:
+        return None
+    return None
+
 
 def _journal_path():
     """Per-save journal path in the Sims 4 saves folder. Returns None
@@ -155,6 +189,7 @@ def add_entry(content_type, content, sim_name=None, recipient_name=None,
         entries = _load()
         entry = {
             "timestamp": datetime.datetime.now().isoformat(),
+            "ticks": _now_ingame_ticks(),
             "type": content_type,
             "content": content,
         }
@@ -305,12 +340,20 @@ def get_sim_history(sim_name, n=6, recipient_name=None,
     matched = [e for e in _load() if _matches_sim(e)]
     if rname_l is not None or rid is not None:
         matched = [e for e in matched if _matches_recipient(e)]
+    # Filter out legacy group_text entries. Group texts have their own
+    # storage (GroupTexts.json) and their own prompt block via
+    # group_texts.format_shared_for_prompt -- writing them to the
+    # journal too produced duplicated 'Past interactions' entries that
+    # overlapped with the SHARED GROUP TEXT block. Scrub them on read
+    # so old saves that accumulated these entries stop leaking them
+    # into prompts, without touching the file itself.
+    matched = [e for e in matched if e.get("type") != "group_text"]
     return matched[-n:]
 
 
 def format_sim_history_for_prompt(sim_name, n=6, recipient_name=None,
                                   trailing_note=None, sim_id=None,
-                                  recipient_id=None):
+                                  recipient_id=None, before_iso=None):
     """
     Return a prompt-friendly summary of recent interactions with a specific sim.
     If recipient_name is given, only includes history involving that recipient.
@@ -322,21 +365,77 @@ def format_sim_history_for_prompt(sim_name, n=6, recipient_name=None,
 
     `sim_id` / `recipient_id`, if provided, take priority over name matching.
     See `get_sim_history` for the exact precedence rules.
+
+    `before_iso`, if provided, filters out entries with a timestamp at
+    or after that value. Used by reply-flow prompts to exclude the
+    current in-progress conversation from the 'Past interactions' block
+    -- otherwise turns of the ongoing convo (which get logged live) show
+    up in both 'Past interactions' AND 'Conversation so far'.
     """
     entries = get_sim_history(
-        sim_name, n,
+        sim_name, n * 3 if before_iso else n,  # over-fetch if filtering to still return n after
         recipient_name=recipient_name,
         sim_id=sim_id,
         recipient_id=recipient_id,
     )
+    if before_iso:
+        entries = [e for e in entries if e.get("timestamp", "") < before_iso]
+        entries = entries[:n]
     if not entries:
         return ""
 
     lines = [f"Past interactions with {sim_name}:"]
+    now_real = datetime.datetime.now()
+    now_ticks = _now_ingame_ticks()
     for e in entries:
+        # For very recent entries, hours-ago carries urgency that a
+        # bare date does not. Prevents the AI from saying 'missing
+        # you today' when the last conversation was 3 hours ago.
+        #
+        # Prefer in-game ticks (sim time). Falls back to real time for
+        # legacy entries without a ticks field OR when time_service
+        # isn't ready. Real time drifts wrong when the player shelves
+        # the game (11 real days = 0 in-game days), but ticks nail it.
+        date_str = "?"
         try:
-            dt = datetime.datetime.fromisoformat(e["timestamp"])
-            date_str = dt.strftime("%b %d")
+            entry_ticks = e.get("ticks")
+            if entry_ticks is not None and now_ticks is not None and now_ticks >= int(entry_ticks):
+                diff_ticks = now_ticks - int(entry_ticks)
+                if diff_ticks < _TICKS_PER_HOUR:
+                    mins = max(1, diff_ticks // 100)
+                    date_str = f"~{mins} in-game min ago"
+                elif diff_ticks < _TICKS_PER_DAY:
+                    hours = diff_ticks // _TICKS_PER_HOUR
+                    date_str = f"~{hours}h ago in-game, earlier today"
+                elif diff_ticks < 2 * _TICKS_PER_DAY:
+                    date_str = "yesterday in-game"
+                elif diff_ticks < 7 * _TICKS_PER_DAY:
+                    days = diff_ticks // _TICKS_PER_DAY
+                    date_str = f"{days} in-game days ago"
+                else:
+                    # For older entries, fall back to real-time date --
+                    # the exact number of in-game days gets fuzzy past
+                    # a week and a real date is still useful as an anchor.
+                    try:
+                        dt = datetime.datetime.fromisoformat(e["timestamp"])
+                        date_str = dt.strftime("%b %d")
+                    except Exception:
+                        date_str = f"{diff_ticks // _TICKS_PER_DAY} in-game days ago"
+            else:
+                # Legacy entry without ticks -- fall back to real-time delta
+                dt = datetime.datetime.fromisoformat(e["timestamp"])
+                delta = now_real - dt
+                seconds = delta.total_seconds()
+                if 0 <= seconds < 3600:
+                    mins = max(1, int(seconds // 60))
+                    date_str = f"~{mins} min ago"
+                elif seconds < 86400:
+                    hours = int(seconds // 3600)
+                    date_str = f"~{hours}h ago"
+                elif seconds < 2 * 86400:
+                    date_str = "yesterday (real time)"
+                else:
+                    date_str = dt.strftime("%b %d")
         except Exception:
             date_str = "?"
 

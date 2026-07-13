@@ -15,7 +15,7 @@ Commands (open cheat console with Ctrl+Shift+C):
 """
 
 MOD_NAME = "Llamafone"
-MOD_VERSION = "3.3.1"
+MOD_VERSION = "3.4.0"
 
 # Captured at module-load time -- the moment Sims 4 imported this build.
 # Used in prompts so a llama.dumpprompt definitively shows which load

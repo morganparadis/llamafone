@@ -116,33 +116,94 @@ def _log_prompt(system, messages, model, provider):
 # see a black box flash every time the mod calls an API.
 # ---------------------------------------------------------------------------
 
-def _curl(url, headers, body_json, timeout=60):
-    """Run curl POST, return (stdout, error). On any error the second
-    value is a human-readable string and stdout is whatever was captured."""
+def _curl(url, headers, body_json, timeout=60, method="POST"):
+    """Run curl, return (stdout, error, returncode). On success error
+    is None. On failure error is a human-readable string. returncode
+    is curl's exit code (or None if we never even got to invoke it --
+    e.g. curl-not-found / timeout / other Python-side failure).
+
+    Callers that want to diagnose specific curl failures (like exit
+    code 7 = 'connection refused' -> Ollama not running) can inspect
+    the returncode to produce provider-specific error messages."""
     startupinfo = None
     if sys.platform == "win32":
         startupinfo = subprocess.STARTUPINFO()
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         startupinfo.wShowWindow = 0
-    args = ["curl", "-s", "-X", "POST"]
+    args = ["curl", "-s"]
+    if method != "GET":
+        args += ["-X", method]
     for k, v in headers.items():
         args += ["-H", f"{k}: {v}"]
-    args += ["-d", body_json, url]
+    if body_json is not None:
+        args += ["-d", body_json]
+    args += [url]
     try:
         result = subprocess.run(
             args, capture_output=True, text=True, timeout=timeout,
             startupinfo=startupinfo,
         )
     except subprocess.TimeoutExpired:
-        return "", f"Request timed out after {timeout}s."
+        return "", f"Request timed out after {timeout}s.", None
     except FileNotFoundError:
-        return "", "curl not found. Llamafone needs curl on PATH."
+        return "", "curl not found. Llamafone needs curl on PATH.", None
     except Exception as e:
-        return "", f"curl invocation failed: {type(e).__name__}: {e}"
+        return "", f"curl invocation failed: {type(e).__name__}: {e}", None
     if result.returncode != 0:
         err = result.stderr.strip() or f"curl exited with code {result.returncode}"
-        return result.stdout, f"Network error: {err}"
-    return result.stdout, None
+        return result.stdout, f"Network error: {err}", result.returncode
+    return result.stdout, None, 0
+
+
+# Curl exit code -> user-friendly summary. curl documents these under
+# EXIT CODES in `man curl`. We cover the ones that show up in practice
+# for the providers we support; unrecognized codes fall through to a
+# generic message.
+_CURL_EXIT_HINTS = {
+    6:  "couldn't resolve host (DNS lookup failed).",
+    7:  "connection refused -- the server isn't listening on that port.",
+    28: "timed out.",
+    35: "SSL/TLS handshake failed.",
+    52: "server sent an empty response.",
+    56: "connection reset.",
+    60: "SSL certificate could not be verified.",
+    77: "SSL certificate file missing.",
+}
+
+
+def _friendly_ollama_error(err, returncode, endpoint):
+    """Turn a raw curl error into a plain-English message for Ollama
+    users. The single most common issue: Ollama isn't running. We
+    detect curl exit code 7 and provide step-by-step guidance instead
+    of the raw 'curl exited with code 7'."""
+    base = f"Can't reach Ollama at {endpoint}."
+    if returncode == 7:
+        return (
+            f"{base} Is Ollama running? On Windows, look for the "
+            f"llama icon in your system tray (bottom-right, click the ^). "
+            f"If it's not there, open Ollama from the Start menu and "
+            f"wait ~10 seconds for it to start, then try again. "
+            f"You can also verify by running `ollama list` in Command "
+            f"Prompt -- if that command fails, Ollama isn't installed "
+            f"or isn't on your PATH."
+        )
+    if returncode == 6:
+        return (
+            f"{base} The hostname in ollama_endpoint (in llamafone.cfg) "
+            f"couldn't be resolved. Default should be "
+            f"http://localhost:11434 -- check your config."
+        )
+    if returncode == 28:
+        return (
+            f"{base} The request timed out. Ollama may be busy loading "
+            f"a large model, or the machine is under heavy load. Try "
+            f"again in a moment; if it keeps timing out, try a smaller "
+            f"model (e.g. llama3.2:3b)."
+        )
+    hint = _CURL_EXIT_HINTS.get(returncode)
+    if hint:
+        return f"{base} {hint} (curl exit code {returncode})"
+    return f"{base} {err}"
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +219,7 @@ def _call_claude(api_key, model, max_tokens, system, messages):
         "x-api-key": api_key,
         "anthropic-version": "2023-06-01",
     }
-    stdout, err = _curl("https://api.anthropic.com/v1/messages", headers, json.dumps(body))
+    stdout, err, _rc = _curl("https://api.anthropic.com/v1/messages", headers, json.dumps(body))
     if err:
         return "", err
     try:
@@ -186,7 +247,7 @@ def _call_openai(api_key, model, max_tokens, system, messages):
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
     }
-    stdout, err = _curl("https://api.openai.com/v1/chat/completions", headers, json.dumps(body))
+    stdout, err, _rc = _curl("https://api.openai.com/v1/chat/completions", headers, json.dumps(body))
     if err:
         return "", err
     try:
@@ -221,7 +282,7 @@ def _call_gemini(api_key, model, max_tokens, system, messages):
         f"{model}:generateContent?key={api_key}"
     )
     headers = {"Content-Type": "application/json"}
-    stdout, err = _curl(url, headers, json.dumps(body))
+    stdout, err, _rc = _curl(url, headers, json.dumps(body))
     if err:
         return "", err
     try:
@@ -236,6 +297,45 @@ def _call_gemini(api_key, model, max_tokens, system, messages):
         return data["candidates"][0]["content"]["parts"][0]["text"], None
     except (KeyError, IndexError, TypeError):
         return "", "Empty response from Gemini."
+
+
+def check_ollama_health(endpoint=None):
+    """Diagnostic: verify an Ollama server is reachable and list its
+    available models. Called by llama.testconnection so non-technical
+    users can pinpoint exactly what's wrong.
+
+    Returns a dict:
+      {
+        "reachable": bool,
+        "endpoint": str,
+        "models": [str, ...],       -- present when reachable
+        "error": str | None,        -- friendly error when not reachable
+        "curl_returncode": int|None
+      }
+    """
+    from . import config as _config
+    base = (endpoint or _config.get_ollama_endpoint() or "http://localhost:11434").rstrip("/")
+    # /api/tags is the standard Ollama listing endpoint. Uses GET so
+    # it's a lightweight probe -- no model download or generation.
+    stdout, err, rc = _curl(f"{base}/api/tags", headers={}, body_json=None, timeout=5, method="GET")
+    out = {
+        "reachable": False,
+        "endpoint": base,
+        "models": [],
+        "error": None,
+        "curl_returncode": rc,
+    }
+    if err:
+        out["error"] = _friendly_ollama_error(err, rc, base)
+        return out
+    try:
+        data = json.loads(stdout)
+        models = data.get("models") or []
+        out["models"] = [m.get("name", "") for m in models if isinstance(m, dict)]
+        out["reachable"] = True
+    except Exception as e:
+        out["error"] = f"Ollama replied but the response wasn't valid JSON: {type(e).__name__}"
+    return out
 
 
 def _call_ollama(endpoint, model, max_tokens, system, messages):
@@ -254,9 +354,13 @@ def _call_ollama(endpoint, model, max_tokens, system, messages):
     }
     base = (endpoint or "http://localhost:11434").rstrip("/")
     headers = {"Content-Type": "application/json"}
-    stdout, err = _curl(f"{base}/api/chat", headers, json.dumps(body))
+    stdout, err, rc = _curl(f"{base}/api/chat", headers, json.dumps(body))
     if err:
-        return "", err
+        # The #1 reported Ollama issue from non-technical users is
+        # 'Network error: curl exited with code' -- opaque and offers
+        # no direction. Swap in a step-by-step message when we can
+        # identify the failure mode.
+        return "", _friendly_ollama_error(err, rc, base)
     try:
         data = json.loads(stdout)
     except json.JSONDecodeError:

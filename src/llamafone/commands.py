@@ -26,7 +26,7 @@ try:
     import sims4.resources
     import services
     from . import config
-    from . import sim_context, dialogue, storyteller, event_generator, notifications, api_client, auto_events, journal, phone
+    from . import sim_context, dialogue, storyteller, event_generator, notifications, api_client, auto_events, journal, phone, contact_prefs
 
     # -------------------------------------------------------------------------
     # Helpers
@@ -84,7 +84,9 @@ try:
         output("  llama.text                 — text message from a relationship sim")
         output("  llama.sendtext First Last msg — text a specific sim")
         output("  llama.sendcall First Last msg — call a specific sim")
+        output("  llama.contact First Last ... — mute/pause/priority a contact")
         output("  llama.reply <message>      — reply to the last call or text")
+        output("  llama.testconnection       — diagnose 'Network error' issues (esp. Ollama)")
         output("  llama.chat <message>       — chat about your game")
         output("  llama.journal              — view recent journal entries")
         output("  llama.reload               — reload config file")
@@ -118,6 +120,86 @@ try:
             else:
                 preview = (text or "").strip().replace("\n", " ")[:120]
                 output(f"[Llamafone] OK -- response: {preview!r}")
+
+        api_client.call_ai_async(
+            messages=[{"role": "user", "content": "Reply with the single word: pong"}],
+            system="You are a test ping. Reply with exactly one word.",
+            use_fast_model=True,
+            callback=_done,
+        )
+
+    @sims4.commands.Command("llama.testconnection", command_type=sims4.commands.CommandType.Live)
+    def cmd_test_connection(_connection=None):
+        """Provider-aware connectivity diagnostic. Aimed at non-technical
+        users who see 'Network error: curl exited with code' and don't
+        know what to do. Walks through each check with pass/fail and
+        specific next steps."""
+        output = sims4.commands.CheatOutput(_connection)
+        provider = config.get_provider()
+        default_model = config.get_default_model()
+        fast_model = config.get_fast_model()
+
+        output(f"[Llamafone] Provider: {provider}")
+        output(f"[Llamafone] Default model: {default_model}")
+        output(f"[Llamafone] Fast model:    {fast_model}")
+        output("")
+
+        if provider == "ollama":
+            endpoint = config.get_ollama_endpoint()
+            output(f"[Llamafone] Ollama endpoint: {endpoint}")
+            output("[Llamafone] Checking if Ollama is reachable...")
+            health = api_client.check_ollama_health(endpoint)
+            if not health.get("reachable"):
+                output("[Llamafone] X FAILED to reach Ollama.")
+                output(f"[Llamafone]   {health.get('error')}")
+                output("[Llamafone] Fix that, then run llama.testconnection again.")
+                return
+            output(f"[Llamafone] OK Reached Ollama at {health['endpoint']}.")
+            models = health.get("models") or []
+            output(f"[Llamafone] Installed models: {len(models)}")
+            for m in models:
+                output(f"[Llamafone]   - {m}")
+            if not models:
+                output("[Llamafone] X No models installed. Open Command Prompt and run:")
+                output("[Llamafone]      ollama pull llama3.2:3b")
+                output("[Llamafone] That downloads a small model (~2GB) suitable for the mod.")
+                return
+            # Verify the configured models are among the installed set.
+            missing = [m for m in {default_model, fast_model} if m and m not in models]
+            if missing:
+                output("[Llamafone] X Models in llamafone.cfg are not installed:")
+                for m in missing:
+                    output(f"[Llamafone]      {m}")
+                output("[Llamafone] Either change default_model / fast_model in llamafone.cfg to a")
+                output("[Llamafone] model from the installed list above, or run:")
+                for m in missing:
+                    output(f"[Llamafone]      ollama pull {m}")
+                output("[Llamafone] Then run llama.reload.")
+                return
+            output(f"[Llamafone] OK Both configured models ({fast_model}, {default_model}) are installed.")
+            output("[Llamafone] Running a tiny generation to confirm end-to-end...")
+        else:
+            # Cloud provider -- check that an API key is set.
+            if not config.is_configured():
+                output(f"[Llamafone] X {provider} provider needs an API key but none is set.")
+                output("[Llamafone] Edit llamafone.cfg -- add your key to api_key, then run llama.reload.")
+                return
+            output(f"[Llamafone] OK API key present.")
+            output(f"[Llamafone] Running a tiny generation to verify the key + model + network...")
+
+        def _done(text, error):
+            if error:
+                output(f"[Llamafone] X FAILED: {error}")
+                if provider == "ollama":
+                    output("[Llamafone] Ollama was reachable earlier, so this is likely a model-")
+                    output("[Llamafone] specific issue (e.g. the model is too large for your RAM).")
+                    output("[Llamafone] Try a smaller model like llama3.2:3b or qwen2.5:3b.")
+                else:
+                    output("[Llamafone] Check provider, api_key, default_model, and fast_model in llamafone.cfg.")
+                return
+            preview = (text or "").strip().replace("\n", " ")[:120]
+            output(f"[Llamafone] OK End-to-end works. Response: {preview!r}")
+            output("[Llamafone] You're good to go -- try llama.text or llama.call.")
 
         api_client.call_ai_async(
             messages=[{"role": "user", "content": "Reply with the single word: pong"}],
@@ -611,6 +693,154 @@ try:
             return
         output(f"[Llamafone] Calling {contact['name']}...")
         phone.send_call(contact, message, output=output)
+
+    @sims4.commands.Command("llama.contact", command_type=sims4.commands.CommandType.Live)
+    def cmd_contact(*args, _connection=None):
+        """Manage per-relationship preferences (household_sim <-> contact_sim).
+
+        Preferences are SCOPED to the currently active/selected household
+        sim. Switch to a different household member first to manage THEIR
+        preferences with the same contact.
+
+        Usage:
+          llama.contact First Last                    -- show current prefs
+          llama.contact First Last muted              -- silence this contact
+          llama.contact First Last paused             -- 'asked for space'
+          llama.contact First Last priority           -- favorite; more calls
+          llama.contact First Last clear              -- back to normal
+          llama.contact First Last note <text>        -- set a freeform note
+          llama.contact First Last note               -- clear the note
+          llama.contact list                          -- show all overrides
+                                                         across every pair
+        """
+        output = sims4.commands.CheatOutput(_connection)
+
+        if not args:
+            output("[Llamafone] Usage: llama.contact First Last [muted|paused|priority|clear|note <text>]")
+            output("[Llamafone]        llama.contact list -- show all current overrides")
+            return
+
+        # Resolve the current household sim (active in the client). All
+        # per-pair reads/writes below use this as the household side.
+        active_household_si = sim_context.get_main_sim_info()
+        household_sim_id = getattr(active_household_si, "sim_id", None) if active_household_si else None
+        household_name = ""
+        if active_household_si:
+            try:
+                household_name = f"{active_household_si.first_name} {active_household_si.last_name}".strip()
+            except Exception:
+                household_name = ""
+
+        # llama.contact list -- dump all overrides across every pair
+        if len(args) == 1 and args[0].lower() == "list":
+            entries = contact_prefs.list_all()
+            if not entries:
+                output("[Llamafone] No contact preferences set.")
+                return
+            output(f"[Llamafone] {len(entries)} pair override(s):")
+            try:
+                import services as _services
+                mgr = _services.sim_info_manager()
+            except Exception:
+                mgr = None
+
+            def _sim_name(sid):
+                try:
+                    if mgr and sid is not None:
+                        si = mgr.get(int(sid))
+                        if si:
+                            return f"{si.first_name} {si.last_name}".strip()
+                except Exception:
+                    pass
+                return f"[{sid}]"
+
+            for key, e in entries.items():
+                hh_id = e.get("household_sim_id")
+                other_id = e.get("other_sim_id")
+                state = e.get("state") or "-"
+                note = e.get("note") or ""
+                note_str = f" (note: {note!r})" if note else ""
+                if e.get("_legacy"):
+                    scope = f"[legacy, any household member] {_sim_name(other_id)}"
+                else:
+                    scope = f"{_sim_name(hh_id)} -> {_sim_name(other_id)}"
+                output(f"[Llamafone]   {scope}  state={state}{note_str}")
+            return
+
+        # For per-sim commands, parse: <First> <Last> [action] [rest]
+        if len(args) < 2:
+            output("[Llamafone] Usage: llama.contact First Last [muted|paused|priority|clear|note <text>]")
+            return
+
+        if not household_sim_id:
+            output("[Llamafone] No active household sim -- select one and try again.")
+            return
+
+        # Resolve the contact by first + last name
+        two_word_name = f"{args[0]} {args[1]}"
+        contact = phone.find_contact_by_name(two_word_name)
+        if not contact:
+            one_word_name = args[0]
+            contact = phone.find_contact_by_name(one_word_name)
+            rest_offset = 1
+        else:
+            rest_offset = 2
+        if not contact:
+            output(f"[Llamafone] Could not find a contact matching '{two_word_name}'.")
+            return
+        si = contact.get("sim_info")
+        other_sim_id = getattr(si, "sim_id", None) if si else None
+        if not other_sim_id:
+            output(f"[Llamafone] Could not resolve sim id for {contact.get('name','?')}.")
+            return
+        name = contact.get("name", "?")
+        output(f"[Llamafone] Scope: {household_name} -> {name}")
+
+        # No action specified -- show current
+        if len(args) <= rest_offset:
+            e = contact_prefs.get_prefs(household_sim_id, other_sim_id) or {}
+            state = e.get("state") or "no override (normal behavior)"
+            note = e.get("note") or "(none)"
+            output(f"[Llamafone]   state: {state}")
+            since_ticks = e.get("state_since_ticks")
+            if since_ticks is not None:
+                try:
+                    now = contact_prefs._now_ingame_ticks()
+                    if now is not None and now >= since_ticks:
+                        delta = contact_prefs._format_ingame_delta(now - since_ticks)
+                        if delta:
+                            output(f"[Llamafone]   since: {delta}")
+                except Exception:
+                    pass
+            since_real = e.get("state_since", "")
+            if since_real:
+                output(f"[Llamafone]   set on (real time): {since_real[:19]}")
+            output(f"[Llamafone]   note:  {note}")
+            output("[Llamafone] Options: muted / paused / priority / clear / note <text>")
+            return
+
+        action = args[rest_offset].lower()
+        if action in ("muted", "paused", "priority"):
+            contact_prefs.set_state(household_sim_id, other_sim_id, action)
+            output(f"[Llamafone] {household_name} -> {name}: {action}.")
+            if action == "paused":
+                output("[Llamafone] Auto-events for them will fire 5x less, and the AI knows you asked for space.")
+            elif action == "muted":
+                output("[Llamafone] No more auto-calls or auto-texts from them (for THIS household sim only).")
+            elif action == "priority":
+                output("[Llamafone] They'll get 2x more auto-events. AI will treat them warmly.")
+        elif action == "clear":
+            contact_prefs.set_state(household_sim_id, other_sim_id, None)
+            output(f"[Llamafone] Cleared state for {household_name} -> {name}. (Any note is preserved -- use 'note' to clear it.)")
+        elif action == "note":
+            note_text = " ".join(args[rest_offset + 1:]).strip()
+            contact_prefs.set_note(household_sim_id, other_sim_id, note_text)
+            if note_text:
+                output(f"[Llamafone] Note ({household_name} -> {name}): {note_text!r}")
+            else:
+                output(f"[Llamafone] Note ({household_name} -> {name}) cleared.")
+        else:
+            output(f"[Llamafone] Unknown action {action!r}. Use: muted / paused / priority / clear / note")
 
     @sims4.commands.Command("llama.reply", command_type=sims4.commands.CommandType.Live)
     def cmd_reply(*args, _connection=None):

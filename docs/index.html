@@ -129,14 +129,21 @@
 <section class="intro container">
   <h2>Your sims' phone, finally interesting.</h2>
   <p>
-    Every call and text reads what's actually happening in your save — who lives in the
-    household, their traits, mood, relationships, where they are — and sends it to the AI as
-    context. Nobody calls about a job they don't have. Nobody texts about a sim who doesn't
-    exist. The phone writes for the people in front of it.
+    Every call and text reads your save state before a word gets written. Traits, mood, career,
+    family role, who lives with them. Live weather where each sim is standing. Recent milestones,
+    parties you both attended, the in-person chat you had yesterday, group texts you were both in,
+    freeform notes you've written about the sim. All of it lands in the prompt.
+  </p>
+  <p>
+    So your dad opens with "hey kiddo, how's the hospital?" because he knows you're on the doctor
+    career. Your ex mentions the funeral you both went to last week. Your best friend brings up
+    the storm you're stuck in. And when you tell someone you need space, the mod picks that up —
+    the next reply from them is a boundary conversation, not another cheerful check-in.
   </p>
   <p>
     A flirty teen texts in lowercase with dramatic slang. An elder writes long, warm paragraphs.
-    A grandparent dotes; an enemy sneers. A Goofball cracks jokes mid-call. The voice fits.
+    A grandparent dotes; an enemy sneers. A parent never opens with "hey man"; a Goofball cracks
+    jokes mid-call. The voice fits.
   </p>
 </section>
 
@@ -308,6 +315,73 @@
   </div>
 </section>
 
+<section id="group-texts" class="screenshot-strip">
+  <div class="container">
+    <h2>Group texts <span class="muted small">(v3.4)</span></h2>
+    <p class="muted">Send one message to 2&#8211;4 sims at once. Each recipient replies in their own voice, staggered like real texts arriving over a few minutes. Every reply sees what the others just said &#8212; so responses stay distinct instead of a chorus of "same." The dialog title and the reply prompt both list the full group roster, so you always know who you're talking to.</p>
+    <div class="screenshot-grid-masonry">
+
+      <figure class="screenshot">
+        <img src="img/selectmultiplerecipients.PNG" alt="Multi-select sim picker allowing 1 to 4 recipients">
+        <figcaption><strong>Multi-select picker</strong><br><span class="muted small">Same "Send Text" entry as before &#8212; now picking 1 sim gives a normal text, picking 2&#8211;4 starts a group thread. Checkboxes replace the radio buttons when the picker's in group mode.</span></figcaption>
+      </figure>
+
+      <figure class="screenshot">
+        <img src="img/grouptext.PNG" alt="Incoming group text with the full roster shown in the dialog title">
+        <figcaption><strong>Roster visible on every message</strong><br><span class="muted small">Title reads <em>Group text with Sarah, Bob, Alice, and Kate</em>. The message body is prefixed with the sender's name so you always see who just spoke.</span></figcaption>
+      </figure>
+
+      <figure class="screenshot">
+        <img src="img/othergroupmemberresponse.PNG" alt="A different group member's reply arriving in the same thread">
+        <figcaption><strong>Staggered replies from everyone</strong><br><span class="muted small">Each recipient's reply lands after its own randomized delay (same delay range as 1:1 texts). Serial, not parallel &#8212; so participant B's prompt includes what participant A just said.</span></figcaption>
+      </figure>
+
+      <figure class="screenshot">
+        <img src="img/replyingtogrouptext.PNG" alt="Reply dialog explicitly listing the whole group as the destination">
+        <figcaption><strong>Reply fans out to the whole group</strong><br><span class="muted small">The Reply button opens a dialog that spells out <em>your reply goes to the whole group: Sarah, Bob, Alice, and Kate</em>. Each active participant may respond to the next round.</span></figcaption>
+      </figure>
+
+    </div>
+    <p class="muted small" style="margin-top:16px;">A briefing call at group creation (using the default model) synthesizes each participant's voice and their web of relationships, then gets cached for every subsequent reply &#8212; so per-turn cost stays sane even over long threads. Persisted per-save in <code>GroupTexts.json</code> so quitting mid-thread doesn't lose it.</p>
+  </div>
+</section>
+
+<section id="contact-prefs" class="screenshot-strip">
+  <div class="container">
+    <h2>Per-relationship contact preferences <span class="muted small">(v3.4)</span></h2>
+    <p class="muted">Alice broke up with Chad. She wants him to stop calling her every hour. She doesn't want him gone from the game &#8212; just from her phone. Bob (her brother) is still friends with Chad and should keep getting his texts. This is what per-relationship preferences are for: mute, "asked for space," or favorite &#8212; scoped to a specific household member's view of a specific contact.</p>
+    <div class="screenshot-grid screenshot-grid-3col-centered">
+
+      <figure class="screenshot">
+        <img src="img/managecontacts.PNG" alt="Llamafone Settings panel with a new Manage Contacts row">
+        <figcaption><strong>Reached from Settings</strong><br><span class="muted small">Phone &gt; Social &gt; Llamafone Settings &gt; <em>Manage contacts</em>. Scoped to whichever household sim opened Settings.</span></figcaption>
+      </figure>
+
+      <figure class="screenshot">
+        <img src="img/contactpreferences.PNG" alt="Sim picker listing contacts with markers for those that have preferences set">
+        <figcaption><strong>Contact list with markers</strong><br><span class="muted small">Contacts with an existing state or note surface first, tagged in brackets ([paused], [muted], note).</span></figcaption>
+      </figure>
+
+      <figure class="screenshot">
+        <img src="img/choosecontactsettings.PNG" alt="Per-contact action picker with mute, paused, priority, clear, and note options">
+        <figcaption><strong>Per-contact actions</strong><br><span class="muted small">Mute, Ask for space, Favorite, Clear, Edit note, or Wipe. The current active state is marked with &larr;.</span></figcaption>
+      </figure>
+
+      <figure class="screenshot">
+        <img src="img/addcontactnote.PNG" alt="Text input dialog for a freeform note about a contact">
+        <figcaption><strong>Freeform notes</strong><br><span class="muted small">Any context you want the AI to know &#8212; "kid's teacher," "asked for space after breakup." Surfaced in every prompt for this pair.</span></figcaption>
+      </figure>
+
+      <figure class="screenshot">
+        <img src="img/askforspacereply.PNG" alt="A text message from a contact respecting the player's request for space">
+        <figcaption><strong>Here's what changes</strong><br><span class="muted small">Once <em>paused</em> is set, the AI knows about the boundary. A decent contact respects it; a love-heavy ex might ignore it; a mean one might guilt-trip.</span></figcaption>
+      </figure>
+
+    </div>
+    <p class="muted small" style="margin-top:16px;">The <em>paused</em> ("asked for space") state is the interesting one. Instead of blocking the contact, it drops their auto-event rate to 20% <em>and</em> tells the AI you asked for space &#8212; so their response is driven by who they are. Also: the mod auto-detects distance signals in messages ("leave me alone," "we're done," "need space") and sets the state for you.</p>
+  </div>
+</section>
+
 <section id="context" class="features container">
   <h2>It knows what's actually going on.</h2>
   <p class="muted">Every call and text is filtered through what's true in your save right now — not generic AI fill.</p>
@@ -325,8 +399,32 @@
       <div class="feature-icon icon-storyline" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6"/><path d="M12 16v6"/><path d="M4.93 4.93l4.24 4.24"/><path d="M14.83 14.83l4.24 4.24"/><path d="M2 12h6"/><path d="M16 12h6"/></svg>
       </div>
-      <h3>Picks up real events</h3>
+      <h3>Weather aware</h3>
+      <p>Live read of the weather where each sim actually is — light rain, blizzard, heatwave, thunderstorm. Dramatic weather comes up in conversation; routine weather stays background. Off-world callers know THEIR climate too, so Sulani friends won't pretend it's snowing during a globally-Winter season.</p>
+    </article>
+
+    <article class="feature-card">
+      <div class="feature-icon icon-story" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect x="3" y="6" width="18" height="15" rx="2"/><path d="M3 10h18"/></svg>
+      </div>
+      <h3>Life events show up</h3>
       <p>Sim quit a job, got promoted, had a baby, got married, aged up? The mod catches it automatically and your friends bring it up — "heard you quit, you good?" — within days of it happening.</p>
+    </article>
+
+    <article class="feature-card">
+      <div class="feature-icon icon-event" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v18"/><path d="M18 3v18"/><path d="M3 8h18"/><path d="M3 16h18"/></svg>
+      </div>
+      <h3>Parties, weddings, holidays</h3>
+      <p>Sims 4 drops calendar events from the UI the moment they end. Llamafone snapshots them. Text a guest the morning after a house party — "great party last night." Text your ex the day of a funeral you both attended. Love Day, Winterfest, and vanilla holidays land with their real names, not internal IDs.</p>
+    </article>
+
+    <article class="feature-card">
+      <div class="feature-icon icon-text" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      </div>
+      <h3>Recent hangouts remembered</h3>
+      <p>When your sim actually chats, flirts, argues, or kisses another sim in-game, the mod logs it. Next time you text or call, the AI knows you saw each other in person — so the opener is "great catching up earlier," not generic small talk. Uses the same Sims 4 relationship bits (Just Chatted, Just Kissed, Social Context) the game itself tracks.</p>
     </article>
 
     <article class="feature-card">
@@ -334,15 +432,7 @@
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
       </div>
       <h3>Family roles override traits</h3>
-      <p>Your Outgoing Adventurous dad doesn't text you like a frat bro — he texts like your dad. Parents sound parental, siblings tease, spouses get intimate, grandparents ramble warmly.</p>
-    </article>
-
-    <article class="feature-card">
-      <div class="feature-icon icon-call" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-      </div>
-      <h3>Plausible contacts only</h3>
-      <p>Sims on the lot don't randomly call you from the next room. A teen acquaintance doesn't suddenly text an elder unless they're family or close friends — cross-generational pairings stay grounded.</p>
+      <p>Your Outgoing Adventurous dad doesn't text you like a frat bro — he texts like your dad. Parents sound parental, siblings tease, spouses get intimate, grandparents ramble warmly. Traits are interests, not voice.</p>
     </article>
 
     <article class="feature-card">
@@ -351,6 +441,38 @@
       </div>
       <h3>Friendship tone is law</h3>
       <p>Friends are warm. Acquaintances are polite. Enemies are openly hostile — no "rooting for you 💕" from someone who hates your guts. The current relationship beats anything from old chat history.</p>
+    </article>
+
+    <article class="feature-card">
+      <div class="feature-icon icon-storyline" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+      </div>
+      <h3>Your notes, your context</h3>
+      <p>Write a freeform note on any contact — "kid's teacher," "asked for space after breakup," "boss's boss," "childhood best friend." Surfaced in every prompt for that pair, weighted heavily, so the AI stays in character on nuance the game itself can't label. Per household member — Alice's notes stay Alice's.</p>
+    </article>
+
+    <article class="feature-card">
+      <div class="feature-icon icon-call" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+      </div>
+      <h3>Boundaries carry through</h3>
+      <p>Tell a sim "leave me alone" or "we're done" and the mod auto-detects it — flips them to muted or paused for that household member. Or set it manually in the Contacts UI. Every subsequent AI prompt for that pair leads with the boundary, not with warmth. A love-heavy ex ignores it and keeps calling; a decent friend apologizes; a mean one guilt-trips. The drama plays out based on who they are.</p>
+    </article>
+
+    <article class="feature-card">
+      <div class="feature-icon icon-text" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 8h2a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2v-9a2 2 0 012-2h2"/><line x1="12" y1="12" x2="12" y2="18"/><polyline points="9 15 12 18 15 15"/><line x1="12" y1="3" x2="12" y2="8"/></svg>
+      </div>
+      <h3>Group thread memory</h3>
+      <p>When Alice later texts Sarah 1:1, the AI knows they were both just in a group text with Bob and Kate. The last few turns from that group thread land in the prompt — so 1:1 conversations reference shared context like real friend groups do. Runs both directions, capped to recent threads only.</p>
+    </article>
+
+    <article class="feature-card">
+      <div class="feature-icon icon-call" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+      </div>
+      <h3>Plausible contacts only</h3>
+      <p>Sims on the lot don't randomly call you from the next room. A teen acquaintance doesn't suddenly text an elder unless they're family or close friends — cross-generational pairings stay grounded.</p>
     </article>
 
     <article class="feature-card">
@@ -464,15 +586,14 @@
           </div>
 
           <div class="provider-card">
-            <h4>🦙 Ollama (local — no API key)</h4>
-            <p>Runs the AI on your own computer. <strong>No API key. No internet. No cost.</strong> Slower than cloud providers and quality depends on what model your hardware can run.</p>
+            <h4>🦙 Ollama (local &#8212; no API key) <span class="provider-tag" style="background:#fdecc8;color:#8b5a2b;">techy</span></h4>
+            <p>Runs on your own computer. No API key, no internet, no cost. <strong>More setup than the cloud options</strong> &#8212; you install Ollama, keep it running in the background, and pull a model yourself.</p>
             <ol class="api-substeps">
-              <li>Install <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a> for your OS</li>
-              <li>In a terminal: <code>ollama pull llama3.1</code> (or <code>mistral</code>, <code>qwen2.5</code>, <code>gemma2</code>, etc.)</li>
-              <li>Make sure the Ollama app is running (it serves on <code>http://localhost:11434</code> by default)</li>
-              <li>No key — leave <code>api_key</code> blank in the config</li>
+              <li>Install <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>. Make sure the tray icon stays running.</li>
+              <li>Pull a model &#8212; e.g. <code>ollama pull llama3.2:3b</code> (small, fast) or a bigger one if your hardware handles it.</li>
+              <li>Leave <code>api_key</code> blank.</li>
             </ol>
-            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = ollama</code> + <code>default_model = llama3.1</code> (whatever you pulled)</p>
+            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = ollama</code> + <code>default_model = llama3.2:3b</code> (must match <code>ollama list</code>). Run <code>llama.testconnection</code> in the cheat console to verify setup.</p>
           </div>
         </div>
 
@@ -520,9 +641,11 @@ api_key  = AIza…
 
 # or (no key needed)
 
-provider = ollama
-api_key  = </code></pre>
-        <p>Save the file. If you're on Ollama, also confirm <code>ollama_endpoint = http://localhost:11434</code> matches wherever your server runs.</p>
+provider      = ollama
+api_key       =
+default_model = llama3.2:3b     # must match the model you pulled -- see `ollama list`
+fast_model    = llama3.2:3b</code></pre>
+        <p>Save the file. If you're on Ollama, also confirm <code>ollama_endpoint = http://localhost:11434</code> matches wherever your server runs. Ollama users can run <code>llama.testconnection</code> in the cheat console after loading a save &#8212; it verifies Ollama is reachable, the model is downloaded, and end-to-end generation works.</p>
       </div>
     </li>
 
@@ -646,6 +769,23 @@ api_key  = </code></pre>
   <ol class="changelog-list">
 
     <li class="changelog-entry">
+      <div class="changelog-date">July 12, 2026</div>
+      <div class="changelog-body">
+        <h3>Group texts, per-relationship contact preferences, and better error messages (v3.4.0)</h3>
+        <p>Two big features and a bunch of polish. Drop-in over v3.3.1. Existing saves and configs untouched; the mod auto-migrates any pre-refactor contact preferences on first load.</p>
+        <ul>
+          <li><strong>Group texts.</strong> Send Text now uses a multi-select picker &#8212; pick 1 sim for a normal 1:1 text, or 2&#8211;4 for a group thread. Each recipient replies in their own voice with staggered delays, and every reply sees what the others just said (so replies stay distinct, not a chorus of "same"). The thread persists to <code>GroupTexts.json</code> in your save folder. Group briefing (one AI call at group creation) is cached and reused for every subsequent reply, so per-turn cost stays sane. Reply button on any group message fans out to the whole roster automatically &#8212; dialog title and reply input both say <em>Group text with Sarah, Bob, Alice, and Kate</em> so you always see who's in the group. Configurable size (default 4, hard-cap 8) and optional gentle "someone got busy" drop-off in later rounds.</li>
+          <li><strong>Per-relationship contact preferences.</strong> Mute, "asked for space" (paused), or favorite (priority), plus a freeform note field &#8212; all scoped to a specific (household sim, contact sim) pair. Alice muting her ex doesn't affect Bob's phone activity with the same sim. The "paused" state is the interesting one: instead of blocking the contact, it drops their auto-event rate to 20% <em>and</em> injects a boundary note into every AI prompt for that pair, so their response depends on who they are. A love-heavy sim ignores it and keeps calling; a decent one apologizes; a mean one guilt-trips. All accessible from Phone &gt; Social &gt; Llamafone Settings &gt; <em>Manage contacts</em> (in-game UI &#8212; no cheat console needed) or via <code>llama.contact First Last muted|paused|priority|clear|note &lt;text&gt;</code>.</li>
+          <li><strong>Auto-detected distance signals.</strong> The mod scans every text and call (both incoming and outgoing) for phrases like "leave me alone," "we're done," "need space," "back off," "lose my number." When detected, it auto-applies the matching state to that (household, contact) pair. Priority-tier contacts are exempt; the auto-note preserves context so you can see WHY the mod reacted. Conservative on purpose &#8212; only whole-phrase matches, only one direction of change (never downgrades muted to paused, never overrides priority).</li>
+          <li><strong>In-game time, not real-world dates.</strong> Preference state timestamps use Sims 4's <code>services.time_service().sim_now</code> so shelving the game for six real-world months doesn't rot the state. The AI prompt says "you asked for space earlier today" or "3 in-game days ago," matching what the sim would actually experience in-world.</li>
+          <li><strong>Better error messages for Ollama users.</strong> The most common non-technical user issue was a raw "Network error: curl exited with code 7" popup when Ollama wasn't running. That's replaced with a step-by-step message pointing at the system tray, Start menu, and the <code>ollama list</code> Command Prompt check. New <code>llama.testconnection</code> command walks through the whole setup &#8212; confirms Ollama is reachable, lists installed models, verifies your configured models are among them (with exact <code>ollama pull</code> commands if not), then runs a tiny end-to-end generation to prove the pipeline works.</li>
+          <li><strong>Group-text picker fix.</strong> Initial group text release had a picker that wouldn't accept multi-select &#8212; the client-side renderer keys off <code>min_selectable = 0</code>, not <code>max_selectable_num &gt; 1</code> alone. Fixed by matching MCCC's pattern; the picker now renders checkboxes correctly.</li>
+          <li><strong>Timer + runtime state cleanup on save switch.</strong> Group text mid-round runtime state now clears alongside the reply-delay Timer cancellation when you load a different save &#8212; nothing from the previous save can fire into the new one.</li>
+        </ul>
+      </div>
+    </li>
+
+    <li class="changelog-entry">
       <div class="changelog-date">July 1, 2026</div>
       <div class="changelog-body">
         <h3>Hotfix: reply chain + phone anchor (v3.3.1)</h3>
@@ -672,115 +812,6 @@ api_key  = </code></pre>
       </div>
     </li>
 
-    <li class="changelog-entry">
-      <div class="changelog-date">June 30, 2026</div>
-      <div class="changelog-body">
-        <h3>Sims notice when you actually hang out (v3.2.0)</h3>
-        <p>Two new context features. Same per-save data layout as v3.1.4, drop-in.</p>
-        <ul>
-          <li><strong>Sims remember when you were just together.</strong> When your active sim actually chats/flirts/argues/kisses another sim in-game, the mod logs the encounter. The next time you text or call that sim, the prompt tells the AI "you saw each other in person recently" — so instead of generic small talk, they open with "great catching up earlier" or "thanks for the chat". Detection uses Sims 4's own short-term relationship bits (Greeted, Social Context, Just Chatted/Kissed/Argued/etc). The tag appears exactly once per burst of in-person contact between phone conversations, so it doesn't get repetitive.</li>
-          <li><strong>Past-event memory for calendar events.</strong> Sims 4 drops calendar events (parties, weddings, funerals, dinners, holidays) from the UI the moment they end. The mod now snapshots them as they complete and surfaces recent shared events in phone prompts for a few in-game days — so the morning after a wedding you attended together, the AI can text about it. Hooks the game's <code>BaseDramaNode</code> completion callback (the same lifecycle point every calendar event class inherits from), so it works for player-planned events, holidays, drama-scheduler events, all in one place.</li>
-          <li><strong>Contact's immediate family always shown as mutuals.</strong> The mutual-contacts block was randomising 4 mutuals per call — meaning a contact's own children/spouse/parents/siblings sometimes weren't in the list, and the AI would say "Who's Luca?" when Luca was their son. Now the contact's family is force-included in the mutuals list before random-fill; total cap raised from 4 to 8 so both family and friends fit. Family relationships (via <code>_get_family_relationship</code>) are checked directly so grandchildren, in-laws, and step-relations all count.</li>
-        </ul>
-      </div>
-    </li>
-
-    <li class="changelog-entry">
-      <div class="changelog-date">June 30, 2026</div>
-      <div class="changelog-body">
-        <h3>Hotfix: per-save folder names now match the .save filename (v3.1.4)</h3>
-        <p>v3.1.2/3 named per-save folders with the slot id formatted as decimal (e.g. <code>Slot_00004373</code>) when Sims 4 actually names the .save files with the slot id in lowercase hex (<code>Slot_00001115.save</code> for the same id — <code>0x1115 == 4373</code>). The folder name didn't match the filename, and on every play session the mod could land on a different decimal value as the player's save state changed. v3.1.4 formats slot ids as hex to match the .save filename exactly. On first load after upgrading, the mod auto-renames your old decimal-named folder to the correct hex name so your journal/milestones history carries over. No manual migration needed.</p>
-      </div>
-    </li>
-
-    <li class="changelog-entry">
-      <div class="changelog-date">June 30, 2026</div>
-      <div class="changelog-body">
-        <h3>Stability pass (v3.1.3)</h3>
-        <p class="muted">No new features — just hardening based on a code audit after v3.1.2. Safe to drop in; same data layout as v3.1.2, no migration steps.</p>
-        <ul>
-          <li><strong>Journal + milestones writes are now thread-safe.</strong> The mod runs several things on background threads (auto-events, milestone scans, reply-delay timers) that all read and write the same files. Added locks so concurrent writes can't race and lose entries.</li>
-          <li><strong>Milestones writes are now atomic.</strong> Snapshots, milestone log, and per-contact references now use the same write-to-.tmp-then-rename pattern the journal already had. A crash mid-write can't corrupt the file anymore.</li>
-          <li><strong>Phantom divorces stopped for good.</strong> v3.1.2's fix for the lazy-load relationship bug only kicked in when BOTH snapshots had the new "spouse was readable" flag. Snapshots that survived from v3.1.1 didn't have the flag, so the safety check defaulted to "yes diff" and could still fire a phantom divorce on the first scan after upgrade. The default is now "no diff" until a clean snapshot exists — at the cost of missing real divorces only on the very first scan after upgrade.</li>
-          <li><strong>Reply-delay timers cancelled when you switch saves.</strong> If a sim was about to text you back in ~30 seconds and you quit to the main menu, the reply used to fire in the new save's context (wrong contact, wrong conversation). Pending timers are now cancelled when a new save loads.</li>
-          <li><strong>Backfill won't misattribute ambiguous names.</strong> The opportunistic journal backfill (which stamps a sim_id onto legacy name-only entries when it learns the mapping) now refuses to backfill when two sims share a name — the legacy entries stay name-only rather than getting bound to the wrong sim.</li>
-        </ul>
-      </div>
-    </li>
-
-    <li class="changelog-entry">
-      <div class="changelog-date">June 30, 2026</div>
-      <div class="changelog-body">
-        <h3>Per-save history, smarter replies (v3.1.2)</h3>
-        <div style="border:2px solid #d97706;background:#fff8eb;padding:12px 16px;border-radius:8px;margin:0 0 12px;">
-          <strong>⚠️ IMPORTANT — your journal/milestones moved.</strong>
-          <p style="margin:6px 0 0;">Per-save data (journal, milestones, sim snapshots, milestone references) now lives in:</p>
-          <p style="margin:6px 0; font-family:monospace; word-break:break-all;">Documents/Electronic Arts/The Sims 4/saves/Llamafone/Slot_NNNNNNNN__&lt;your save name&gt;/</p>
-          <p style="margin:6px 0 0;">…instead of one shared file in your Mods folder. The folder is created automatically when you load each save. If you want to keep your existing v3.1.1 journal/milestones data, do this once per save AFTER updating:</p>
-          <ol style="margin:6px 0 0 1.2em;">
-            <li>Launch a save in Sims 4. Wait for the loading screen to finish (the per-save folder gets created at that moment).</li>
-            <li>Quit. Open <code>Documents/Electronic Arts/The Sims 4/saves/Llamafone/</code> — you'll see a <code>Slot_NNNNNNNN__&lt;save name&gt;/</code> folder for the save you just loaded.</li>
-            <li>From your Mods folder, copy these files in and drop the <code>Llamafone_</code> prefix: <code>Llamafone_Journal.json</code> → <code>Journal.json</code>, <code>Llamafone_Milestones.json</code> → <code>Milestones.json</code>, <code>Llamafone_SimSnapshots.json</code> → <code>SimSnapshots.json</code>, <code>Llamafone_MilestoneRefs.json</code> → <code>MilestoneRefs.json</code>.</li>
-            <li>Repeat for every save you want history preserved on.</li>
-          </ol>
-          <p style="margin:6px 0 0;">If you don't migrate, each save just starts fresh — nothing breaks. <code>llamafone.cfg</code> and <code>Llamafone_Settings.json</code> stay in the Mods folder unchanged (those are global, not per-save).</p>
-        </div>
-        <ul>
-          <li><strong>Per-save data folders.</strong> Multiple saves no longer share one history. Load Save A, talk to Bella → her journal entries land in A's folder; switch to Save B and a parallel "Bella" there has her own clean slate. The folder is created the instant Sims 4's loading screen finishes (verified hook against the game's <code>Zone.on_loading_screen_animation_finished</code> — no polling, no surprise CPU).</li>
-          <li><strong>Journal lookups by sim_id, not name.</strong> Two sims with the same name (Maxis premades, your own duplicates) no longer cross-contaminate. Entries store both the name (for display) and the sim_id (for lookup). Legacy entries opportunistically get their sim_id filled in as you interact with each sim — no migration script, the journal self-heals.</li>
-          <li><strong>Reply prompt brought up to parity with the call/text prompt.</strong> When an AI sim replies to your message, they now get the same rule set their incoming messages have — full friendship-tier table, geography rule, Sims 4 time block, banned-filler rules, calendar event handling, aspiration name-drop ban, mutual plausibility check. Previously the reply prompt was abbreviated and several rules silently didn't apply on the reply path. The user prompt also now carries <code>[GEOGRAPHY]</code>, <code>[SEASON]</code>, <code>[WEATHER]</code> tags on replies just like it does on incoming calls/texts.</li>
-          <li><strong>Outgoing calls/texts know who's calling.</strong> When YOU call or text someone via the phone UI or <code>llama.send_text</code>/<code>llama.send_call</code>, the prompt now includes the player's full recipient block — mood, career, aspiration, top-3 skills. Previously only the contact was described, so the AI had no idea who they were talking TO. (Bonus fix: outgoing-call path was using the incoming-call system prompt by mistake, which told the AI to initiate the call instead of answer it. Fixed.)</li>
-          <li><strong>Elder sims actually text like elders.</strong> The age rule was a soft "Elder: formal, warm" line that the AI would override when a sim's traits (Geek, Bookworm, Genius, Programming 10) read as a "tech nerd" archetype — pattern-matching them to lowercase millennial voice. Now hardened: elders ALWAYS use proper capitalization and complete sentences, regardless of traits. Traits are interests, not voice.</li>
-          <li><strong>"Been ages since we caught up" frame killed.</strong> The banned-filler list previously matched literal phrases like "it's been ages" but slipped past reworded versions ("been ages since we [verb]"). Now bans the whole frame — any opening about how long it's been since contact, including with an empty journal (an empty journal just means recent contact wasn't logged, NOT that this is your first contact in months).</li>
-          <li><strong>Clubs and interests stop transferring between mutuals.</strong> The AI was reading Daniel's "Board" club listing and writing "you and Bob doing that board-game stuff" to a sim who wasn't in the club. New rule explicitly says each sim's clubs/career/skills are listed individually — assume nothing transfers.</li>
-          <li><strong>Phantom divorce/remarriage milestones fixed.</strong> For sims outside the active household, Sims 4 loads the relationship tracker lazily — a startup scan could see zero targets, conclude "not married", then a later scan would see the real spouse and conclude "got married", firing a phantom divorce + remarriage pair. The detector now tracks whether the relationship read was reliable and skips the comparison when it wasn't.</li>
-        </ul>
-      </div>
-    </li>
-
-    <li class="changelog-entry">
-      <div class="changelog-date">June 29, 2026</div>
-      <div class="changelog-body">
-        <h3>Smarter context, durable journal (v3.1.1)</h3>
-        <ul>
-          <li><strong>Sims know each other better.</strong> The recipient block now passes the same context the caller block has had for ages — mood, career, aspiration, top-3 skills. The AI can now reference real save state on both sides of the conversation: your dad asks how the doctor track is going, your mom asks how the painting's coming along, your sister teases you about the promotion she heard about.</li>
-          <li><strong>Real skills only, cleanly named.</strong> Rewrote the skill lookup to use the game's own <code>sim_info.all_skills()</code> API (verified by reading the decompiled game source). Strips internal naming junk like <code>Statistic_Skill_AdultMajor_</code> so you see <code>Charisma 10</code>, not <code>Statistic Skill AdultMajor Charisma 10</code>. Filters out CC-mod skills (e.g. WickedWhims) and minor/hidden skills so the top-3 surfaces things worth chatting about.</li>
-          <li><strong>Mutuals you call out actually fit your topic.</strong> Each mutual entry now includes career + traits + age, plus a <em>plausibility check</em> rule: a Young Adult Entertainer isn't co-researching archaeology with you, a Loner Bookworm Elder isn't your nightclub buddy. The AI is also explicitly told not to hedge ("would Francesca even be into this?") — that's a tell the mutual doesn't fit and shouldn't be name-dropped at all.</li>
-          <li><strong>Stop "running into" people who live in other worlds.</strong> Tighter geography rules — only "ran into X" if X actually lives in the caller's world. And cohabiting sims / romantic partners NEVER "run into" each other; they live a shared life.</li>
-          <li><strong>"It's been forever" filler banned.</strong> Sims were over-using "it's been forever since we talked", "long time no see", "been a minute" as openers. All variants now banned; the AI has to lead with the actual reason for the call.</li>
-          <li><strong>Aspirations stay in your sim's head.</strong> No more "I've been working on my Track Knowledge aspiration" — aspirations are background context, not labels real sims would say out loud. The AI now references the underlying goal in natural language ("the research I've been doing", "my music project").</li>
-          <li><strong>Bogus "moved out / moved in" milestones fixed.</strong> The old detector compared sim household-id to whichever family the player was currently controlling — so swapping households via Manage Households fired phantom move events for every sim in your save. Now tracks the sim's absolute household identity and only fires on real moves. Old bogus entries are suppressed.</li>
-          <li><strong>Journal: no more silent data loss.</strong> Removed the 150-entry hard cap (the journal now grows unbounded — no more silently dropping history on long-running saves). Atomic writes prevent partial-write corruption. If a journal file ever becomes unreadable, it's renamed to a timestamped <code>.bak</code> BEFORE the cache resets, so no data is ever blindly overwritten. Any failure is logged.</li>
-        </ul>
-      </div>
-    </li>
-
-    <li class="changelog-entry">
-      <div class="changelog-date">June 29, 2026</div>
-      <div class="changelog-body">
-        <h3>Weather-aware calls and texts (v3.1)</h3>
-        <ul>
-          <li><strong>The AI knows what the weather is doing.</strong> Calls and texts now include a live read of the weather where your sim physically is — light rain, heavy snow, thunderstorm, scorching, whatever's actually on the radar. Dramatic weather (storms, blizzards, heatwaves) is fair game to come up in conversation; routine weather stays in the background.</li>
-          <li><strong>Off-world callers know their own climate too.</strong> Every Sims 4 world is mapped to a real-world climate analogue (Sulani tropical, Mt. Komorebi alpine, Oasis Springs desert, etc.) with per-season descriptions. So a friend calling from Sulani in globally-Winter still won't pretend it's snowing — tropical islands don't get snow even when the calendar flips. Gibbi Point's geothermal hot springs get their own treatment too.</li>
-          <li><strong>Apartment residents resolve correctly.</strong> Fixed a long-standing bug where played sims living in San Myshuno (and any other pack-named residential region) were tagged "world unknown" in the prompt. Now every household resolves to a real world, with three fallback lookup paths and a new <code>llama.scanworlds</code> diagnostic to audit them all in one shot.</li>
-          <li><strong>Auto-events show their work.</strong> The background thread now logs "waiting for game to unpause" so silent pause-gating doesn't look like a dead thread anymore. New <code>llama.testweather</code> cheat command dumps the WeatherService state for diagnostics.</li>
-        </ul>
-      </div>
-    </li>
-
-    <li class="changelog-entry">
-      <div class="changelog-date">June 28, 2026</div>
-      <div class="changelog-body">
-        <h3>Llamafone — new name, four AI providers (v3.0)</h3>
-        <ul>
-          <li><strong>Renamed to Llamafone.</strong> The mod is now called Llamafone. Same mod, new branding — phone tiles, settings panel, cheat commands (<code>llama.*</code>), config file, and notifications all rebrand in step.</li>
-          <li><strong>Bring your own AI.</strong> Pick <code>provider = claude | openai | gemini | ollama</code> in <code>llamafone.cfg</code> and Llamafone routes every call/text/story through whichever you choose. Cloud providers (Claude, OpenAI GPT, Google Gemini) need an API key; <strong>Ollama runs locally on your computer with no key, no internet, no cost</strong> — use whatever model your GPU can handle.</li>
-          <li><strong>Gemini's free tier covers most casual play.</strong> If you're cost-conscious, set <code>provider = gemini</code> + <code>default_model = gemini-1.5-flash</code> and play for free. New <code>llama.testprovider</code> cheat command fires a tiny round-trip so you can verify your config in 5 seconds before playing.</li>
-          <li><strong>No more emoji glitches.</strong> Local AI models sometimes mangle emoji into garbage rectangles in the Sims 4 UI. The mod now strips Unicode emoji and text emoticons from every response before they hit the dialog box, and the prompts forbid them. Plain readable text every time.</li>
-        </ul>
-      </div>
-    </li>
-
   </ol>
 
   <p class="changelog-footer">
@@ -798,24 +829,6 @@ api_key  = </code></pre>
       <div class="roadmap-status status-planned">Planned</div>
       <h3>In-game event triggers</h3>
       <p>Calls and texts that fire when something happens in your save. Get dumped → your best friend texts to check in. Get a promotion → mom calls to congratulate. Thunderstorm rolls in → your dad texts to make sure you're okay. Reactive rather than random.</p>
-    </li>
-
-    <li class="roadmap-card">
-      <div class="roadmap-status status-planned">Planned</div>
-      <h3>Per-contact preferences</h3>
-      <p>Block a specific sim from ever calling. Mark someone as "texts only, no calls." Set frequency per contact. Give your protagonist control over who can reach them.</p>
-    </li>
-
-    <li class="roadmap-card">
-      <div class="roadmap-status status-planned">Planned</div>
-      <h3>Custom relationship overrides</h3>
-      <p>Tell the mod about dynamics the game doesn't natively label. Mark a sim as your mentor, your daughter's older boyfriend, your estranged half-sibling, your childhood best friend, your work nemesis — and the AI will write calls and texts that reflect that, even when the in-game relationship data is just "acquaintance."</p>
-    </li>
-
-    <li class="roadmap-card">
-      <div class="roadmap-status status-planned">Planned</div>
-      <h3>Group texts</h3>
-      <p>Multi-sim chats where everyone replies in their own voice. Pick two or three sims, type the message, and watch the group chat unfold — siblings ribbing each other, the friend group planning a night out, parents coordinating around the kids. Each reply lands in character based on their relationship to you AND to each other.</p>
     </li>
 
     <li class="roadmap-card">

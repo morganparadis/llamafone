@@ -319,6 +319,235 @@ def _start_outbound(kind, sim_info):
         return
 
 
+# ---------------------------------------------------------------------------
+# Multi-select text flow (v3.4.0): the "Send Text" phone entry uses a
+# picker that permits 1-N recipients. 1 selected routes to the existing
+# 1:1 send_text (unchanged); 2+ routes to send_group_text.
+#
+# Call stays single-select via the original _start_outbound above --
+# group calls are out of scope for this feature.
+# ---------------------------------------------------------------------------
+
+
+def _get_group_max_participants():
+    """Config-driven cap on group text size. Hard-capped at 8 in code
+    even if the config value is higher, to keep API costs bounded."""
+    try:
+        raw = int(config.get_setting("group_text_max_participants", 4))
+    except Exception:
+        raw = 4
+    return max(2, min(8, raw))
+
+
+def _show_recipient_picker_multi(sim_info, max_pick, on_picked_list):
+    """Multi-select variant of _show_recipient_picker. Callback gets a
+    LIST of contact dicts (1..max_pick). Returns True on dialog
+    construction, False otherwise. Same picker construction as the
+    single-select version, differences flagged inline."""
+    _log(f"_show_recipient_picker_multi(max_pick={max_pick}, anchor={getattr(sim_info, 'first_name', '?')})")
+    choices = _gather_contact_choices(sim_info)
+    if not choices:
+        notifications.show_error(
+            "You don't have any contacts to text yet. Meet some sims "
+            "first, then come back here."
+        )
+        return False
+
+    try:
+        from sims4.localization import LocalizationHelperTuning
+        from ui.ui_dialog_picker import UiSimPicker, SimPickerRow
+
+        loc_title = LocalizationHelperTuning.get_raw_text("Text")
+        loc_text = LocalizationHelperTuning.get_raw_text(
+            f"Pick 1 sim for a direct text, or up to {max_pick} for a "
+            f"group text. Llamafone will craft the message once you "
+            f"tell it what to say."
+        )
+        loc_ok = LocalizationHelperTuning.get_raw_text("Text")
+        loc_cancel = LocalizationHelperTuning.get_raw_text("Cancel")
+
+        try:
+            dialog = UiSimPicker.TunableFactory().default(
+                sim_info,
+                title=lambda *_a, **_kw: loc_title,
+                text=lambda *_a, **_kw: loc_text,
+                text_ok=lambda *_a, **_kw: loc_ok,
+                text_cancel=lambda *_a, **_kw: loc_cancel,
+            )
+        except Exception:
+            _log_exc("_show_recipient_picker_multi: default() failed")
+            return False
+
+        # Multi-select mode requires the CLIENT to render checkboxes.
+        # UiDialogObjectPicker.multi_select returns True when either
+        # min_selectable < 1 OR max_selectable_num > 1, but in practice
+        # the client-side renderer keys off min_selectable=0 (MCCC's
+        # multi-select dialogs all set this explicitly for the same
+        # reason -- max_selectable alone isn't sufficient to flip the
+        # UI from radio-buttons to checkboxes).
+        #
+        # Semantically we WANT min=1 (must pick at least one recipient),
+        # but the game reserves that for single-select mode. We work
+        # around by setting min=0 and validating in _on_response --
+        # picked_results empty => user tapped OK with nothing selected,
+        # treat as cancel.
+        try:
+            dialog.min_selectable = 0
+        except Exception:
+            pass
+        try:
+            dialog.max_selectable = int(max_pick)
+        except Exception:
+            pass
+        try:
+            dialog.max_selectable_num = int(max_pick)
+        except Exception:
+            pass
+
+        option_to_contact = {}
+        added = 0
+        for idx, (sid, contact) in enumerate(choices):
+            try:
+                row = SimPickerRow(sid)
+                row.option_id = idx
+                dialog.add_row(row)
+                option_to_contact[idx] = contact
+                added += 1
+            except Exception:
+                _log_exc(f"  add_row failed for sid={sid}")
+                continue
+        _log(f"  added {added}/{len(choices)} picker rows (max_pick={max_pick})")
+
+        def _on_response(response_dialog):
+            try:
+                if not response_dialog.accepted:
+                    return
+                picked = list(getattr(response_dialog, "picked_results", None) or ())
+                if not picked:
+                    return
+                contacts = []
+                for opt in picked:
+                    c = option_to_contact.get(opt)
+                    if c:
+                        contacts.append(c)
+                if not contacts:
+                    notifications.show_error("Couldn't resolve the selected sims. Try again.")
+                    return
+                on_picked_list(contacts)
+            except Exception as _e:
+                # Log the error rather than swallowing it -- v3.3.1
+                # taught us silent-swallow in a picker callback is what
+                # hides "the mod appears frozen" bugs from users.
+                _log_exc("_show_recipient_picker_multi._on_response failed")
+
+        try:
+            dialog.add_listener(_on_response)
+            dialog.show_dialog()
+            return True
+        except Exception:
+            _log_exc("_show_recipient_picker_multi.show_dialog failed")
+            return False
+    except Exception:
+        _log_exc("_show_recipient_picker_multi outer failure")
+        return False
+
+
+def _show_group_message_input(sim_info, contacts, on_message):
+    """Message-input dialog for a group text. Same dialog construction
+    pattern as _show_message_input (subclass UiDialogTextInputOkCancel
+    and inject the text_input protobuf directly) -- factory kwargs
+    don't accept text_inputs, so we mirror the proven approach used by
+    1:1 texts. Only the labels differ."""
+    try:
+        from sims4.localization import LocalizationHelperTuning
+        from ui.ui_dialog_generic import UiDialogTextInputOkCancel
+
+        names = [c.get("name", "?") for c in contacts]
+        if len(names) == 2:
+            recipient_label = f"{names[0]} and {names[1]}"
+        else:
+            recipient_label = ", ".join(names[:-1]) + f", and {names[-1]}"
+
+        loc_title = LocalizationHelperTuning.get_raw_text(f"Group text to {recipient_label}")
+        loc_text = LocalizationHelperTuning.get_raw_text(
+            f"Write your message. Each of the {len(contacts)} recipients "
+            f"will reply in character. Reply to the group with the "
+            f"Reply button on any of their responses."
+        )
+        loc_send = LocalizationHelperTuning.get_raw_text("Send")
+        loc_cancel = LocalizationHelperTuning.get_raw_text("Cancel")
+
+        class _GroupMessageDialog(UiDialogTextInputOkCancel):
+            def on_text_input(self, text_input_name='', text_input=''):
+                self.text_input_responses[text_input_name] = text_input
+                return True
+
+            def build_msg(self, text_input_overrides=None, additional_tokens=(), **kwargs):
+                msg = super().build_msg(additional_tokens=additional_tokens, **kwargs)
+                ti = msg.text_input.add()
+                ti.text_input_name = _MESSAGE_INPUT
+                ti.height = 100
+                return msg
+
+        dialog = _GroupMessageDialog.TunableFactory().default(
+            sim_info,
+            text=lambda *_a, **_kw: loc_text,
+            title=lambda *_a, **_kw: loc_title,
+            text_ok=lambda *_a, **_kw: loc_send,
+            text_cancel=lambda *_a, **_kw: loc_cancel,
+        )
+
+        def _on_response(response_dialog):
+            try:
+                if not response_dialog.accepted:
+                    return
+                message = (response_dialog.text_input_responses or {}).get(
+                    _MESSAGE_INPUT, ""
+                ).strip()
+                if not message:
+                    return
+                on_message(message)
+            except Exception:
+                _log_exc("_show_group_message_input._on_response failed")
+
+        dialog.add_listener(_on_response)
+        try:
+            dialog.show_dialog()
+        except Exception:
+            _log_exc("_show_group_message_input.show_dialog failed")
+            return False
+        return True
+    except Exception:
+        _log_exc("_show_group_message_input outer failure")
+        return False
+
+
+def _start_outbound_text_or_group(sim_info):
+    """Send-Text entry point: multi-select picker -> route by count.
+    1 contact  -> phone.send_text (existing 1:1 path, unchanged)
+    2+ contacts -> phone.send_group_text (new)."""
+    max_pick = _get_group_max_participants()
+
+    def _on_picked(contacts):
+        if len(contacts) == 1:
+            # Route to existing 1:1 path exactly as _start_outbound would
+            contact = contacts[0]
+            def _on_message(message):
+                phone.send_text(contact, message)
+            if not _show_message_input("text", sim_info, contact, _on_message):
+                notifications.show_error("Couldn't open the message dialog.")
+            return
+
+        # Group text path
+        def _on_group_message(message):
+            phone.send_group_text(contacts, message)
+        if not _show_group_message_input(sim_info, contacts, _on_group_message):
+            notifications.show_error("Couldn't open the group-text message dialog.")
+
+    if not _show_recipient_picker_multi(sim_info, max_pick, _on_picked):
+        return
+
+
 class LlamafoneCallInteraction(_LlamafonePhoneInteractionBase):
     """Phone > Social > Call Someone -- pick a recipient, type a topic,
     Llamafone crafts and delivers the call."""
@@ -328,13 +557,29 @@ class LlamafoneCallInteraction(_LlamafonePhoneInteractionBase):
         _start_outbound("call", sim_info)
 
 
+def _group_text_feature_enabled():
+    """Master toggle for the group-text feature. When off, Send Text
+    reverts to the single-select-only picker exactly as pre-3.4.
+    Default ON -- the feature ships enabled but users can disable it
+    from the Settings menu if they don't want the multi-select UI."""
+    try:
+        return bool(config.get_setting("group_text_enabled", True))
+    except Exception:
+        return True
+
+
 class LlamafoneTextInteraction(_LlamafonePhoneInteractionBase):
-    """Phone > Social > Send Text -- pick a recipient, type a message,
-    Llamafone crafts and sends the text."""
+    """Phone > Social > Send Text -- pick 1 recipient for a direct text
+    or up to N for a group text. Llamafone routes based on selection
+    count (see _start_outbound_text_or_group). Falls back to the
+    original single-select flow when group_text_enabled=False."""
 
     def _fire(self):
         sim_info = getattr(self.sim, "sim_info", None) or self.sim
-        _start_outbound("text", sim_info)
+        if _group_text_feature_enabled():
+            _start_outbound_text_or_group(sim_info)
+        else:
+            _start_outbound("text", sim_info)
 
 
 # ---------------------------------------------------------------------------
@@ -415,6 +660,35 @@ def _setting_definitions():
             "getter": config.get_reply_delay_max_seconds,
             "bounds": (0, 600),
             "hint":   "Maximum delay before a sim replies (seconds).",
+        },
+        {
+            "key":    "group_text_enabled",
+            "label":  "Group texts: {value}",
+            "kind":   "bool",
+            "getter": lambda: bool(config.get_setting("group_text_enabled", True)),
+            "hint":   "When on, Send Text uses a multi-select picker (1 = normal text, 2+ = group text). When off, Send Text is single-select only.",
+        },
+        {
+            "key":    "group_text_max_participants",
+            "label":  "Group text max size: {value}",
+            "kind":   "int",
+            "getter": lambda: int(config.get_setting("group_text_max_participants", 4)),
+            "bounds": (2, 8),
+            "hint":   "Max recipients in a group text (2-8). Each recipient reply is a separate AI call.",
+        },
+        {
+            "key":    "group_text_dropoff_enabled",
+            "label":  "Group text dropoff: {value}",
+            "kind":   "bool",
+            "getter": lambda: bool(config.get_setting("group_text_dropoff_enabled", True)),
+            "hint":   "When on, participants may silently skip a round after the first (gentle 20/40/60%).",
+        },
+        {
+            "key":    "manage_contacts",
+            "label":  "Manage contacts...",
+            "kind":   "action",
+            "getter": lambda: "",
+            "hint":   "Set per-contact preferences: mute, paused ('asked for space'), priority, or freeform notes.",
         },
     ]
 
@@ -508,9 +782,9 @@ def _show_settings_picker(anchor_sim):
 
 
 def _on_setting_picked(anchor_sim, setting):
-    """Handler for a picked row -- either toggles a bool or opens a
-    numeric text-input dialog, then re-opens the settings picker so the
-    player can see the change and keep editing."""
+    """Handler for a picked row -- toggle a bool, open a numeric input,
+    or invoke a named action. Re-opens the settings picker after so the
+    player can keep editing."""
     kind = setting["kind"]
     if kind == "bool":
         try:
@@ -523,6 +797,18 @@ def _on_setting_picked(anchor_sim, setting):
         return
     if kind == "int":
         _show_int_input(anchor_sim, setting)
+        return
+    if kind == "action":
+        # Action items open a sub-flow. Route by key -- we intentionally
+        # avoid a big generic dispatch table so each action stays wired
+        # explicitly and dead entries can't linger silently.
+        key = setting.get("key")
+        if key == "manage_contacts":
+            _show_contact_manager_picker(anchor_sim)
+            return
+        # Unknown action -- log and re-open the picker
+        _log(f"_on_setting_picked: unknown action key {key!r}")
+        _show_settings_picker(anchor_sim)
         return
 
 
@@ -601,6 +887,396 @@ def _show_int_input(anchor_sim, setting):
     except Exception:
         _log_exc("_show_int_input failure")
         return False
+
+
+# ---------------------------------------------------------------------------
+# Contact manager -- picks a contact, opens per-contact action picker,
+# lets the player set state (muted/paused/priority/clear) or edit a
+# freeform note. All three levels re-open their parent picker after a
+# save so the player can chain edits without re-navigating.
+#
+# Reached via Phone > Social > Llamafone Settings > "Manage contacts..."
+# for v1. A pie-menu-on-sim entry point (Phase 2) will call the same
+# flow starting from _show_contact_actions(anchor_sim, contact).
+# ---------------------------------------------------------------------------
+
+
+def _show_contact_manager_picker(anchor_sim):
+    """Level 1: pick which contact to manage. Row names show a short
+    indicator for contacts that already have a state / note set, so
+    the player can see at a glance what they've configured.
+
+    Scoped to the anchor sim (the household member on whose phone this
+    was opened). Preferences are (anchor_sim, contact_sim) pairs -- if
+    another household member has different prefs for the same contact,
+    they don't collide."""
+    from . import contact_prefs
+    try:
+        from sims4.localization import LocalizationHelperTuning
+        from ui.ui_dialog_picker import UiItemPicker, BasePickerRow
+    except Exception:
+        _log_exc("_show_contact_manager_picker: import failed")
+        return False
+
+    anchor_id = getattr(anchor_sim, "sim_id", None) if anchor_sim else None
+    anchor_name = ""
+    if anchor_sim:
+        try:
+            anchor_name = anchor_sim.first_name
+        except Exception:
+            anchor_name = ""
+
+    choices = _gather_contact_choices(anchor_sim)
+    if not choices:
+        notifications.show_error(
+            "You don't have any contacts yet. Meet some sims first, "
+            "then come back here."
+        )
+        _show_settings_picker(anchor_sim)
+        return False
+
+    # Sort: contacts with prefs first, then alphabetical.
+    def _sort_key(entry):
+        sid, contact = entry
+        e = contact_prefs.get_prefs(anchor_id, sid) or {}
+        has_state = 0 if e.get("state") else 1
+        has_note = 0 if e.get("note") else 1
+        name = (contact.get("name") or "").lower()
+        return (has_state, has_note, name)
+    choices = sorted(choices, key=_sort_key)
+
+    try:
+        # Keep title short -- Sims 4 dialogs wrap long titles into the
+        # description area on lower-resolution / non-ultrawide displays,
+        # which collides with the close (X) button. Scope info goes in
+        # the description body instead.
+        loc_title = LocalizationHelperTuning.get_raw_text("Manage contacts")
+        loc_text = LocalizationHelperTuning.get_raw_text(
+            f"Preferences here apply only to {anchor_name or 'this sim'}. "
+            f"Contacts with an existing state or note are marked in brackets."
+        )
+        loc_ok = LocalizationHelperTuning.get_raw_text("Open")
+        loc_cancel = LocalizationHelperTuning.get_raw_text("Back")
+
+        dialog = UiItemPicker.TunableFactory().default(
+            anchor_sim,
+            title=lambda *_a, **_kw: loc_title,
+            text=lambda *_a, **_kw: loc_text,
+            text_ok=lambda *_a, **_kw: loc_ok,
+            text_cancel=lambda *_a, **_kw: loc_cancel,
+        )
+        try:
+            dialog.max_selectable = 1
+        except Exception:
+            pass
+        try:
+            dialog.min_selectable = 1
+        except Exception:
+            pass
+
+        idx_to_choice = {}
+        for idx, (sid, contact) in enumerate(choices):
+            e = contact_prefs.get_prefs(anchor_id, sid) or {}
+            state = e.get("state")
+            note = e.get("note")
+            markers = []
+            if state:
+                markers.append(state)
+            if note:
+                markers.append("note")
+            marker = f"  [{', '.join(markers)}]" if markers else ""
+            name_text = f"{contact.get('name', '?')}{marker}"
+            desc_text = ""
+            if note:
+                # First 60 chars of the note as row description
+                desc_text = note[:60] + ("…" if len(note) > 60 else "")
+
+            try:
+                row = BasePickerRow(
+                    option_id=idx,
+                    name=LocalizationHelperTuning.get_raw_text(name_text),
+                    row_description=LocalizationHelperTuning.get_raw_text(desc_text),
+                    is_enable=True,
+                )
+                dialog.add_row(row)
+                idx_to_choice[idx] = (sid, contact)
+            except Exception:
+                _log_exc(f"contact_manager: add_row failed for sid={sid}")
+                continue
+
+        def _on_response(response_dialog):
+            try:
+                if not response_dialog.accepted:
+                    # Back out to the settings picker
+                    _show_settings_picker(anchor_sim)
+                    return
+                picked = list(getattr(response_dialog, "picked_results", None) or ())
+                if not picked:
+                    _show_settings_picker(anchor_sim)
+                    return
+                entry = idx_to_choice.get(picked[0])
+                if not entry:
+                    _show_settings_picker(anchor_sim)
+                    return
+                sid, contact = entry
+                _show_contact_actions(anchor_sim, sid, contact)
+            except Exception:
+                _log_exc("contact_manager: on_response failed")
+
+        dialog.add_listener(_on_response)
+        dialog.show_dialog()
+        return True
+    except Exception:
+        _log_exc("_show_contact_manager_picker outer failure")
+        return False
+
+
+def _show_contact_actions(anchor_sim, sim_id, contact):
+    """Level 2: for a chosen contact, pick an action. Scoped to the
+    (anchor_sim, contact_sim) pair -- edits only affect this household
+    member's view of this contact."""
+    from . import contact_prefs
+    try:
+        from sims4.localization import LocalizationHelperTuning
+        from ui.ui_dialog_picker import UiItemPicker, BasePickerRow
+    except Exception:
+        _log_exc("_show_contact_actions: import failed")
+        return False
+
+    anchor_id = getattr(anchor_sim, "sim_id", None) if anchor_sim else None
+    anchor_name = ""
+    if anchor_sim:
+        try:
+            anchor_name = anchor_sim.first_name
+        except Exception:
+            anchor_name = ""
+
+    name = contact.get("name", "?")
+    e = contact_prefs.get_prefs(anchor_id, sim_id) or {}
+    current_state = e.get("state") or "no state"
+    current_note = e.get("note") or ""
+
+    # Assemble the "you're editing X" header text. Show the in-game
+    # delta if a state was set (matches how the AI prompt sees it).
+    header_bits = []
+    if anchor_name:
+        header_bits.append(f"Preferences: {anchor_name} -> {name}")
+    else:
+        header_bits.append(f"Contact: {name}")
+    header_bits.append(f"Current state: {current_state}")
+    since_ticks = e.get("state_since_ticks")
+    if since_ticks is not None:
+        try:
+            now = contact_prefs._now_ingame_ticks()
+            if now is not None and now >= since_ticks:
+                delta = contact_prefs._format_ingame_delta(now - since_ticks)
+                if delta:
+                    header_bits.append(f"State set: {delta}")
+        except Exception:
+            pass
+    if current_note:
+        note_preview = current_note[:100] + ("…" if len(current_note) > 100 else "")
+        header_bits.append(f"Note: {note_preview}")
+    header_text = "\n".join(header_bits)
+
+    # Action rows. Order: state changes first (most common), then note,
+    # then clear-all last so it's not accidentally picked.
+    actions = [
+        ("muted",    "Mute",                "No auto-calls or auto-texts from them."),
+        ("paused",   "Ask for space",       "5x fewer auto-events. AI knows you asked for space."),
+        ("priority", "Favorite",            "2x more auto-events. AI treats them warmly."),
+        ("clear",    "Clear state",         "Back to normal (keeps any freeform note)."),
+        ("note",     "Edit note...",        "Freeform text about this contact, surfaced in AI prompts."),
+        ("wipe",     "Wipe all preferences", "Remove state AND note. Full reset for this contact."),
+    ]
+
+    try:
+        # Keep title short so it doesn't wrap into the close-button
+        # region on smaller displays. Scope + current-state details
+        # go in the description body below.
+        loc_title = LocalizationHelperTuning.get_raw_text(name)
+        loc_text = LocalizationHelperTuning.get_raw_text(header_text)
+        loc_ok = LocalizationHelperTuning.get_raw_text("Apply")
+        loc_cancel = LocalizationHelperTuning.get_raw_text("Back")
+
+        dialog = UiItemPicker.TunableFactory().default(
+            anchor_sim,
+            title=lambda *_a, **_kw: loc_title,
+            text=lambda *_a, **_kw: loc_text,
+            text_ok=lambda *_a, **_kw: loc_ok,
+            text_cancel=lambda *_a, **_kw: loc_cancel,
+        )
+        try:
+            dialog.max_selectable = 1
+        except Exception:
+            pass
+        try:
+            dialog.min_selectable = 1
+        except Exception:
+            pass
+
+        for idx, (key, label, hint) in enumerate(actions):
+            # Highlight the current state so the player sees which one
+            # is already active.
+            display_label = label
+            if key in ("muted", "paused", "priority") and current_state == key:
+                display_label = f"{label}  ← current"
+            try:
+                row = BasePickerRow(
+                    option_id=idx,
+                    name=LocalizationHelperTuning.get_raw_text(display_label),
+                    row_description=LocalizationHelperTuning.get_raw_text(hint),
+                    is_enable=True,
+                )
+                dialog.add_row(row)
+            except Exception:
+                _log_exc(f"contact_actions: add_row failed for {key}")
+                continue
+
+        def _on_response(response_dialog):
+            try:
+                if not response_dialog.accepted:
+                    _show_contact_manager_picker(anchor_sim)
+                    return
+                picked = list(getattr(response_dialog, "picked_results", None) or ())
+                if not picked:
+                    _show_contact_manager_picker(anchor_sim)
+                    return
+                idx = picked[0]
+                if idx is None or idx < 0 or idx >= len(actions):
+                    _show_contact_manager_picker(anchor_sim)
+                    return
+                key = actions[idx][0]
+                scope_label = f"{anchor_name} -> {name}" if anchor_name else name
+                if key in ("muted", "paused", "priority"):
+                    contact_prefs.set_state(anchor_id, sim_id, key)
+                    notifications.show(
+                        "Llamafone",
+                        f"{scope_label}: {key}.",
+                    )
+                    _show_contact_actions(anchor_sim, sim_id, contact)
+                elif key == "clear":
+                    contact_prefs.set_state(anchor_id, sim_id, None)
+                    notifications.show(
+                        "Llamafone",
+                        f"Cleared state for {scope_label} (note preserved).",
+                    )
+                    _show_contact_actions(anchor_sim, sim_id, contact)
+                elif key == "note":
+                    _show_contact_note_input(anchor_sim, sim_id, contact)
+                elif key == "wipe":
+                    contact_prefs.clear_prefs(anchor_id, sim_id)
+                    notifications.show(
+                        "Llamafone",
+                        f"Wiped all preferences for {scope_label}.",
+                    )
+                    _show_contact_manager_picker(anchor_sim)
+                else:
+                    _show_contact_manager_picker(anchor_sim)
+            except Exception:
+                _log_exc("contact_actions: on_response failed")
+
+        dialog.add_listener(_on_response)
+        dialog.show_dialog()
+        return True
+    except Exception:
+        _log_exc("_show_contact_actions outer failure")
+        return False
+
+
+def _show_contact_note_input(anchor_sim, sim_id, contact):
+    """Level 3: text input for the freeform note. Same protobuf
+    injection pattern as the other text-input dialogs."""
+    from . import contact_prefs
+    try:
+        from sims4.localization import LocalizationHelperTuning
+        from ui.ui_dialog_generic import UiDialogTextInputOkCancel
+    except Exception:
+        _log_exc("_show_contact_note_input: import failed")
+        return False
+
+    anchor_id = getattr(anchor_sim, "sim_id", None) if anchor_sim else None
+    anchor_name = ""
+    if anchor_sim:
+        try:
+            anchor_name = anchor_sim.first_name
+        except Exception:
+            anchor_name = ""
+
+    name = contact.get("name", "?")
+    existing_note = contact_prefs.get_note(anchor_id, sim_id) or ""
+
+    # Short title to avoid wrap-into-close-button on smaller displays.
+    # The description body carries the scope + full context.
+    loc_title = LocalizationHelperTuning.get_raw_text(f"Note about {name}")
+    scope_line = f"For {anchor_name}'s view only.\n" if anchor_name else ""
+    loc_text = LocalizationHelperTuning.get_raw_text(
+        f"{scope_line}"
+        "Freeform text about this contact -- surfaced in AI prompts as "
+        "context. E.g. 'kid's teacher', 'asked for space after breakup', "
+        "'coworker on the marketing team'. Clear the text to remove."
+    )
+    loc_ok = LocalizationHelperTuning.get_raw_text("Save")
+    loc_cancel = LocalizationHelperTuning.get_raw_text("Cancel")
+
+    _FIELD = "note"
+
+    class _NoteInputDialog(UiDialogTextInputOkCancel):
+        def on_text_input(self, text_input_name='', text_input=''):
+            self.text_input_responses[text_input_name] = text_input
+            return True
+
+        def build_msg(self, text_input_overrides=None, additional_tokens=(), **kwargs):
+            msg = super().build_msg(additional_tokens=additional_tokens, **kwargs)
+            ti = msg.text_input.add()
+            ti.text_input_name = _FIELD
+            # Multi-line -- notes can be a couple sentences.
+            ti.height = 120
+            # Seed the field with any existing note so edits are incremental.
+            if existing_note:
+                try:
+                    ti.initial_value = LocalizationHelperTuning.get_raw_text(existing_note)
+                except Exception:
+                    pass
+            return msg
+
+    try:
+        dialog = _NoteInputDialog.TunableFactory().default(
+            anchor_sim,
+            text=lambda *_a, **_kw: loc_text,
+            title=lambda *_a, **_kw: loc_title,
+            text_ok=lambda *_a, **_kw: loc_ok,
+            text_cancel=lambda *_a, **_kw: loc_cancel,
+        )
+    except Exception:
+        _log_exc("_show_contact_note_input: dialog build failed")
+        _show_contact_actions(anchor_sim, sim_id, contact)
+        return False
+
+    def _on_response(response_dialog):
+        try:
+            if not response_dialog.accepted:
+                _show_contact_actions(anchor_sim, sim_id, contact)
+                return
+            new_note = (response_dialog.text_input_responses or {}).get(_FIELD, "").strip()
+            contact_prefs.set_note(anchor_id, sim_id, new_note)
+            scope_label = f"{anchor_name} -> {name}" if anchor_name else name
+            if new_note:
+                notifications.show("Llamafone", f"Note saved: {scope_label}.")
+            else:
+                notifications.show("Llamafone", f"Note cleared: {scope_label}.")
+            _show_contact_actions(anchor_sim, sim_id, contact)
+        except Exception:
+            _log_exc("_show_contact_note_input: on_response failed")
+
+    dialog.add_listener(_on_response)
+    try:
+        dialog.show_dialog()
+    except Exception:
+        _log_exc("_show_contact_note_input: show_dialog failed")
+        _show_contact_actions(anchor_sim, sim_id, contact)
+        return False
+    return True
 
 
 class LlamafoneSettingsInteraction(_LlamafonePhoneInteractionBase):

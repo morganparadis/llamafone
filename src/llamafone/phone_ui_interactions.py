@@ -107,9 +107,7 @@ def _show_message_input(kind, anchor_sim, contact, on_submit):
         other_name = contact.get("name", "this sim")
 
         loc_title = LocalizationHelperTuning.get_raw_text(f"{verb} {other_name}")
-        loc_text = LocalizationHelperTuning.get_raw_text(
-            f"What do you want to {verb.lower()} {other_name} about?"
-        )
+        loc_text = LocalizationHelperTuning.get_raw_text("")
         loc_send = LocalizationHelperTuning.get_raw_text("Send")
         loc_cancel = LocalizationHelperTuning.get_raw_text("Cancel")
 
@@ -192,10 +190,7 @@ def _show_recipient_picker(kind, anchor_sim, on_picked):
 
         verb = "Call" if kind == "call" else "Text"
         loc_title = LocalizationHelperTuning.get_raw_text(f"Who to {verb.lower()}?")
-        loc_text = LocalizationHelperTuning.get_raw_text(
-            f"Pick a sim to {verb.lower()}. Llamafone will craft the "
-            f"{verb.lower()} once you tell it what to say."
-        )
+        loc_text = LocalizationHelperTuning.get_raw_text("")
         loc_ok = LocalizationHelperTuning.get_raw_text(verb)
         loc_cancel = LocalizationHelperTuning.get_raw_text("Cancel")
 
@@ -359,9 +354,7 @@ def _show_recipient_picker_multi(sim_info, max_pick, on_picked_list):
 
         loc_title = LocalizationHelperTuning.get_raw_text("Text")
         loc_text = LocalizationHelperTuning.get_raw_text(
-            f"Pick 1 sim for a direct text, or up to {max_pick} for a "
-            f"group text. Llamafone will craft the message once you "
-            f"tell it what to say."
+            f"Pick 1 for a text, or up to {max_pick} for a group text."
         )
         loc_ok = LocalizationHelperTuning.get_raw_text("Text")
         loc_cancel = LocalizationHelperTuning.get_raw_text("Cancel")
@@ -469,11 +462,7 @@ def _show_group_message_input(sim_info, contacts, on_message):
             recipient_label = ", ".join(names[:-1]) + f", and {names[-1]}"
 
         loc_title = LocalizationHelperTuning.get_raw_text(f"Group text to {recipient_label}")
-        loc_text = LocalizationHelperTuning.get_raw_text(
-            f"Write your message. Each of the {len(contacts)} recipients "
-            f"will reply in character. Reply to the group with the "
-            f"Reply button on any of their responses."
-        )
+        loc_text = LocalizationHelperTuning.get_raw_text("")
         loc_send = LocalizationHelperTuning.get_raw_text("Send")
         loc_cancel = LocalizationHelperTuning.get_raw_text("Cancel")
 

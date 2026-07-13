@@ -242,13 +242,10 @@ def _show_reply_input_dialog(caller_sim_info, anchor_sim, group_id=None):
             roster = _group_roster_names(group_id)
             roster_str = _format_group_names(roster) or "the group"
             title_str = f"Reply to group: {roster_str}"
-            text_str = (
-                f"Your reply goes to the whole group: {roster_str}. "
-                f"Each of them may respond in character."
-            )
+            text_str = ""
         else:
             title_str = f"Reply to {other_name}" if other_name else "Reply"
-            text_str = "Type what you want to say. Llamafone will craft a reply."
+            text_str = ""
 
         loc_title = LocalizationHelperTuning.get_raw_text(title_str)
         loc_text = LocalizationHelperTuning.get_raw_text(text_str)

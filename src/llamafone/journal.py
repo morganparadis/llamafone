@@ -99,10 +99,6 @@ def _load():
     with _lock:
         global _cache, _cached_for_save_id
         current = _save_id.get_current_save_id()
-        # Don't cache during the early-load window when the save isn't
-        # ready. See contact_prefs._load for the full rationale.
-        if current is None:
-            return []
         if _cache is not None and _cached_for_save_id == current:
             return _cache
         _cached_for_save_id = current

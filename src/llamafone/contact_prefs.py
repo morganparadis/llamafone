@@ -195,14 +195,6 @@ def _load():
     with _lock:
         global _cache, _cached_for_save_id
         current = _save_id.get_current_save_id()
-        # If the save isn't ready yet (typically during the mod-load
-        # window before Zone.on_loading_screen_animation_finished
-        # fires), DO NOT cache anything -- we don't want a callsite
-        # that ran early to seed an empty cache that then never gets
-        # refreshed. Return an ephemeral empty view; the next call
-        # after the save is ready will do the real load.
-        if current is None:
-            return {"pairs": {}}
         if _cache is not None and _cached_for_save_id == current:
             return _cache
         _cached_for_save_id = current

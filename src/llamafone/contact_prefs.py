@@ -515,26 +515,25 @@ def format_for_prompt(household_id, other_id, other_name=None, household_name=No
         except Exception:
             pass
         lines.append(
-            f"### CRITICAL PLAYER-SET STATE ###\n"
-            f"{from_who} asked {who} for space{when_str}. Any message {who} "
-            f"sends is happening DESPITE that boundary. React in-character: "
-            f"some sims respect space, some ignore it, some apologize, some "
-            f"guilt-trip. {who}'s traits and how they feel about {from_who} "
-            f"decide which. THIS OVERRIDES any friendly tone the rest of the "
-            f"context suggests -- lead with the boundary, not with warmth."
+            f"[BOUNDARY STATE] {from_who} asked {who} for space{when_str}. "
+            f"{who} is aware of that boundary. This overrides any friendly "
+            f"tone in older history. If any earlier chat/text history "
+            f"conflicts with the boundary, treat the history as pre-dating "
+            f"the request and write as {who} would today. Write ONE plausible "
+            f"message from {who} -- no meta-commentary, no listing of "
+            f"options, no questions to the player. Just the message text."
         )
     elif state == STATE_MUTED:
         lines.append(
-            f"### CRITICAL PLAYER-SET STATE ###\n"
-            f"{from_who} has muted {who}. Any conversation is unusual and "
-            f"unwelcome from {from_who}'s side. If {who} is reaching out "
-            f"anyway, treat it as {who} pushing past a clear signal."
+            f"[BOUNDARY STATE] {from_who} has muted {who}. Any conversation "
+            f"is unusual and unwelcome from {from_who}'s side. Write ONE "
+            f"plausible message from {who} -- no meta-commentary, no "
+            f"listing of options, no questions to the player."
         )
     elif state == STATE_PRIORITY:
         lines.append(
-            f"### PLAYER-SET STATE ###\n"
-            f"{from_who} marked {who} as a priority contact. The relationship "
-            f"is warm and current -- lead with that."
+            f"[PRIORITY STATE] {from_who} marked {who} as a priority "
+            f"contact. Relationship is warm and current."
         )
 
     if note:

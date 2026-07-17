@@ -195,41 +195,68 @@ def _load():
     with _lock:
         global _cache, _cached_for_save_id
         current = _save_id.get_current_save_id()
+        # If the save isn't ready yet (typically during the mod-load
+        # window before Zone.on_loading_screen_animation_finished
+        # fires), DO NOT cache anything -- we don't want a callsite
+        # that ran early to seed an empty cache that then never gets
+        # refreshed. Return an ephemeral empty view; the next call
+        # after the save is ready will do the real load.
+        if current is None:
+            return {"pairs": {}}
         if _cache is not None and _cached_for_save_id == current:
             return _cache
         _cached_for_save_id = current
         path = _path()
         if path is None or not os.path.exists(path):
             _cache = {"pairs": {}}
+            _log(f"_load: no file yet at {path!r}; cached empty")
             return _cache
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             if not isinstance(data, dict):
-                data = {"pairs": {}}
+                _log(f"_load: file wasn't a dict (got {type(data).__name__}); refusing to overwrite disk. Cache empty for this session; restart to retry.")
+                _cache = {"pairs": {}}
+                return _cache
         except Exception as e:
-            _log(f"_load: parse failed ({type(e).__name__}: {e}); starting fresh")
-            data = {"pairs": {}}
+            # SAFETY: don't overwrite the disk when parse fails --
+            # the file might be recoverable, or the failure might be
+            # a transient file-lock race. Cache empty for this session
+            # only; the next successful load (e.g. after restart) will
+            # populate correctly. The previous version wrote {"pairs":{}}
+            # back over the parse-failed file, permanently nuking data.
+            _log(f"_load: parse failed ({type(e).__name__}: {e}); refusing to overwrite disk. Cache empty for this session only.")
+            _cache = {"pairs": {}}
+            return _cache
 
         # Migrate the legacy top-level "sims" dict to a bucket that we
         # keep as a household-agnostic fallback. Never mutates entries
         # -- just moves them under a new key so writes don't stomp on
         # them and reads can fall back for household sims that haven't
         # set their own pair-specific override yet.
+        did_migrate = False
         if "sims" in data and isinstance(data.get("sims"), dict):
             legacy = data.pop("sims")
             existing_legacy = data.get("_legacy_sims") or {}
             existing_legacy.update(legacy)
             data["_legacy_sims"] = existing_legacy
+            did_migrate = True
             _log(f"_load: migrated {len(legacy)} legacy entries -> _legacy_sims (kept as household-agnostic fallback)")
 
         if "pairs" not in data or not isinstance(data.get("pairs"), dict):
             data["pairs"] = {}
 
         _cache = data
-        # If we did any structural migration, persist it so the next
-        # save is already in the new format.
-        if "_legacy_sims" in data or "pairs" in data:
+        n_pairs = len(data.get("pairs") or {})
+        n_legacy = len(data.get("_legacy_sims") or {})
+        _log(f"_load: OK -- {n_pairs} pair(s), {n_legacy} legacy entry/entries from {os.path.basename(path)}")
+
+        # Persist the new format ONLY if we actually migrated -- previous
+        # versions wrote back on every load (the branch condition was
+        # always true), which meant a transient parse failure would
+        # save an empty dict over good data. Now the write-back
+        # happens only when there's a real structural change.
+        if did_migrate:
             try:
                 _save(data)
             except Exception:

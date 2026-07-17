@@ -51,7 +51,7 @@ _RECENT_WINDOW_IN_GAME_DAYS = 5
 
 # Ticks per minute in Sims 4's DateAndTime math. Documented in the
 # game's date_and_time module; the conversion ratio is stable.
-_TICKS_PER_MINUTE = 100
+_TICKS_PER_MINUTE = 60000  # Sims 4 uses 1000 ticks/sim-sec (REAL_MILLISECONDS_PER_SIM_SECOND); 60 sim-sec = 1 sim-min
 
 
 _cache = None

@@ -1995,6 +1995,15 @@ def _format_mutual_block(mutuals, casual=True):
         "\"your daughter\" -- NOT by their first name. This is how real people talk "
         "to family about other family. First-name references are fine for non-family "
         "mutuals."
+        "\n\nSHARED-FAMILY EXCEPTION -- if the mutual is family of BOTH you AND the "
+        "recipient in the same way (their entry lists you as e.g. 'your Mother' AND "
+        "the recipient as 'Francesca's Mother'), you two SHARE that family member. "
+        "Use \"our mom\", \"our dad\", \"our sister\", \"our brother\" -- or just "
+        "\"mom\", \"dad\" without a possessive. NEVER \"your mom\" when the mutual is "
+        "your mom too. Same rule for shared kids (\"our kid\", not \"your kid\"), "
+        "shared siblings, shared grandparents. Check the mutual's entry: if the "
+        "family role to YOU matches the family role to the recipient (both call her "
+        "'Mother', or both call him 'Brother'), it's shared -- use \"our\"."
     )
     body += (
         "\nPLAUSIBILITY CHECK -- before involving a mutual in your topic, look at "
@@ -4191,14 +4200,34 @@ def _build_group_reply_prompt(group, participant_index, this_round_replies):
     # so a long thread doesn't run away with prompt tokens.
     THREAD_TAIL = 12
     tail = history[-THREAD_TAIL:] if len(history) > THREAD_TAIL else history
+    anchor_author = group.get("_anchor_name") or "Anchor"
     thread_lines = ["=== Thread so far ==="]
     for turn in tail:
         if turn.get("role") == "you":
-            author = group.get("_anchor_name") or "Anchor"
-            thread_lines.append(f"{author}: {turn.get('text','')}")
+            thread_lines.append(f"{anchor_author}: {turn.get('text','')}")
         else:
             thread_lines.append(f"{turn.get('from_name','?')}: {turn.get('text','')}")
     parts.append("\n".join(thread_lines))
+
+    # Find the MOST RECENT player-turn and quote it explicitly. Without
+    # this, when the thread has multiple player-turns (e.g. an initial
+    # invite, then later a thank-you), the model can respond to the
+    # earlier topic instead of the fresh one -- leading to Vivian/Luca
+    # replying about "tomorrow at 5" when the player has moved on to
+    # thanking them for last night's party. Pin the target explicitly.
+    latest_player_turn = None
+    for turn in reversed(history):
+        if turn.get("role") == "you":
+            latest_player_turn = turn.get("text", "")
+            break
+    if latest_player_turn:
+        parts.append(
+            f"=== Reply TO THIS specific message ===\n"
+            f"{anchor_author}'s most recent message (this is what "
+            f"{my_name} should respond to -- NOT any earlier topic in "
+            f"the thread, even if it looks unresolved):\n"
+            f"  \"{latest_player_turn}\""
+        )
 
     # What others JUST said this round -- explicit call-out to steer
     # the reply toward distinctness.
@@ -4209,7 +4238,10 @@ def _build_group_reply_prompt(group, participant_index, this_round_replies):
         just_said.append("Say something distinct -- don't parrot them.")
         parts.append("\n".join(just_said))
 
-    parts.append(f"Now write {my_name}'s next 1-2 short messages.")
+    parts.append(
+        f"Now write {my_name}'s next 1-2 short messages, responding "
+        f"specifically to {anchor_author}'s most recent message above."
+    )
     return "\n\n".join(p for p in parts if p)
 
 

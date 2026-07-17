@@ -37,9 +37,13 @@ _cached_for_save_id = None
 _lock = threading.RLock()
 
 # 100 ticks per in-game minute. Same convention past_events / contact_prefs
-# use. 1 in-game day = 24 * 60 * 100 = 144000 ticks.
-_TICKS_PER_DAY = 24 * 60 * 100
-_TICKS_PER_HOUR = 60 * 100
+# use. Sims 4 uses 1000 ticks per SIM SECOND (via
+# REAL_MILLISECONDS_PER_SIM_SECOND in the game's date_and_time.py).
+# Older mod versions used 100 ticks/minute which was off by 600x --
+# fixed to 60000 ticks per sim minute.
+_TICKS_PER_MINUTE = 60000
+_TICKS_PER_HOUR = 60 * _TICKS_PER_MINUTE
+_TICKS_PER_DAY = 24 * _TICKS_PER_HOUR
 
 
 def _now_ingame_ticks():
@@ -402,7 +406,7 @@ def format_sim_history_for_prompt(sim_name, n=6, recipient_name=None,
             if entry_ticks is not None and now_ticks is not None and now_ticks >= int(entry_ticks):
                 diff_ticks = now_ticks - int(entry_ticks)
                 if diff_ticks < _TICKS_PER_HOUR:
-                    mins = max(1, diff_ticks // 100)
+                    mins = max(1, diff_ticks // _TICKS_PER_MINUTE)
                     date_str = f"~{mins} in-game min ago"
                 elif diff_ticks < _TICKS_PER_DAY:
                     hours = diff_ticks // _TICKS_PER_HOUR

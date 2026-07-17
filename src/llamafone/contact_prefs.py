@@ -83,7 +83,11 @@ _STATE_MULTIPLIER = {
 # in-game ticks means "how long ago" in the AI prompt reflects sim-
 # world time, not the player's real-world calendar -- so shelving the
 # game for months doesn't rot the state.
-_TICKS_PER_MINUTE = 100
+# Sims 4 uses 1000 ticks per SIM SECOND (via REAL_MILLISECONDS_PER_SIM_SECOND
+# in the game's date_and_time.py). Older mod versions used 100 ticks/minute,
+# which was off by 600x -- "1 sim hour ago" was rendering as "600 sim hours"
+# aka "25 days ago". Fixed to 60000 ticks per sim minute.
+_TICKS_PER_MINUTE = 60000
 _TICKS_PER_DAY = 24 * 60 * _TICKS_PER_MINUTE
 
 

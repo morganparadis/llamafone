@@ -422,6 +422,31 @@ def install_hook():
 # Prompt-helper
 # ---------------------------------------------------------------------------
 
+def _are_sims_in_same_household(sim_a_id, sim_b_id):
+    """True if both sims live in the same household. Household members
+    see each other constantly regardless of whether Sims 4 fired a
+    fresh Greeted bit -- rendering "you two saw each other 6 in-game
+    hours ago" for siblings who live together reads as nonsense."""
+    if not sim_a_id or not sim_b_id:
+        return False
+    try:
+        import services
+        mgr = services.sim_info_manager()
+        if mgr is None:
+            return False
+        si_a = mgr.get(int(sim_a_id))
+        si_b = mgr.get(int(sim_b_id))
+        if si_a is None or si_b is None:
+            return False
+        hh_a = getattr(si_a, "household", None)
+        hh_b = getattr(si_b, "household", None)
+        if hh_a is None or hh_b is None:
+            return False
+        return getattr(hh_a, "id", -1) == getattr(hh_b, "id", -2)
+    except Exception:
+        return False
+
+
 def _are_sims_on_same_lot(sim_a_id, sim_b_id):
     """True if both sims are currently instantiated on the same lot.
     Used to distinguish 'you saw each other 3h ago' (parted) from
@@ -478,6 +503,19 @@ def format_for_prompt(sim_a_id, sim_b_id, last_conv_iso=None):
     NOTE: `last_conv_iso` is accepted for backward compat but no
     longer suppresses -- the journal history is a separate block in
     the prompt, no double-count risk."""
+    # Household members share a home -- they see each other constantly
+    # regardless of what the last recorded relationship bit says.
+    # Rendering "we saw each other 6 in-game hours ago" for siblings
+    # who live together reads as absurd, so we short-circuit before
+    # even looking at the recorded interaction entry.
+    if _are_sims_in_same_household(sim_a_id, sim_b_id):
+        return (
+            f"\n[IN-PERSON CONTACT: You two live in the same household. "
+            f"You see each other constantly at home -- do not frame "
+            f"any conversation as 'catching up' or 'we saw each other X "
+            f"ago'. Any events, meals, or moments at home are shared "
+            f"context you both already know about.]"
+        )
     entry = most_recent_for_pair(sim_a_id, sim_b_id)
     if not entry:
         return ""
@@ -502,8 +540,12 @@ def format_for_prompt(sim_a_id, sim_b_id, last_conv_iso=None):
 
 
 # 100 ticks per in-game minute (matches past_events / journal / contact_prefs).
-_TICKS_PER_HOUR_INTX = 60 * 100
-_TICKS_PER_DAY_INTX = 24 * 60 * 100
+# 60000 ticks per sim minute (Sims 4 uses 1000 ticks per sim second).
+# Older mod versions used 100 ticks/minute which was off by 600x --
+# an interaction 1 sim hour ago rendered as "25 days ago". Fixed.
+_TICKS_PER_MINUTE_INTX = 60000
+_TICKS_PER_HOUR_INTX = 60 * _TICKS_PER_MINUTE_INTX
+_TICKS_PER_DAY_INTX = 24 * _TICKS_PER_HOUR_INTX
 
 
 def _format_recency(entry):
@@ -518,7 +560,7 @@ def _format_recency(entry):
             if diff < 0:
                 return ""
             if diff < _TICKS_PER_HOUR_INTX:
-                mins = max(1, diff // 100)
+                mins = max(1, diff // _TICKS_PER_MINUTE_INTX)
                 return f"about {mins} in-game min ago"
             if diff < _TICKS_PER_DAY_INTX:
                 hours = diff // _TICKS_PER_HOUR_INTX

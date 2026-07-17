@@ -84,6 +84,10 @@ def _load():
     with _lock:
         global _cache, _cached_for_save_id
         current = _save_id.get_current_save_id()
+        # Transient save_id=None during zone transitions must NOT
+        # invalidate a populated cache. See contact_prefs._load.
+        if current is None and _cache is not None:
+            return _cache
         if _cache is not None and _cached_for_save_id == current:
             return _cache
         _cached_for_save_id = current

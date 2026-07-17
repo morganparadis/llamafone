@@ -199,6 +199,13 @@ def _load():
     with _lock:
         global _cache, _cached_for_save_id
         current = _save_id.get_current_save_id()
+        # If save_id transiently returns None (typical during Sims 4 zone
+        # transitions), DO NOT invalidate the cache. Keep last-known-good
+        # data. Only invalidate on transitions between actual save ids.
+        # Without this guard, a zone transition wiped populated caches
+        # and rendered Manage Contacts empty until the game re-hit disk.
+        if current is None and _cache is not None:
+            return _cache
         if _cache is not None and _cached_for_save_id == current:
             return _cache
         _cached_for_save_id = current

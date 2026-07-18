@@ -368,6 +368,26 @@ def _resolve_event_name(event):
     except Exception:
         pass
 
+    # Player-planned drama nodes carry the SPECIFIC event type (e.g.
+    # Engagement Dinner, Wedding Ceremony, Bachelor Party) on their
+    # situation_seed.situation_type.display_name. Without this lookup,
+    # a wedding-family drama node just reports "Player Planned Wedding"
+    # for ALL wedding sub-events (engagement, rehearsal, ceremony,
+    # reception, etc.) because the drama node class name is generic.
+    try:
+        seed = getattr(event, "_situation_seed", None)
+        if seed is not None:
+            situation_type = getattr(seed, "situation_type", None)
+            if situation_type is not None:
+                disp = getattr(situation_type, "display_name", None)
+                if disp is not None:
+                    resolved = sim_context._resolve_localized_string(disp)
+                    cleaned = _clean_event_name(resolved or "")
+                    if cleaned and cleaned.lower() not in _GENERIC_FALLBACK_NAMES:
+                        return cleaned
+    except Exception:
+        pass
+
     raw = None
     try:
         ud = getattr(event, "ui_display_data", None)

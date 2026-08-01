@@ -271,9 +271,18 @@ def _call_gemini(api_key, model, max_tokens, system, messages):
     for m in messages:
         role = "model" if m.get("role") == "assistant" else "user"
         contents.append({"role": role, "parts": [{"text": str(m.get("content", ""))}]})
+    # Gemini 2.5 flash/pro count "thinking" tokens against maxOutputTokens,
+    # so a 512 budget can be entirely eaten by silent reasoning and the
+    # visible reply comes back empty or truncated mid-sentence. Disable
+    # thinking (flash/flash-lite honor thinkingBudget=0; pro ignores it,
+    # which is fine) and give the visible reply enough headroom.
+    generation_config = {
+        "maxOutputTokens": max(max_tokens, 1024),
+        "thinkingConfig": {"thinkingBudget": 0},
+    }
     body = {
         "contents": contents,
-        "generationConfig": {"maxOutputTokens": max_tokens},
+        "generationConfig": generation_config,
     }
     if system:
         body["systemInstruction"] = {"parts": [{"text": system}]}
@@ -294,9 +303,31 @@ def _call_gemini(api_key, model, max_tokens, system, messages):
         msg = e.get("message", str(e)) if isinstance(e, dict) else str(e)
         return "", f"API error: {msg}"
     try:
-        return data["candidates"][0]["content"]["parts"][0]["text"], None
+        candidate = data["candidates"][0]
     except (KeyError, IndexError, TypeError):
         return "", "Empty response from Gemini."
+    # Concatenate ALL text parts -- Gemini can split a single reply across
+    # multiple parts, and grabbing only parts[0] silently drops the tail.
+    text_chunks = []
+    try:
+        for part in candidate.get("content", {}).get("parts", []) or []:
+            t = part.get("text")
+            if t:
+                text_chunks.append(t)
+    except (AttributeError, TypeError):
+        pass
+    text = "".join(text_chunks).strip()
+    finish = candidate.get("finishReason", "")
+    if not text:
+        if finish == "MAX_TOKENS":
+            return "", ("Gemini hit maxOutputTokens before producing any "
+                       "visible text (likely spent the whole budget on "
+                       "internal reasoning). Try a larger max_tokens in "
+                       "llamafone.cfg or a different Gemini model.")
+        if finish == "SAFETY":
+            return "", "Gemini blocked the response for safety."
+        return "", "Empty response from Gemini."
+    return text, None
 
 
 def check_ollama_health(endpoint=None):

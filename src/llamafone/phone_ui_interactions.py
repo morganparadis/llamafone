@@ -299,7 +299,9 @@ class _LlamafonePhoneInteractionBase(SuperInteraction):
 def _start_outbound(kind, sim_info):
     """Recipient picker -> message dialog -> phone.send_call / send_text."""
     def _on_recipient(contact):
+        _log(f"_start_outbound picked kind={kind} name={contact.get('name','?')} sid={getattr(contact.get('sim_info'), 'sim_id', '?')}")
         def _on_message(message):
+            _log(f"_start_outbound dispatching kind={kind} to name={contact.get('name','?')}")
             if kind == "call":
                 phone.send_call(contact, message)
             else:
@@ -518,10 +520,16 @@ def _start_outbound_text_or_group(sim_info):
     max_pick = _get_group_max_participants()
 
     def _on_picked(contacts):
+        picked_debug = ", ".join(
+            f"{c.get('name','?')}#{getattr(c.get('sim_info'), 'sim_id', '?')}"
+            for c in contacts
+        )
+        _log(f"_start_outbound_text_or_group picked {len(contacts)} contact(s): {picked_debug}")
         if len(contacts) == 1:
             # Route to existing 1:1 path exactly as _start_outbound would
             contact = contacts[0]
             def _on_message(message):
+                _log(f"_start_outbound_text_or_group dispatching TEXT to name={contact.get('name','?')}")
                 phone.send_text(contact, message)
             if not _show_message_input("text", sim_info, contact, _on_message):
                 notifications.show_error("Couldn't open the message dialog.")
@@ -529,6 +537,7 @@ def _start_outbound_text_or_group(sim_info):
 
         # Group text path
         def _on_group_message(message):
+            _log(f"_start_outbound_text_or_group dispatching GROUP TEXT to {picked_debug}")
             phone.send_group_text(contacts, message)
         if not _show_group_message_input(sim_info, contacts, _on_group_message):
             notifications.show_error("Couldn't open the group-text message dialog.")

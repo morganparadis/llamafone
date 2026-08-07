@@ -675,6 +675,84 @@ def get_sim_career(sim_info):
     return None
 
 
+def _get_bool_attr_or_call(obj, name):
+    """Read an attribute that could be a plain @property or a zero-arg
+    bound method (Sims 4 has both patterns in its Career class over the
+    years). Returns None if neither works or if reading raises."""
+    try:
+        val = getattr(obj, name, None)
+        if callable(val):
+            try:
+                return bool(val())
+            except Exception:
+                return None
+        if val is None:
+            return None
+        return bool(val)
+    except Exception:
+        return None
+
+
+def get_sim_work_status(sim_info):
+    """Return a short prompt-ready phrase describing whether the sim is
+    at work / at school right now, or None when there's nothing worth
+    saying (no career, or off-duty and not late).
+
+    Kept small on purpose: this is context enrichment for phone prompts,
+    not a scheduler. We ONLY report the "right now" state so the AI can
+    write things like "sorry, at work, catch you later" without us
+    modelling shift math.
+    """
+    try:
+        career_tracker = getattr(sim_info, "career_tracker", None)
+        if not career_tracker:
+            return None
+        careers = getattr(career_tracker, "careers", None)
+        if not careers:
+            return None
+        career_iter = careers.values() if hasattr(careers, "values") else careers
+        for career in career_iter:
+            if career is None:
+                continue
+            # "currently_at_work" -> physically at the venue OR clocked in
+            # for a work-from-home shift. "is_work_time" -> it's their
+            # scheduled hours but they may not have gone in yet
+            # (uncommon in play, but happens for skipped shifts).
+            at_work = _get_bool_attr_or_call(career, "currently_at_work")
+            in_work_hours = _get_bool_attr_or_call(career, "is_work_time")
+            if not at_work and not in_work_hours:
+                continue
+            # Decide the label. School careers use class names like
+            # Career_Highschool / Career_Grade / Career_Preschool /
+            # University_*. Everything else is a work career.
+            cls_name = ""
+            try:
+                cls_name = type(career).__name__
+            except Exception:
+                pass
+            lname = cls_name.lower()
+            if "highschool" in lname or "high_school" in lname:
+                venue = "high school"
+            elif "grade" in lname:
+                venue = "grade school"
+            elif "preschool" in lname:
+                venue = "preschool"
+            elif "university" in lname:
+                venue = "class"
+            elif "elementary" in lname:
+                venue = "elementary school"
+            else:
+                venue = "work"
+            if at_work:
+                return f"at {venue} right now"
+            # In work hours but not clocked in -- either running late or
+            # actively skipping. Phrase it neutrally.
+            return f"supposed to be at {venue} right now"
+    except Exception:
+        pass
+    return None
+
+
 def get_current_world():
     """Return the friendly name of the world the player is currently in, or None.
     This is the zone the active household is loaded into — for vacations, this differs

@@ -1713,6 +1713,17 @@ def _describe_recipient(recipient_sim, contact=None):
     except Exception:
         pass
 
+    # Live work/school status. Cheap tag that lets the AI know when the
+    # recipient shouldn't realistically be replying at length ("hey, in
+    # class, txt you after"). Only surfaced when they're currently on
+    # the clock; skipped otherwise so the AI doesn't over-index on it.
+    try:
+        work_status = sim_context.get_sim_work_status(recipient_sim)
+        if work_status:
+            parts.append(f"{recipient_sim.first_name} is {work_status}")
+    except Exception:
+        pass
+
     try:
         aspiration = sim_context.get_sim_aspiration(recipient_sim)
         if aspiration:
@@ -3132,6 +3143,13 @@ def _describe_relationship(contact, recipient=None):
         career = sim_context.get_sim_career(si)
         if career:
             parts.append(f"{name}'s career: {career}")
+
+        try:
+            work_status = sim_context.get_sim_work_status(si)
+            if work_status:
+                parts.append(f"{name} is {work_status}")
+        except Exception:
+            pass
 
         aspiration = sim_context.get_sim_aspiration(si)
         if aspiration:

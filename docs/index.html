@@ -785,6 +785,7 @@ fast_model    = llama3.2:3b</code></pre>
           <li><strong>Cleaner holiday names in sim conversations.</strong> Vanilla holidays used to leak into prompts as "Premade Holidays Harvestfest"; modded holidays showed up with their author's mod prefix attached. Both cleaned up — the AI sees "Harvestfest" and the modded holiday's actual name.</li>
           <li><strong>"FAILED TO LOAD" line in the log is gone.</strong> The mod was actually loading fine — a harmless startup call was mis-reporting itself as a fatal error and scaring people. Cleaned up.</li>
           <li><strong>Log files stay smaller during long play sessions.</strong> A diagnostic line was repeating on every AI prompt for certain sims — now logs once per sim per session.</li>
+          <li><strong>Sims know when they (or you) are at work or in class.</strong> If a sim is currently on the clock or at school when the prompt is built, the AI sees it and can react in-character — "hey, in class, catch you at lunch" or "sorry, just got to work, later?" — instead of writing a paragraph as if they're free. Covers regular work careers, active careers, part-time gigs, and schools (grade school, high school, university).</li>
         </ul>
       </div>
     </li>

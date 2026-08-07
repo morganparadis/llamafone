@@ -191,24 +191,45 @@ def _ticks_to_minutes(ticks):
 
 def record_seen(event_id, name, start_time, attendee_ids, honored=None, is_holiday=False):
     """Record/update a single event. Keyed by event_id so repeated calls
-    for the same event just refresh the snapshot (newer attendee list etc.)"""
+    for the same event just refresh the snapshot (newer attendee list etc.).
+
+    First-write-wins on `start_ticks`: subsequent calls preserve the
+    original start time and only refresh the attendee list, honored
+    list, and holiday flag. This matters because the situation-snapshot
+    path passes `now` as `start_time` -- if we let every snapshot
+    overwrite start_ticks, an event's "when" would keep sliding forward
+    to whenever the mod last happened to poll (misreading a real event
+    from three sim days ago as "86 minutes ago" was exactly this bug)."""
     if event_id is None or not name:
         return
-    start_ticks = _ticks_of(start_time)
-    if start_ticks is None:
+    new_start_ticks = _ticks_of(start_time)
+    if new_start_ticks is None:
         return
     try:
         with _lock:
             cache = _load()
-            cache[str(event_id)] = {
-                "event_id": str(event_id),
-                "name": name,
-                "start_ticks": start_ticks,
-                "attendees": list(attendee_ids or []),
-                "honored": list(honored or []),
-                "is_holiday": bool(is_holiday),
-                "logged_at": datetime.datetime.now().isoformat(),
-            }
+            key = str(event_id)
+            existing = cache.get(key)
+            if existing is not None and existing.get("start_ticks") is not None:
+                # Preserve original start_ticks and logged_at; refresh
+                # everything else. The attendee list is the main thing
+                # that can grow after first record (more sims join a
+                # party mid-event).
+                existing["name"] = name  # in case drama_node path resolves a better one later
+                existing["attendees"] = list(attendee_ids or [])
+                existing["honored"] = list(honored or [])
+                existing["is_holiday"] = bool(is_holiday)
+                cache[key] = existing
+            else:
+                cache[key] = {
+                    "event_id": key,
+                    "name": name,
+                    "start_ticks": new_start_ticks,
+                    "attendees": list(attendee_ids or []),
+                    "honored": list(honored or []),
+                    "is_holiday": bool(is_holiday),
+                    "logged_at": datetime.datetime.now().isoformat(),
+                }
             _save(cache)
     except Exception as e:
         _log(f"record_seen failed: {type(e).__name__}: {e}")
@@ -531,21 +552,62 @@ def _record_from_situation(sit):
 
         name = cls_name
 
-        now = None
-        try:
-            import services
-            ts = services.time_service()
-            if ts:
-                now = ts.sim_now
-        except Exception as e:
-            _log(f"  time_service read failed on {cls_name}: {type(e).__name__}: {e}")
-        if now is None:
+        # Try to get the situation's actual start time. Fall back to
+        # "now" only if none of the known accessors work -- and even
+        # then, record_seen's first-write-wins rule means subsequent
+        # polls won't keep sliding start_ticks forward.
+        start_time = None
+        for attr in ("_seed_creation_time", "_start_time", "_creation_time",
+                     "start_time", "creation_time"):
+            try:
+                val = getattr(sit, attr, None)
+                if callable(val):
+                    try:
+                        val = val()
+                    except Exception:
+                        continue
+                if val is not None and _ticks_of(val) is not None:
+                    start_time = val
+                    break
+            except Exception:
+                continue
+        # Also try the situation seed's start time -- many player-
+        # planned situations carry it there.
+        if start_time is None:
+            try:
+                seed = getattr(sit, "_seed", None) or getattr(sit, "seed", None)
+                if seed is not None:
+                    for attr in ("_creation_time", "creation_time",
+                                 "_start_time", "start_time"):
+                        val = getattr(seed, attr, None)
+                        if callable(val):
+                            try:
+                                val = val()
+                            except Exception:
+                                continue
+                        if val is not None and _ticks_of(val) is not None:
+                            start_time = val
+                            break
+            except Exception:
+                pass
+        # Final fallback: current sim_now. Only used when the situation
+        # exposes no start-time accessor at all; with first-write-wins
+        # this is at least stable per event_id (won't keep drifting).
+        if start_time is None:
+            try:
+                import services
+                ts = services.time_service()
+                if ts:
+                    start_time = ts.sim_now
+            except Exception as e:
+                _log(f"  time_service read failed on {cls_name}: {type(e).__name__}: {e}")
+        if start_time is None:
             return
 
         record_seen(
             event_id=sit_id,
             name=name,
-            start_time=now,
+            start_time=start_time,
             attendee_ids=list(sim_ids),
             honored=[],
             is_holiday=False,

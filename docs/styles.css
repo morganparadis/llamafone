@@ -1197,6 +1197,24 @@ section > p { max-width: 780px; margin-left: auto; margin-right: auto; }
 }
 .changelog-body li::marker { color: var(--accent); }
 
+.changelog-figure {
+  margin: 0.75rem 0 0.25rem;
+  max-width: 360px;
+}
+.changelog-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+.changelog-figure figcaption {
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
 .changelog-footer {
   text-align: center;
   margin-top: 1.5rem;

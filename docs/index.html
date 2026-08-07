@@ -775,7 +775,13 @@ fast_model    = llama3.2:3b</code></pre>
         <p>Drop-in over v3.4.1.</p>
         <ul>
           <li><strong>Gemini users: replies come back complete.</strong> If you were on a Gemini model and seeing your sims send back short, cut-off, or completely empty texts, that's fixed. Full replies again.</li>
-          <li><strong>Sims know which wedding event they're going to.</strong> Every wedding sub-event you planned — engagement dinner, rehearsal dinner, ceremony, reception, bachelor/bachelorette party — was showing up to the AI as the same generic "wedding event." Now they get the specific one, so a text about tomorrow's rehearsal dinner sounds like a rehearsal dinner, not a wedding. The same resolver may help other packs' scheduled events (funerals, planned parties, dine-out reservations) if they follow the same tuning convention, but only weddings have been directly confirmed on this release.</li>
+          <li>
+            <strong>Sims know which wedding event they're going to.</strong> Every wedding sub-event you planned — engagement dinner, rehearsal dinner, ceremony, reception, bachelor/bachelorette party — was showing up to the AI as the same generic "wedding event." Now they get the specific one, so a text about tomorrow's rehearsal dinner sounds like a rehearsal dinner, not a wedding. The same resolver may help other packs' scheduled events (funerals, planned parties, dine-out reservations) if they follow the same tuning convention, but only weddings have been directly confirmed on this release.
+            <figure class="changelog-figure">
+              <img src="img/weddingevent.PNG" alt="Text conversation referencing an engagement dinner specifically, not just a generic wedding event">
+              <figcaption>Real in-game example — the prompt now says <em>Engagement Dinner</em>, not <em>Player Planned Wedding</em>.</figcaption>
+            </figure>
+          </li>
           <li><strong>Cleaner holiday names in sim conversations.</strong> Vanilla holidays used to leak into prompts as "Premade Holidays Harvestfest"; modded holidays showed up with their author's mod prefix attached. Both cleaned up — the AI sees "Harvestfest" and the modded holiday's actual name.</li>
           <li><strong>"FAILED TO LOAD" line in the log is gone.</strong> The mod was actually loading fine — a harmless startup call was mis-reporting itself as a fatal error and scaring people. Cleaned up.</li>
           <li><strong>Log files stay smaller during long play sessions.</strong> A diagnostic line was repeating on every AI prompt for certain sims — now logs once per sim per session.</li>

@@ -339,9 +339,7 @@ def _prettify_event_name(raw):
     return spaced or "Event"
 
 
-def format_for_prompt(sim_a_id, sim_b_id):
-    """Return a multi-line block listing recent events both sims attended,
-    or empty string if none. Used by the phone prompt builders."""
+def _format_for_prompt_impl(sim_a_id, sim_b_id):
     events = get_recent_for(sim_a_id, sim_b_id)
     if not events:
         return ""
@@ -382,10 +380,36 @@ def format_for_prompt(sim_a_id, sim_b_id):
             when = "yesterday"
         else:
             when = f"{days_diff} sim days ago"
-        honored = e.get("honored") or []
-        honor_str = f" (in memory of {', '.join(honored)})" if honored else ""
+        # `honored` is a list of {'name': str, 'role': str} dicts from
+        # events._get_honored_sims -- extract the names before joining
+        # (raw dict-join blows up prompt building with a TypeError and
+        # takes down the whole outgoing call/text flow with it).
+        honored_raw = e.get("honored") or []
+        honored_names = []
+        for h in honored_raw:
+            if isinstance(h, dict):
+                nm = h.get("name")
+                if nm:
+                    honored_names.append(str(nm))
+            elif h:
+                honored_names.append(str(h))
+        honor_str = f" (in memory of {', '.join(honored_names)})" if honored_names else ""
         lines.append(f"  - {name}{honor_str} -- {when}")
     return "\n".join(lines)
+
+
+def format_for_prompt(sim_a_id, sim_b_id):
+    """Return a multi-line block listing recent events both sims attended,
+    or empty string if none. Used by the phone prompt builders.
+
+    Wrapped so any formatting bug degrades to an empty block instead of
+    propagating up and killing the outgoing call/text/reply that
+    triggered the prompt build."""
+    try:
+        return _format_for_prompt_impl(sim_a_id, sim_b_id)
+    except Exception as e:
+        _log(f"format_for_prompt failed: {type(e).__name__}: {e}")
+        return ""
 
 
 # ---------------------------------------------------------------------------

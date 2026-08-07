@@ -317,24 +317,38 @@ def _prettify_event_name(raw):
     """Clean a stored event name for prompt display. Drama-node names
     come out of _resolve_event_name already-prose ("Grandpa's Funeral")
     and pass through unchanged. Situation class names come raw as
-    e.g. "Situation_HouseParty" or "Situation_DinnerParty_Formal" --
-    strip the prefix and split CamelCase into spaced words."""
+    e.g. "Situation_HouseParty" or, for pack-tuned sub-events,
+    "situation_CustomGoals_PrePostWeddingParties_EngagementDinner" --
+    take the LAST underscore-separated segment (which by Sims 4
+    tuning convention is the specific event name in CamelCase) and
+    split it into spaced words. This mirrors the fix on the upcoming-
+    events path in events._resolve_event_name."""
     if not raw:
         return "Event"
-    # Situation class names: strip common prefixes, split CamelCase.
+    # Already prose-looking (has spaces) -- pass through unchanged.
+    if " " in raw:
+        return raw
+    # Strip the leading Situation_/situation_ noise. Everything after
+    # is either bare CamelCase (Sims 4 base-game party classes) or
+    # further underscore-separated pack namespacing.
     stripped = raw
     for prefix in ("Situation_", "situation_"):
         if stripped.startswith(prefix):
             stripped = stripped[len(prefix):]
             break
-    else:
-        # Already prose-looking (has spaces or lowercase letters) --
-        # return as-is.
-        if " " in raw or raw[0:1].islower():
-            return raw
+    # Heuristic on how many underscore-separated segments remain:
+    #   0-1 segments (HouseParty, DinnerParty_Formal) -- keep the whole
+    #     thing; the second segment is a meaningful qualifier
+    #     ("Formal", "Casual") the reader wants to see.
+    #   2+ segments (CustomGoals_PrePostWeddingParties_EngagementDinner)
+    #     -- take just the last segment; the earlier ones are pack
+    #     namespacing noise ("CustomGoals", "PrePostWeddingParties")
+    #     that leaks the tuning path.
+    segment_count = stripped.count("_") + 1
+    core = stripped if segment_count <= 2 else stripped.rsplit("_", 1)[-1]
     # Split CamelCase (insert space before each interior uppercase),
     # replace underscores with spaces, collapse multi-space, strip.
-    spaced = _re_prompt.sub(r"(?<!^)(?=[A-Z])", " ", stripped).replace("_", " ")
+    spaced = _re_prompt.sub(r"(?<!^)(?=[A-Z])", " ", core).replace("_", " ")
     spaced = _re_prompt.sub(r"\s+", " ", spaced).strip()
     return spaced or "Event"
 
@@ -381,19 +395,37 @@ def _format_for_prompt_impl(sim_a_id, sim_b_id):
         else:
             when = f"{days_diff} sim days ago"
         # `honored` is a list of {'name': str, 'role': str} dicts from
-        # events._get_honored_sims -- extract the names before joining
-        # (raw dict-join blows up prompt building with a TypeError and
-        # takes down the whole outgoing call/text flow with it).
+        # events._get_honored_sims. The role determines how to phrase
+        # the honor -- "in memory of" only fits funerals ("deceased"
+        # role); a wedding's "betrothed" or a birthday's "celebrant"
+        # would read as saying they died. Tolerate legacy string
+        # entries by falling back to a neutral "for" prefix.
         honored_raw = e.get("honored") or []
         honored_names = []
+        first_role = None
         for h in honored_raw:
             if isinstance(h, dict):
                 nm = h.get("name")
                 if nm:
                     honored_names.append(str(nm))
+                    if first_role is None:
+                        first_role = h.get("role")
             elif h:
                 honored_names.append(str(h))
-        honor_str = f" (in memory of {', '.join(honored_names)})" if honored_names else ""
+        if honored_names:
+            joined = ", ".join(honored_names)
+            if first_role == "deceased":
+                honor_str = f" (in memory of {joined})"
+            elif first_role == "betrothed":
+                honor_str = f" (for {joined})"
+            elif first_role == "celebrant":
+                honor_str = f" ({joined}'s)"
+            elif first_role == "guest_of_honor":
+                honor_str = f" (honoring {joined})"
+            else:
+                honor_str = f" (for {joined})"
+        else:
+            honor_str = ""
         lines.append(f"  - {name}{honor_str} -- {when}")
     return "\n".join(lines)
 

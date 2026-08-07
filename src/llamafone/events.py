@@ -383,21 +383,36 @@ def _resolve_event_name(event):
     except Exception:
         pass
 
-    # Player-planned drama nodes carry the SPECIFIC event type (e.g.
-    # Engagement Dinner, Wedding Ceremony, Bachelor Party) on their
-    # situation_seed.situation_type.display_name. Without this lookup,
-    # a wedding-family drama node just reports "Player Planned Wedding"
-    # for ALL wedding sub-events (engagement, rehearsal, ceremony,
-    # reception, etc.) because the drama node class name is generic.
+    # Player-planned drama nodes carry the specific event type on
+    # _situation_seed.situation_type. The situation_type is a class
+    # whose __name__ is something like
+    # 'situation_CustomGoals_PrePostWeddingParties_EngagementDinner'
+    # -- the last underscore-separated segment ("EngagementDinner")
+    # cleans to a clean prompt-ready label. Its `display_name`
+    # LocalizedString would give us localized text, but it typically
+    # requires token bindings (host, guest_of_honor, etc.) that we
+    # don't have at resolve-time, so the resolver returns None and we
+    # fall through to __name__.
     try:
         seed = getattr(event, "_situation_seed", None)
         if seed is not None:
             situation_type = getattr(seed, "situation_type", None)
             if situation_type is not None:
+                # Path A: LocalizedString display_name (works when the
+                # localization tokens happen to be bindable).
                 disp = getattr(situation_type, "display_name", None)
                 if disp is not None:
                     resolved = sim_context._resolve_localized_string(disp)
                     cleaned = _clean_event_name(resolved or "")
+                    if cleaned and cleaned.lower() not in _GENERIC_FALLBACK_NAMES:
+                        return cleaned
+                # Path B: derive from the situation class name. Take the
+                # last underscore-separated segment ('EngagementDinner')
+                # and CamelCase-split it via _clean_event_name.
+                st_name = getattr(situation_type, "__name__", "") or ""
+                if st_name:
+                    last_seg = st_name.rsplit("_", 1)[-1]
+                    cleaned = _clean_event_name(last_seg)
                     if cleaned and cleaned.lower() not in _GENERIC_FALLBACK_NAMES:
                         return cleaned
     except Exception:

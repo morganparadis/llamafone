@@ -135,11 +135,21 @@ try:
 
     _log("All modules imported, commands registered.")
 
-    # Console output fires immediately as a fallback
-    sims4.commands.output(
-        f"[{MOD_NAME}] v{MOD_VERSION} loaded -- type 'llama.status' to get started.",
-        None,
-    )
+    # Console output fires immediately as a fallback. Wrapped: at mod-load
+    # time there is no client yet, and some Sims 4 builds raise
+    # `TypeError: output() argument 2 must be int, not None` for a None
+    # client_id. That would trigger the outer except and log a scary
+    # "FAILED TO LOAD" line even though every module already imported
+    # successfully. The cheat-console line is a nice-to-have, not
+    # load-critical.
+    try:
+        sims4.commands.output(
+            f"[{MOD_NAME}] v{MOD_VERSION} loaded -- type 'llama.status' to get started.",
+            None,
+        )
+    except Exception as _e:
+        _log(f"Startup console line skipped: {type(_e).__name__}: {_e} "
+             f"(mod loaded fine; this is cosmetic)")
 
     # Deferred in-game notification -- waits for the game client to be ready
     def _deferred_startup_notification():

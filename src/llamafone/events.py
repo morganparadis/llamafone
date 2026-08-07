@@ -213,6 +213,12 @@ def _clean_event_name(raw):
     import re
     if not raw:
         return ""
+    # Strip creator/pack namespace prefixes that mod authors put in front
+    # of their tuning class names (e.g. "Kuttoe:BasementalAddons_..." or
+    # "TURBODRIVER:Something_..."). Everything up through the last colon
+    # is the namespace; drop it. Base-game tunings never contain a colon.
+    if ":" in raw:
+        raw = raw.rsplit(":", 1)[-1]
     # If a "...DramaNode" segment appears followed by the real event
     # type, take everything after it. Handles snake/camel/space joiners.
     m = re.search(r'[Dd]rama\s*[Nn]ode[\s_]+(.+)$', raw)
@@ -220,10 +226,19 @@ def _clean_event_name(raw):
     # camelCase -> "camel Case"
     candidate = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', candidate)
     candidate = candidate.replace('_', ' ').strip()
-    # Strip any leading "Premadeholiday" / "Customholiday" wrapper that
-    # gets baked into tuned-holiday class names ("premadeholiday Surprise
-    # Pirateday" -> "Surprise Pirateday") -- the wrapper word is internal.
-    candidate = re.sub(r'^(?:Premade|Custom)?holiday\s+', '', candidate, flags=re.IGNORECASE).strip()
+    # Strip any leading "premadeHolidays" / "customHolidays" wrapper that
+    # gets baked into tuned-holiday class names. After the CamelCase
+    # split above, "premadeHolidays_Harvestfest" becomes
+    # "premade Holidays Harvestfest" -- accept the plural, the optional
+    # space, and any leading author-name residue that got left behind
+    # by a hyphenated mod prefix (e.g. "Basemental Addons Premade
+    # Holidays Surprise Funny Number Day" -> "Surprise Funny Number Day").
+    candidate = re.sub(
+        r'^.*?(?:Premade|Custom)\s*Holidays?\s+',
+        '',
+        candidate,
+        flags=re.IGNORECASE,
+    ).strip()
     return candidate.title() if candidate else ""
 
 

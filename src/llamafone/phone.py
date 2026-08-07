@@ -2382,6 +2382,16 @@ def _world_name_from_zone_id(zone_id, debug_label=""):
         return None
 
 
+# Session-scoped cache: sim_id -> resolved world name (or None if all paths
+# failed). Homeworld data changes very rarely -- essentially only when the
+# player moves a sim between worlds. Without this cache every prompt build
+# re-scans every mutual's household, and every failing sim (e.g. townies
+# with no valid home_zone_id) re-logs its per-path diagnostics. On a
+# 5-mutual prompt that's 20+ log lines per prompt, times every prompt.
+_homeworld_cache = {}
+_homeworld_failure_logged = set()
+
+
 def _get_sim_home_world(sim_info):
     """Get the world/neighborhood name where a sim lives.
 
@@ -2390,15 +2400,31 @@ def _get_sim_home_world(sim_info):
     manager (works for NPC/townie sims whose Household object isn't fully
     loaded into the active session). Falls back further to the sim's
     persisted `_zone_id` (their last known zone) as a last resort.
+
+    Cached per-session by sim_id. The first miss for a given sim logs the
+    per-path diagnostics; subsequent misses for the same sim return the
+    cached None silently.
     """
     if sim_info is None:
         return None
+
+    sim_id = getattr(sim_info, "sim_id", None) or getattr(sim_info, "id", None)
+    if sim_id is not None and sim_id in _homeworld_cache:
+        return _homeworld_cache[sim_id]
 
     name_for_log = ""
     try:
         name_for_log = f"sim={getattr(sim_info, 'first_name', '?')} {getattr(sim_info, 'last_name', '?')}"
     except Exception:
         pass
+
+    already_logged = sim_id in _homeworld_failure_logged
+    def _hlog(msg):
+        # Suppress per-path diagnostics on repeat-fail sims -- we already
+        # logged them once; the cache hit above would normally short-circuit
+        # this, but we keep the guard for the pre-cache-populated path.
+        if not already_logged:
+            _homeworld_log(msg)
 
     # Path 1: direct household reference (active household, played sims).
     try:
@@ -2407,11 +2433,13 @@ def _get_sim_home_world(sim_info):
             home_zone_id = getattr(household, "home_zone_id", None)
             world = _world_name_from_zone_id(home_zone_id, debug_label=f"{name_for_log} path=household")
             if world:
+                if sim_id is not None:
+                    _homeworld_cache[sim_id] = world
                 return world
         else:
-            _homeworld_log(f"{name_for_log} path=household: sim_info.household is None")
+            _hlog(f"{name_for_log} path=household: sim_info.household is None")
     except Exception as e:
-        _homeworld_log(f"{name_for_log} path=household: exception {type(e).__name__}: {e}")
+        _hlog(f"{name_for_log} path=household: exception {type(e).__name__}: {e}")
 
     # Path 2: look up by household_id (works for NPCs/townies).
     try:
@@ -2425,13 +2453,15 @@ def _get_sim_home_world(sim_info):
                     home_zone_id = getattr(household, "home_zone_id", None)
                     world = _world_name_from_zone_id(home_zone_id, debug_label=f"{name_for_log} path=hh_id={hh_id}")
                     if world:
+                        if sim_id is not None:
+                            _homeworld_cache[sim_id] = world
                         return world
                 else:
-                    _homeworld_log(f"{name_for_log} path=hh_id={hh_id}: household_manager.get() returned None")
+                    _hlog(f"{name_for_log} path=hh_id={hh_id}: household_manager.get() returned None")
         else:
-            _homeworld_log(f"{name_for_log} path=hh_id: household_id is missing")
+            _hlog(f"{name_for_log} path=hh_id: household_id is missing")
     except Exception as e:
-        _homeworld_log(f"{name_for_log} path=hh_id: exception {type(e).__name__}: {e}")
+        _hlog(f"{name_for_log} path=hh_id: exception {type(e).__name__}: {e}")
 
     # Path 3: sim's own persisted zone_id (last known location).
     try:
@@ -2439,11 +2469,19 @@ def _get_sim_home_world(sim_info):
         if sim_zone_id:
             world = _world_name_from_zone_id(sim_zone_id, debug_label=f"{name_for_log} path=sim.zone_id")
             if world:
+                if sim_id is not None:
+                    _homeworld_cache[sim_id] = world
                 return world
     except Exception as e:
-        _homeworld_log(f"{name_for_log} path=sim.zone_id: exception {type(e).__name__}: {e}")
+        _hlog(f"{name_for_log} path=sim.zone_id: exception {type(e).__name__}: {e}")
 
-    _homeworld_log(f"{name_for_log}: ALL PATHS FAILED -- returning None")
+    if not already_logged:
+        _homeworld_log(f"{name_for_log}: ALL PATHS FAILED -- returning None (further "
+                       f"lookups for this sim will be silent this session)")
+        if sim_id is not None:
+            _homeworld_failure_logged.add(sim_id)
+    if sim_id is not None:
+        _homeworld_cache[sim_id] = None
     return None
 
 

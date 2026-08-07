@@ -723,8 +723,8 @@ def get_sim_work_status(sim_info):
             if not at_work and not in_work_hours:
                 continue
             # Decide the label. School careers use class names like
-            # Career_Highschool / Career_Grade / Career_Preschool /
-            # University_*. Everything else is a work career.
+            # careers_Adult_Highschool / careers_Adult_Grade /
+            # careers_Adult_University. Everything else is a work career.
             cls_name = ""
             try:
                 cls_name = type(career).__name__

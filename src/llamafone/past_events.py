@@ -324,17 +324,43 @@ def format_for_prompt(sim_a_id, sim_b_id):
     events = get_recent_for(sim_a_id, sim_b_id)
     if not events:
         return ""
+    now_ticks = _now_ticks()
     lines = ["Recent events you both attended:"]
     for e in events[:4]:  # cap at 4 most-recent so the prompt doesn't bloat
         name = _prettify_event_name(e.get("name") or "")
-        mins_ago = e.get("_mins_ago", 0)
-        days_ago = mins_ago // (24 * 60)
-        if days_ago == 0:
+        # Prefer calendar-day-boundary comparison over rolling-24h math.
+        # rolling-24h says "today" whenever less than a full sim day has
+        # elapsed since the event's start_ticks -- but an event that
+        # started yesterday evening and is now being referenced this
+        # morning has less than 24h elapsed and IS from yesterday, not
+        # today. Sims 4's tick math: 1 sim day = REAL_MILLISECONDS_PER_
+        # SIM_SECOND (1000) * SECONDS_PER_DAY (86400) = 86_400_000 ticks
+        # (this is also `date_and_time.sim_ticks_per_day`). Floor-
+        # dividing absolute_ticks by that gives an integer sim-day
+        # number stable across a session; subtracting gives the number
+        # of day boundaries crossed. Not perfect calendar-day math
+        # (tick_0 usually aligns to game-start time rather than
+        # midnight, so the boundary happens at that time each morning)
+        # but it fixes the "yesterday evening reads as today" case,
+        # which is what players actually notice.
+        start_ticks = e.get("start_ticks")
+        days_diff = None
+        if start_ticks is not None and now_ticks is not None:
+            try:
+                _TICKS_PER_DAY = _TICKS_PER_MINUTE * 60 * 24
+                days_diff = (now_ticks // _TICKS_PER_DAY) - (start_ticks // _TICKS_PER_DAY)
+            except Exception:
+                days_diff = None
+        if days_diff is None:
+            # Fallback: rolling-24h math from the stored delta.
+            mins_ago = e.get("_mins_ago", 0)
+            days_diff = mins_ago // (24 * 60)
+        if days_diff <= 0:
             when = "today"
-        elif days_ago == 1:
+        elif days_diff == 1:
             when = "yesterday"
         else:
-            when = f"{days_ago} sim days ago"
+            when = f"{days_diff} sim days ago"
         honored = e.get("honored") or []
         honor_str = f" (in memory of {', '.join(honored)})" if honored else ""
         lines.append(f"  - {name}{honor_str} -- {when}")

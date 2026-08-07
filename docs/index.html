@@ -830,33 +830,6 @@ fast_model    = llama3.2:3b</code></pre>
       </div>
     </li>
 
-    <li class="changelog-entry">
-      <div class="changelog-date">July 1, 2026</div>
-      <div class="changelog-body">
-        <h3>Hotfix: reply chain + phone anchor (v3.3.1)</h3>
-        <p>Two bugs reported by users. Drop-in over v3.3.0.</p>
-        <ul>
-          <li><strong>Reply chain no longer dies after one response.</strong> A one-character typo in v3.2.0's <code>generate_reply</code> (variable named <code>recipient_sim_id</code> instead of <code>main_sim_id</code>) was raising a <code>NameError</code> on every Reply-button reply. The exception was being swallowed silently by <code>except Exception: pass</code> in the text-input dialog callback, so the mod appeared frozen — first reply worked (different code path), every subsequent one just did nothing. Fixed the typo. Also replaced the silent <code>except: pass</code> with actual error logging so the next silent-failure bug can't hide for weeks.</li>
-          <li><strong>Incoming calls/texts now ring the right sim's phone.</strong> Two of the mod's five phone-dialog call paths (<code>send_text</code> and <code>send_call</code>) weren't passing the recipient's sim info at all — so the dialog fell through defensive fallbacks and ultimately anchored to whoever the player had selected. If a toddler was selected when this fired, the toddler's non-clickable phone appeared to ring and the message became inaccessible. Fixed both paths to pass the recipient explicitly, and removed the "fall back to whoever's selected" behavior entirely — every call path now has a deterministic recipient (from the household, the stored conversation, or the currently-played sim), so no fallback is needed.</li>
-          <li><strong>Timer callbacks now log their errors.</strong> The reply-delay Timer (the "sim is thinking" pause before their response appears) runs on a background thread. Python's <code>threading.Timer</code> silently swallows any exception on that thread — so if the reply generator raised, the response just never came. Wrapped the callback body in try/except with logging so future Timer-side bugs surface instead of vanishing.</li>
-        </ul>
-      </div>
-    </li>
-
-    <li class="changelog-entry">
-      <div class="changelog-date">June 30, 2026</div>
-      <div class="changelog-body">
-        <h3>Sims remember the parties (v3.3.0)</h3>
-        <p>Past-event memory is finally working end-to-end, and built-in Sims 4 holidays now surface with their real names. Same per-save data layout as v3.2.0, drop-in.</p>
-        <ul>
-          <li><strong>Sims remember the party you both attended.</strong> Throw a house party, dinner, wedding, funeral, whatever — end it, then text a guest the next sim day. The AI now sees a <code>Recent events you both attended:</code> block in the prompt with the event and how long ago, so they'll open with "great party last night" or "thanks for coming to grandpa's wake" instead of generic small talk. Data lands in <code>PastEvents.json</code> in your save folder as each event ends.</li>
-          <li><strong>The mechanism (for the curious).</strong> Sims 4 aggressively clears attendee data on situation teardown — <code>sim_ids</code>, <code>guest_ids</code>, <code>host_sim_info</code>, and even <code>sit.id</code> all get zeroed before any teardown hook runs. Solved with a background thread that polls every 15 seconds while a party is live: iterates all sims via <code>services.sim_info_manager()</code>, asks <code>SituationManager.get_situations_sim_is_in(sim)</code> which situations each sim is currently in, and stashes both the sim id and the situation id onto the situation as private attributes. Those private attributes survive the teardown clear, so when the situation is destroyed we still have the full attendee list and event id.</li>
-          <li><strong>Love Day and other built-in holidays now show in upcoming events.</strong> Vanilla Sims 4 holidays (Love Day, Winterfest, Harvestfest, New Year's, etc.) have holiday_ids in the low-integer range that Sims 4's <code>holiday_service.get_holiday_display_name()</code> returns empty for. They were silently dropped from the calendar block. Added class-level fallbacks: try <code>display_name</code> tunable first, then a cleaned <code>__name__</code> of the holiday class. Also strips <code>Premade_Holiday_</code> prefix so the name reads as "Love Day" not "Premade Holiday Love Day".</li>
-          <li><strong>Prettier event names in prompts.</strong> <code>Situation_HouseParty</code> now reads as "House Party" in the recent-events block; <code>Situation_DinnerParty_Formal</code> as "Dinner Party Formal", etc. Strips class prefixes and splits CamelCase.</li>
-        </ul>
-      </div>
-    </li>
-
   </ol>
 
   <p class="changelog-footer">

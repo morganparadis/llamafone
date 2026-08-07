@@ -181,6 +181,72 @@ def _get_honored_sims(event, event_name_for_log=""):
                 if name:
                     out.append({"name": name, "role": role})
 
+        # Second pass: enumerate the guest list's job types directly and
+        # match by tuning class name. Wedding sub-events (Engagement
+        # Dinner, Rehearsal, Ceremony, Reception, Bachelor/Bachelorette
+        # Party) don't expose top-level `betrothed`/`celebrant` attrs on
+        # the situation_type class -- the couple is tracked as job
+        # roles inside the guest list only. So we iterate every guest
+        # info, look at its `job_type.__name__`, and if it matches a
+        # known wedding-couple / honoree pattern, add it as honored.
+        #
+        # Uses a keyword list rather than a fixed attribute list so a
+        # new pack that names its couple role "betrothed_partner" or
+        # "engaged_1" still gets picked up.
+        _HONORED_JOB_KEYWORDS = (
+            ("bride",       "betrothed"),
+            ("groom",       "betrothed"),
+            ("betrothed",   "betrothed"),
+            ("engaged",     "betrothed"),
+            ("wedding_couple", "betrothed"),
+            ("weddingcouple",  "betrothed"),
+            ("celebrant",   "celebrant"),
+            ("birthday_sim","celebrant"),
+            ("birthdaysim", "celebrant"),
+            ("honoree",     "guest_of_honor"),
+            ("guest_of_honor","guest_of_honor"),
+            ("departed",    "deceased"),
+            ("deceased",    "deceased"),
+        )
+        try:
+            jt_map = guest_list.job_type_to_guest_infos() if hasattr(guest_list, "job_type_to_guest_infos") else {}
+            if log_misses and jt_map:
+                _log(f"honored[{event_name_for_log}]: job_type_to_guest_infos jobs="
+                     f"{[getattr(jt, '__name__', str(jt)) for jt in jt_map.keys()]}")
+            for job_type, infos in (jt_map or {}).items():
+                job_name = getattr(job_type, "__name__", "") or ""
+                job_lower = job_name.lower()
+                matched_role = None
+                for keyword, role in _HONORED_JOB_KEYWORDS:
+                    if keyword in job_lower:
+                        matched_role = role
+                        break
+                if matched_role is None:
+                    continue
+                for info in infos or ():
+                    si = None
+                    try:
+                        si = getattr(info, "sim_info", None)
+                        if si is None:
+                            sid = getattr(info, "sim_id", None)
+                            if sid:
+                                import services
+                                sm = services.sim_info_manager()
+                                si = sm.get(sid) if sm is not None else None
+                    except Exception:
+                        si = None
+                    if si is None:
+                        continue
+                    try:
+                        cname = f"{si.first_name} {si.last_name}".strip()
+                    except Exception:
+                        cname = None
+                    if cname and not any(h["name"] == cname for h in out):
+                        out.append({"name": cname, "role": matched_role})
+        except Exception as e:
+            if log_misses:
+                _log(f"honored[{event_name_for_log}]: job-name scan raised {type(e).__name__}: {e}")
+
         # Host of the event -- the sim who scheduled it. Useful context
         # for parties/gatherings/dates where there's no specific honoree
         # job but there IS a host. Dedupe against role-specific entries

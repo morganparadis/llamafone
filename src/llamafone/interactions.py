@@ -543,11 +543,12 @@ def format_for_prompt(sim_a_id, sim_b_id, last_conv_iso=None):
     return f"\n[RECENT IN-PERSON CONTACT: You two {phrase}{when_tail}.]"
 
 
-# 100 ticks per in-game minute (matches past_events / journal / contact_prefs).
-# 60000 ticks per sim minute (Sims 4 uses 1000 ticks per sim second).
-# Older mod versions used 100 ticks/minute which was off by 600x --
-# an interaction 1 sim hour ago rendered as "25 days ago". Fixed.
-_TICKS_PER_MINUTE_INTX = 60000
+# 1500 ticks per sim minute (Sims 4 uses 25 ticks per sim second,
+# empirically verified from services.time_service() live data; see
+# past_events.py for derivation). Prior versions used 100 then 60000
+# -- both wrong. past_events._self_check_ticks_per_minute() will log
+# loudly if EA ever changes this and we drift again.
+_TICKS_PER_MINUTE_INTX = 1500
 _TICKS_PER_HOUR_INTX = 60 * _TICKS_PER_MINUTE_INTX
 _TICKS_PER_DAY_INTX = 24 * _TICKS_PER_HOUR_INTX
 

@@ -51,7 +51,7 @@ _RECENT_WINDOW_IN_GAME_DAYS = 5
 
 # Ticks per minute in Sims 4's DateAndTime math. Documented in the
 # game's date_and_time module; the conversion ratio is stable.
-_TICKS_PER_MINUTE = 60000  # Sims 4 uses 1000 ticks/sim-sec (REAL_MILLISECONDS_PER_SIM_SECOND); 60 sim-sec = 1 sim-min
+_TICKS_PER_MINUTE = 1500  # Sims 4: 25 ticks/sim-sec (REAL_MILLISECONDS_PER_SIM_SECOND, verified empirically); 60 sim-sec = 1 sim-min. See _self_check_ticks_per_minute below.
 
 
 _cache = None
@@ -166,11 +166,68 @@ def _ticks_of(start_time):
     return None
 
 
+_ticks_self_check_done = False
+
+
+def _self_check_ticks_per_minute():
+    """Ground-truth check: the game exposes both `absolute_ticks` (int
+    tick count) and `absolute_days` (float sim-days) on `sim_now`, and
+    the ratio between them IS the game's actual ticks-per-day. Compute
+    ticks-per-sim-minute from that ratio and warn loudly if it doesn't
+    match our constant.
+
+    This exists because we've been wrong about `_TICKS_PER_MINUTE`
+    TWICE (100 was off by 15x, 60000 was off by 40x). Named constants
+    inside decompiled game code are easy to mis-identify; the live
+    game math never lies. If EA ever changes tick semantics in an
+    update, this fires immediately instead of the mod silently
+    reporting inaccurate 'N sim days ago' for weeks.
+    """
+    global _ticks_self_check_done
+    if _ticks_self_check_done:
+        return
+    try:
+        import services as _svc
+        ts = _svc.time_service()
+        now = getattr(ts, "sim_now", None) if ts else None
+        if now is None:
+            return  # try again next call
+        ticks = _ticks_of(now)
+        days_fn = getattr(now, "absolute_days", None)
+        if days_fn is None or ticks is None:
+            return
+        try:
+            days = float(days_fn() if callable(days_fn) else days_fn)
+        except Exception:
+            return
+        if days <= 0.01:
+            return  # too early in the save to derive a stable ratio
+        actual_ticks_per_day = ticks / days
+        actual_ticks_per_minute = actual_ticks_per_day / (60 * 24)
+        # Allow a few % of tolerance for float noise / rounding.
+        drift_ratio = actual_ticks_per_minute / _TICKS_PER_MINUTE
+        _ticks_self_check_done = True  # only warn once per session either way
+        if drift_ratio < 0.95 or drift_ratio > 1.05:
+            _log(
+                f"TICKS SELF-CHECK FAILED: constant _TICKS_PER_MINUTE={_TICKS_PER_MINUTE} "
+                f"but live game math gives ~{actual_ticks_per_minute:.1f} "
+                f"ticks/sim-minute (from {ticks} ticks / {days:.2f} sim-days). "
+                f"All 'N sim days ago' phrasing will be off by {drift_ratio:.2f}x. "
+                f"Update _TICKS_PER_MINUTE in past_events.py, journal.py, "
+                f"contact_prefs.py, and interactions.py."
+            )
+        else:
+            _log(f"ticks self-check OK: constant={_TICKS_PER_MINUTE} live={actual_ticks_per_minute:.1f}")
+    except Exception:
+        pass
+
+
 def _now_ticks():
     try:
         import services
         ts = services.time_service()
         now = getattr(ts, "sim_now", None) if ts else None
+        _self_check_ticks_per_minute()
         return _ticks_of(now)
     except Exception:
         return None
@@ -353,10 +410,49 @@ def _prettify_event_name(raw):
     return spaced or "Event"
 
 
+def _dedupe_events(events):
+    """Group events by (prettified name, day-window) and keep the
+    'best' representative from each group. The situation-snapshot path
+    and the drama-node path can both record the same real-world event
+    (different event_ids -- situation.id vs drama_node.uid), leaving
+    two entries that print identically in the prompt. Prefer the
+    representative with (a) the most honored sims, then (b) the most
+    attendees, then (c) the earliest start_ticks (drama_node fires on
+    complete/cleanup, so its start_ticks is the real scheduled start;
+    situation path stores whenever the snapshot noticed the situation,
+    which is later)."""
+    groups = {}
+    order = []
+    for e in events:
+        name = _prettify_event_name(e.get("name") or "")
+        st = e.get("start_ticks") or 0
+        day_win = st // (_TICKS_PER_MINUTE * 60 * 24) if st else 0
+        key = (name, day_win)
+        if key not in groups:
+            groups[key] = e
+            order.append(key)
+            continue
+        current = groups[key]
+        challenger_score = (
+            len(e.get("honored") or []),
+            len(e.get("attendees") or []),
+            -(e.get("start_ticks") or 0),  # earlier ticks preferred
+        )
+        current_score = (
+            len(current.get("honored") or []),
+            len(current.get("attendees") or []),
+            -(current.get("start_ticks") or 0),
+        )
+        if challenger_score > current_score:
+            groups[key] = e
+    return [groups[k] for k in order]
+
+
 def _format_for_prompt_impl(sim_a_id, sim_b_id):
     events = get_recent_for(sim_a_id, sim_b_id)
     if not events:
         return ""
+    events = _dedupe_events(events)
     now_ticks = _now_ticks()
     lines = ["Recent events you both attended:"]
     for e in events[:4]:  # cap at 4 most-recent so the prompt doesn't bloat

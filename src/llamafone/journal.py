@@ -37,11 +37,14 @@ _cached_for_save_id = None
 _lock = threading.RLock()
 
 # 100 ticks per in-game minute. Same convention past_events / contact_prefs
-# use. Sims 4 uses 1000 ticks per SIM SECOND (via
-# REAL_MILLISECONDS_PER_SIM_SECOND in the game's date_and_time.py).
-# Older mod versions used 100 ticks/minute which was off by 600x --
-# fixed to 60000 ticks per sim minute.
-_TICKS_PER_MINUTE = 60000
+# use. Sims 4 uses 25 ticks per SIM SECOND (empirically verified from
+# services.time_service().sim_now.absolute_days vs absolute_ticks:
+# 5,547,251,267 ticks / 2568.17 days = 2,160,000 ticks/day, and
+# 2,160,000 / 86,400 sim-sec-per-day = 25 ticks/sim-sec). Older mod
+# versions used 100 (off by 15x) then 60000 (off by 40x); this is
+# the correct value. past_events._self_check_ticks_per_minute() runs
+# at prompt-build time and will log loudly if it ever drifts again.
+_TICKS_PER_MINUTE = 1500
 _TICKS_PER_HOUR = 60 * _TICKS_PER_MINUTE
 _TICKS_PER_DAY = 24 * _TICKS_PER_HOUR
 

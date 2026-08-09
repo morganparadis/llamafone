@@ -360,13 +360,39 @@ _COLD_OUTREACH_SUFFIX = (
 
 def _pick_cold_outreach_recipient():
     """Pick which household member the cold outreach is aimed at. Prefers
-    the current 'main sim' (the household protagonist the mod treats as
-    default). Falls back to any teen+ household member who has any
-    dating candidates in their own network -- outreach is only useful
-    if the target has plausible people to be contacted by."""
+    the current active sim; falls back to any teen+ household member.
+
+    Three gates, all required:
+      1. Age is teen+ (children never see cold outreach).
+      2. Sim is NOT already committed (married / engaged / going
+         steady / has a partner-level romantic bit with anyone).
+         Getting hit on by a stranger while happily married reads
+         as disruptive rather than immersive, so we skip. If a
+         player specifically wants that temptation-drama flavor
+         it'll need a separate opt-in knob -- default is 'no'.
+      3. Sim has at least one candidate in their own network --
+         no point picking a recipient when no plausible sender
+         exists for them.
+
+    Returns None when no household member passes all three gates."""
+    def _eligible(si):
+        if si is None:
+            return False
+        try:
+            age = str(getattr(si, "age", "")).replace("Age.", "").upper()
+            if age not in ("TEEN", "YOUNGADULT", "YOUNG_ADULT", "ADULT", "ELDER"):
+                return False
+        except Exception:
+            return False
+        if _sim_is_committed(si):
+            return False
+        if not get_candidates(si):
+            return False
+        return True
+
     try:
         main = sim_context.get_main_sim_info()
-        if main is not None and get_candidates(main):
+        if _eligible(main):
             return main
     except Exception:
         pass
@@ -378,10 +404,7 @@ def _pick_cold_outreach_recipient():
             return None
         for si in hh.sim_info_gen():
             try:
-                age = str(getattr(si, "age", "")).replace("Age.", "").upper()
-                if age not in ("TEEN", "YOUNGADULT", "YOUNG_ADULT", "ADULT", "ELDER"):
-                    continue
-                if get_candidates(si):
+                if _eligible(si):
                     return si
             except Exception:
                 continue
@@ -847,12 +870,28 @@ _FOLLOWUP_SUFFIX_TEMPLATE = (
 
 
 def _fire_intro(entry):
-    """Send an introducee-to-target text using the intro suffix."""
+    """Send an introducee-to-target text using the intro suffix.
+
+    Runs the same 'target is not committed' guard as cold outreach --
+    if the target got married/engaged in the 2-3 sim-day gap between
+    when the setup was requested and now, drop the intro silently.
+    A romantic intro landing on a freshly-engaged sim reads as
+    disruptive; better to no-op than surprise the player."""
     introducee_si = _resolve_sim_info(entry.get("introducee_id"))
     target_si = _resolve_sim_info(entry.get("target_id"))
     if introducee_si is None or target_si is None:
         _log(f"intro entry stale (sim_info missing): {entry}")
         return False
+    if _sim_is_committed(target_si):
+        _log(f"intro skipped: target {getattr(target_si, 'first_name', '?')} is now committed "
+             f"(was single when the setup was queued)")
+        # Return True so the queue entry gets removed -- we don't want
+        # to retry when the target's still committed 15s from now.
+        return True
+    if _sim_is_committed(introducee_si):
+        _log(f"intro skipped: introducee {getattr(introducee_si, 'first_name', '?')} is now committed "
+             f"(was single when picked)")
+        return True
     contact = _contact_dict_from_sim_info(introducee_si)
     if contact is None:
         return False

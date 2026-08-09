@@ -253,21 +253,38 @@ def read_icon_key(xml_text):
     (type, group, instance) as ints, or (None, None, None) when the
     field is missing or unparseable.
 
-    The XML shape we're parsing looks like:
+    Two accepted XML shapes:
+
+    Flat (World Tour / MC Command Center / most modern mods):
+        <T n="_icon" p="path/for/humans">2f7d0004:00000000:XXXXXXX</T>
+
+    Nested (what Sims4Studio autogenerates from GUI edits):
         <V n="_icon" t="resource_key">
           <U n="resource_key">
-            <T n="key" p="..."\">2f7d0004:00000000:6189ced9570b8609</T>
+            <T n="key" p="...">2f7d0004:00000000:XXXXXXX</T>
           </U>
         </V>
-    We only need the `key` string; the leading `p="..."` path attribute
-    is a source-file comment for humans.
+
+    The client-side ActionScript that renders phone tiles only
+    recognises the flat form for `_icon` on a PieMenuCategory --
+    the nested form parses server-side but produces a broken tile
+    (verified empirically). Interactions (tuning kind='interaction')
+    happily accept either form for their own `_icon` field.
     """
+    # Try flat form first (single <T n="_icon"> with the resource-key
+    # text as its body).
     m = re.search(
-        r'<V\s+n="_icon"\s+t="resource_key"\s*>\s*'
-        r'<U\s+n="resource_key"\s*>\s*'
-        r'<T\s+n="key"[^>]*>([^<]+)</T>',
+        r'<T\s+n="_icon"[^>]*>([0-9a-fA-F:]+)</T>',
         xml_text,
     )
+    if not m:
+        # Try nested form.
+        m = re.search(
+            r'<V\s+n="_icon"\s+t="resource_key"\s*>\s*'
+            r'<U\s+n="resource_key"\s*>\s*'
+            r'<T\s+n="key"[^>]*>([^<]+)</T>',
+            xml_text,
+        )
     if not m:
         return (None, None, None)
     parts = m.group(1).strip().split(':')

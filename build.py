@@ -135,9 +135,19 @@ def _refresh_icon_dds():
         square = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         square.paste(img, ((size - w) // 2, (size - h) // 2))
         img = square
-    img = img.resize((256, 256), Image.LANCZOS)
+    # Bake in ~10% transparent padding on each side so the phone tile's
+    # green selection highlight has room to sit OUTSIDE the artwork
+    # instead of overlapping it. Base game / mod icons all have this
+    # safe-area border built in; without it, the icon reads as
+    # oversized relative to its neighbors. Content ~205x205 in a
+    # 256x256 canvas.
+    CONTENT_SIZE = 236
+    img = img.resize((CONTENT_SIZE, CONTENT_SIZE), Image.LANCZOS)
+    canvas = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
+    canvas.paste(img, ((256 - CONTENT_SIZE) // 2, (256 - CONTENT_SIZE) // 2))
+    img = canvas
     img.save(dst_dds, format="DDS")
-    print(f"  + icon DDS regenerated from docs/img/llamafone-icon.png ({os.path.getsize(dst_dds):,} bytes)")
+    print(f"  + icon DDS regenerated from assets/llamafone-icon.png ({os.path.getsize(dst_dds):,} bytes)")
 
 
 def build_package():

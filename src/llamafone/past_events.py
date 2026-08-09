@@ -1027,6 +1027,16 @@ def _start_snapshot_thread():
                 _snapshot_active_situations()
             except Exception as e:
                 _log(f"snapshot loop iteration raised: {type(e).__name__}: {e}")
+            # Dating queue tick -- fires any ready introduction /
+            # follow-up entries. Piggybacks on this thread so we don't
+            # spawn a second daemon just for the queue; the 15s cadence
+            # is already the right order-of-magnitude for a queue that
+            # measures its delays in sim-days.
+            try:
+                from . import dating as _dating
+                _dating.tick_queue()
+            except Exception as e:
+                _log(f"dating.tick_queue raised: {type(e).__name__}: {e}")
             _time.sleep(15)
 
     _threading.Thread(target=_loop, daemon=True, name="Llamafone-PastEvents-Snapshot").start()

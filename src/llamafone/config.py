@@ -292,3 +292,50 @@ def get_reply_delay_max_seconds():
     return _int_setting_with_config_fallback("reply_delay_max_seconds", "reply_delay_max_seconds", 90)
 
 
+# ---------------------------------------------------------------------------
+# Dating (v3.5): opt-in dating-app layer -- see llamafone.cfg for the
+# behavior each knob controls. Feature is off by default so existing saves
+# aren't ambushed by new autonomous phone activity.
+# ---------------------------------------------------------------------------
+
+_DATING_ORIENTATION_VALUES = ("auto", "men", "women", "anyone")
+
+
+def get_dating_enabled():
+    """Master switch for the dating-app layer. Default False -- all
+    dating flows (cold outreach + friend-setup chain) are gated on this
+    being True, so a config that doesn't mention 'dating_enabled' at
+    all keeps the old pre-v3.5 behavior."""
+    return _bool_setting_with_config_fallback("dating_enabled", "dating_enabled", False)
+
+
+def get_dating_orientation():
+    """Which sims are candidates. Returns one of 'auto', 'men', 'women',
+    'anyone'. 'auto' means the dating module should read the player
+    sim's romantic-orientation preferences from CAS; the other values
+    are explicit overrides."""
+    val = get_setting("dating_orientation")
+    if val is None:
+        val = get_config().get(_SECTION, "dating_orientation", fallback="auto")
+    val = str(val).strip().lower()
+    if val not in _DATING_ORIENTATION_VALUES:
+        return "auto"
+    return val
+
+
+def get_dating_cold_outreach_weight():
+    """Weight for cold-outreach auto-events. 0 = disabled. Combined
+    with auto_event_weights so setting this to 20 alongside call:50 /
+    text:50 makes cold outreach roughly 17% of firings."""
+    val = _int_setting_with_config_fallback("dating_cold_outreach_weight", "dating_cold_outreach_weight", 20)
+    return max(0, val)
+
+
+def get_dating_setup_chain_enabled():
+    """Whether the friend-setup chain flow is active (outgoing-text
+    intent detection + delayed introducee outreach + friend follow-up).
+    Kept as its own toggle so users can enable cold outreach without
+    the multi-day queue machinery, or vice versa."""
+    return _bool_setting_with_config_fallback("dating_setup_chain_enabled", "dating_setup_chain_enabled", True)
+
+

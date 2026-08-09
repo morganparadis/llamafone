@@ -3559,13 +3559,38 @@ def generate_text(callback=None, output=None):
         elif output:
             notifications.show_error(msg, output=output)
         return
+    return generate_text_for(recipient, contact, callback=callback, output=output)
 
+
+def generate_text_for(recipient, contact, callback=None, output=None,
+                      system_override=None, prompt_suffix=None,
+                      journal_type_override=None):
+    """Generate an incoming text with a specific (recipient, contact)
+    pair. Public entry point so extension modules (e.g. dating) can
+    surface their own senders using the full context-building
+    pipeline without duplicating it.
+
+    `system_override` -- if given, replaces the default _TEXT_SYSTEM
+    for this one send. Callers that want the base system prompt plus
+    extra rules should format their own combined string.
+
+    `prompt_suffix` -- appended to the user-facing prompt. Used to
+    inject "this is a first-time cold outreach" / "you were just
+    introduced by X" framing without touching the shared prompt
+    builder.
+
+    `journal_type_override` -- lets extensions tag the journal entry
+    with a specialized type ("dating_outreach", "intro"), so history
+    filtering can distinguish them from normal auto-texts.
+    """
+    if recipient is None or contact is None:
+        return
     recipient_name = recipient.first_name
 
     _refresh_milestones_for(contact, recipient)
 
     language = config.get_language()
-    system = _TEXT_SYSTEM.format(language=language)
+    system = system_override if system_override else _TEXT_SYSTEM.format(language=language)
     rel_desc = _describe_relationship(contact, recipient=recipient)
 
     contact_id = getattr(contact.get("sim_info"), "sim_id", None)
@@ -3593,12 +3618,13 @@ def generate_text(callback=None, output=None):
     last_conv_iso = journal.last_entry_timestamp_for_pair(contact_id, recipient_sim_id)
     interaction_tag = interactions.format_for_prompt(contact_id, recipient_sim_id, last_conv_iso=last_conv_iso)
 
+    suffix = f"\n\n{prompt_suffix}" if prompt_suffix else ""
     prompt = (
         f"Sender info:\n{rel_desc}{history_block}{mutual_block}\n\n"
         f"{recipient_block}{events_block}{past_events_block}\n\n"
         f"They are texting {recipient_name}{_location_context(recipient, contact)}.{_season_context()}{_weather_context(recipient, contact)}{interaction_tag}"
         f"{_contact_prefs_block(recipient, contact.get('sim_info'), contact['name'])}\n\n"
-        f"Write 1-2 short text messages from {contact['name']}."
+        f"Write 1-2 short text messages from {contact['name']}.{suffix}"
     )
 
     def _on_result(text, error):
@@ -3607,7 +3633,7 @@ def generate_text(callback=None, output=None):
             text = _apply_mood_from_text(text, recipient=recipient, is_incoming=True)
             _start_conversation(contact, text, recipient_sim=recipient)
             journal.add_entry(
-                "text",
+                journal_type_override or "text",
                 f"Text from {contact['name']} (to {recipient_name}):\n{text}",
                 sim_name=contact["name"],
                 recipient_name=recipient_name,
@@ -3829,6 +3855,16 @@ def send_text(contact, player_message, callback=None, output=None):
         _main_id_auto, _contact_id_auto, other_name, player_message,
         source_label="you texted",
     )
+
+    # Auto-detect setup-request intent (v3.5 dating). Silent no-op when
+    # the dating feature is disabled or the intent detector doesn't
+    # match. When it matches, enqueues an intro + follow-up pair to
+    # fire in a couple of sim-days.
+    try:
+        from . import dating as _dating
+        _dating.maybe_start_setup_chain(player_message, main_si, contact)
+    except Exception:
+        pass
 
     # Seed the conversation with the player's outgoing message as turn 1
     _start_conversation(contact, "", recipient_sim=main_si)

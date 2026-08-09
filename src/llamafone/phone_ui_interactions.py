@@ -690,33 +690,54 @@ def _setting_definitions():
         },
         {
             "key":    "dating_enabled",
-            "label":  "Dating layer: {value}",
+            "label":  "Dating features: {value}",
             "kind":   "bool",
             "getter": config.get_dating_enabled,
-            "hint":   "Master switch for the dating flows (cold outreach + friend setups). Off by default -- turn on to have random single sims text you and to enable 'know anyone single?' friend-introductions.",
+            "hint":   "Turn on to let random single sims text your sim out of the blue, and to enable the 'ask a friend to set you up' flow. Off by default -- your save works exactly the same as before when this is off.",
         },
         {
+            "key":    "dating_submenu",
+            "label":  "Dating options...",
+            "kind":   "action",
+            "getter": lambda: "",
+            "hint":   "Adjust who counts as a match, how often random dating messages fire, and whether friends can introduce you to people. Only shows when dating is on.",
+        },
+    ]
+
+
+def _dating_setting_definitions():
+    """Sub-picker for the dating options -- only shown when dating is
+    enabled. Kept separate from the main settings picker so users
+    who aren't using dating see one row (the master toggle) instead
+    of five, and users who ARE using dating get a focused screen."""
+    return [
+        {
             "key":    "dating_orientation",
-            "label":  "Dating orientation: {value}",
+            "label":  "Who to date: {value}",
             "kind":   "enum",
             "getter": config.get_dating_orientation,
             "values": ("auto", "men", "women", "anyone"),
-            "hint":   "Which sims are considered as candidates. 'auto' reads your sim's CAS preferences; the others explicitly override. Tap to cycle.",
+            "hint":   "Which sims count as potential matches. 'Auto' reads your sim's own CAS preferences; the other options force a specific choice. Tap to cycle.",
         },
         {
             "key":    "dating_cold_outreach_weight",
-            "label":  "Cold outreach weight: {value}",
-            "kind":   "int",
+            "label":  "Random dating messages: {value}",
+            "kind":   "preset_int",
             "getter": config.get_dating_cold_outreach_weight,
-            "bounds": (0, 100),
-            "hint":   "How often the cold-outreach flow fires vs. regular auto-events. 0 = off. Compares to auto_event_weights -- e.g. weight 20 alongside call:50/text:50 makes cold outreach roughly 17% of firings.",
+            "presets": (
+                ("Off",       0),
+                ("Rarely",    10),
+                ("Sometimes", 25),
+                ("Often",     50),
+            ),
+            "hint":   "How often a random single sim in your network texts your sim out of the blue. Uses the same schedule as regular auto-events. Set to Off to keep dating messages only from friend-setups.",
         },
         {
             "key":    "dating_setup_chain_enabled",
-            "label":  "Friend setups: {value}",
+            "label":  "Ask friends to set you up: {value}",
             "kind":   "bool",
             "getter": config.get_dating_setup_chain_enabled,
-            "hint":   "When on, outgoing texts to friends are scanned for setup-request phrases ('know anyone single', 'set me up'). Match triggers a delayed introduction chain + friend follow-up.",
+            "hint":   "When on, if you text a friend a phrase like 'know anyone single?' or 'set me up with someone,' the mod picks a candidate and a couple sim-days later they reach out saying your friend gave them your number. A day or two after that, the friend follows up to see how it went.",
         },
     ]
 
@@ -727,12 +748,29 @@ def _format_value(setting):
         val = setting["getter"]()
     except Exception:
         val = "?"
-    if setting["kind"] == "bool":
+    kind = setting["kind"]
+    if kind == "bool":
         val = "ON" if val else "OFF"
-    elif setting["kind"] == "enum":
+    elif kind == "enum":
         # Show value as-is; the enum-cycle handler stringifies before
         # writing so the getter always returns a display-ready string.
         val = str(val).upper() if val is not None else "?"
+    elif kind == "preset_int":
+        # Map the stored int back to its preset label. Pick the preset
+        # whose value is closest to (but not exceeding) the current
+        # value; a stored value larger than the biggest preset shows
+        # the biggest preset's label. Keeps the display honest even
+        # if a user edits the JSON directly.
+        presets = setting.get("presets") or ()
+        try:
+            current = int(val)
+        except Exception:
+            current = 0
+        chosen_label = presets[0][0] if presets else "?"
+        for label, preset_val in presets:
+            if current >= preset_val:
+                chosen_label = label
+        val = chosen_label
     return setting["label"].format(value=val)
 
 
@@ -813,6 +851,92 @@ def _show_settings_picker(anchor_sim):
         return False
 
 
+def _show_dating_settings_picker(anchor_sim):
+    """Sub-picker for dating-specific options. Opens from the main
+    settings picker's 'Dating options...' row. If dating is disabled,
+    shows a helpful message row instead of the option list so tapping
+    the submenu when master is off doesn't feel broken."""
+    try:
+        from sims4.localization import LocalizationHelperTuning
+        from ui.ui_dialog_picker import UiItemPicker, BasePickerRow
+
+        settings = _dating_setting_definitions()
+        loc_title = LocalizationHelperTuning.get_raw_text("Dating options")
+        if not config.get_dating_enabled():
+            loc_text = LocalizationHelperTuning.get_raw_text(
+                "Dating features are OFF. Turn them on from the main "
+                "Llamafone Settings screen first -- then come back here "
+                "to tune who counts as a match, how often random "
+                "dating messages fire, and whether the 'set me up' "
+                "friend-introduction flow is active."
+            )
+        else:
+            loc_text = LocalizationHelperTuning.get_raw_text(
+                "Adjust the dating flows. Changes save instantly and "
+                "apply without reloading."
+            )
+        loc_ok = LocalizationHelperTuning.get_raw_text("Change")
+        loc_cancel = LocalizationHelperTuning.get_raw_text("Done")
+
+        dialog = UiItemPicker.TunableFactory().default(
+            anchor_sim,
+            title=lambda *_a, **_kw: loc_title,
+            text=lambda *_a, **_kw: loc_text,
+            text_ok=lambda *_a, **_kw: loc_ok,
+            text_cancel=lambda *_a, **_kw: loc_cancel,
+        )
+        try:
+            dialog.max_selectable = 1
+        except Exception:
+            pass
+        try:
+            dialog.min_selectable = 1
+        except Exception:
+            pass
+
+        for idx, setting in enumerate(settings):
+            try:
+                name_text = _format_value(setting)
+                hint_text = setting.get("hint", "")
+                row = BasePickerRow(
+                    option_id=idx,
+                    name=LocalizationHelperTuning.get_raw_text(name_text),
+                    row_description=LocalizationHelperTuning.get_raw_text(hint_text),
+                    is_enable=True,
+                )
+                dialog.add_row(row)
+            except Exception:
+                _log_exc(f"dating settings: add_row {setting['key']} failed")
+                continue
+
+        def _on_response(response_dialog):
+            try:
+                if not response_dialog.accepted:
+                    # 'Done' returns to the main settings picker rather
+                    # than dropping the player out of the flow entirely
+                    # -- feels less abrupt than closing back to the game.
+                    _show_settings_picker(anchor_sim)
+                    return
+                picked = list(getattr(response_dialog, "picked_results", None) or ())
+                if not picked:
+                    _show_settings_picker(anchor_sim)
+                    return
+                idx = picked[0]
+                if idx is None or idx < 0 or idx >= len(settings):
+                    _show_dating_settings_picker(anchor_sim)
+                    return
+                _on_setting_picked(anchor_sim, settings[idx])
+            except Exception:
+                _log_exc("dating settings: on_response failed")
+
+        dialog.add_listener(_on_response)
+        dialog.show_dialog()
+        return True
+    except Exception:
+        _log_exc("_show_dating_settings_picker outer failure")
+        return False
+
+
 def _on_setting_picked(anchor_sim, setting):
     """Handler for a picked row -- toggle a bool, open a numeric input,
     or invoke a named action. Re-opens the settings picker after so the
@@ -824,8 +948,8 @@ def _on_setting_picked(anchor_sim, setting):
         except Exception:
             current = False
         config.set_setting(setting["key"], not current)
-        # Re-open the picker to show the new state.
-        _show_settings_picker(anchor_sim)
+        # Re-open whichever picker this setting belongs to.
+        _reopen_home_for(anchor_sim, setting)
         return
     if kind == "int":
         _show_int_input(anchor_sim, setting)
@@ -848,7 +972,34 @@ def _on_setting_picked(anchor_sim, setting):
             idx = -1
         next_val = values[(idx + 1) % len(values)]
         config.set_setting(setting["key"], next_val)
-        _show_settings_picker(anchor_sim)
+        # Re-open whichever picker the setting lives in. Dating rows
+        # live in the dating sub-picker; everything else in the main
+        # settings picker.
+        _reopen_home_for(anchor_sim, setting)
+        return
+    if kind == "preset_int":
+        # Cycle to the next preset value. Compares CURRENT int to the
+        # preset values (not labels) so a stored 25 correctly advances
+        # from "Sometimes" to "Often" even if the config was hand-
+        # edited to a non-preset value like 27.
+        presets = setting.get("presets") or ()
+        if not presets:
+            _reopen_home_for(anchor_sim, setting)
+            return
+        try:
+            current = int(setting["getter"]())
+        except Exception:
+            current = 0
+        # Find the preset closest to (but not exceeding) current; that's
+        # the "logical" current selection.
+        idx = 0
+        for i, (_label, pval) in enumerate(presets):
+            if current >= pval:
+                idx = i
+        next_idx = (idx + 1) % len(presets)
+        _next_label, next_val = presets[next_idx]
+        config.set_setting(setting["key"], int(next_val))
+        _reopen_home_for(anchor_sim, setting)
         return
     if kind == "action":
         # Action items open a sub-flow. Route by key -- we intentionally
@@ -858,10 +1009,25 @@ def _on_setting_picked(anchor_sim, setting):
         if key == "manage_contacts":
             _show_contact_manager_picker(anchor_sim)
             return
+        if key == "dating_submenu":
+            _show_dating_settings_picker(anchor_sim)
+            return
         # Unknown action -- log and re-open the picker
         _log(f"_on_setting_picked: unknown action key {key!r}")
         _show_settings_picker(anchor_sim)
         return
+
+
+def _reopen_home_for(anchor_sim, setting):
+    """After editing a setting row, re-open the picker it lives in.
+    Dating rows live in the dating sub-picker; everything else in
+    the main settings picker. We disambiguate by the setting's key --
+    dating rows all start with `dating_`."""
+    key = setting.get("key", "")
+    if key.startswith("dating_") and key not in ("dating_enabled", "dating_submenu"):
+        _show_dating_settings_picker(anchor_sim)
+    else:
+        _show_settings_picker(anchor_sim)
 
 
 def _show_int_input(anchor_sim, setting):

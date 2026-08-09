@@ -414,19 +414,24 @@ def main():
         resources.append((TYPE_STBL, STBL_GROUP, STBL_INSTANCE, stbl_body))
         print(f"  + STBL ({len(STRINGS)} strings)")
 
-    # PNG image assets. Any .png in package_src/ gets embedded as an
+    # DDS image assets. Any .dds in package_src/ gets embedded as an
     # IMAGE resource. Type/group are Sims 4's UI-image conventions
     # (see TYPE_IMAGE / IMAGE_GROUP above); instance ID is
     # deterministic (FNV-64 of the bare filename) so tuning XMLs can
-    # hard-reference it without a lookup pass. When we ship more
-    # icons later, each just needs to sit in package_src/ with the
-    # name it's referenced by.
-    for png_path in sorted(package_src.glob("*.png")):
-        stem = png_path.stem  # e.g. "llamafone_icon"
+    # hard-reference it without a lookup pass.
+    #
+    # DDS specifically (not PNG): the game's image decoder at type
+    # 0x00B2D882 expects DDS magic bytes. Feeding it a PNG resource
+    # decodes to "?" and the phone tile renders with the fallback
+    # placeholder. Every shipping mod that gets icons working uses
+    # DDS. Convert source PNGs via Pillow's Image.save(fmt='DDS')
+    # before dropping them in package_src/.
+    for dds_path in sorted(package_src.glob("*.dds")):
+        stem = dds_path.stem  # e.g. "llamafone_icon"
         instance = fnv1_64_lower(stem)
-        body = png_path.read_bytes()
+        body = dds_path.read_bytes()
         resources.append((TYPE_IMAGE, IMAGE_GROUP, instance, body))
-        print(f"  + PNG                 {png_path.name} "
+        print(f"  + DDS                 {dds_path.name} "
               f"(instance={hex(instance)}, type={hex(TYPE_IMAGE)}, "
               f"group={hex(IMAGE_GROUP)}, {len(body):,} bytes)")
 

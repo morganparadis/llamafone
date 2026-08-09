@@ -200,6 +200,13 @@ def _get_honored_sims(event, event_name_for_log=""):
             ("engaged",     "betrothed"),
             ("wedding_couple", "betrothed"),
             ("weddingcouple",  "betrothed"),
+            # My Wedding Stories' custom-state wedding uses a job named
+            # 'job_Wedding_Ceremony_Host_Couple' -- the bare word
+            # "couple" catches that plus any other pack that just uses
+            # "couple" as the honored role. Keeping the more specific
+            # keywords above so future packs with weirder tuning still
+            # pattern-match.
+            ("couple",      "betrothed"),
             ("celebrant",   "celebrant"),
             ("birthday_sim","celebrant"),
             ("birthdaysim", "celebrant"),

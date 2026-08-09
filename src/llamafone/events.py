@@ -209,7 +209,18 @@ def _get_honored_sims(event, event_name_for_log=""):
             ("deceased",    "deceased"),
         )
         try:
-            jt_map = guest_list.job_type_to_guest_infos() if hasattr(guest_list, "job_type_to_guest_infos") else {}
+            # `job_type_to_guest_infos` is exposed as either a callable
+            # method or a dict/property depending on the game build --
+            # calling it when it's the dict raises TypeError('dict' is
+            # not callable). Try both shapes.
+            jt_attr = getattr(guest_list, "job_type_to_guest_infos", None)
+            if callable(jt_attr):
+                try:
+                    jt_map = jt_attr()
+                except TypeError:
+                    jt_map = jt_attr
+            else:
+                jt_map = jt_attr or {}
             if log_misses and jt_map:
                 _log(f"honored[{event_name_for_log}]: job_type_to_guest_infos jobs="
                      f"{[getattr(jt, '__name__', str(jt)) for jt in jt_map.keys()]}")

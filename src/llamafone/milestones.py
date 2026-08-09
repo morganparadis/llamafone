@@ -233,15 +233,25 @@ def _get_age_stage(sim_info):
 
 
 def _get_active_career(sim_info):
-    """Return (career_name, career_level) for the sim's primary career, or (None, None)."""
+    """Return (career_name, career_level) for the sim's primary career, or (None, None).
+
+    Reads the PUBLIC `careers` attribute first, falling back to the
+    private `_careers`. The public one is the live-active list; the
+    private storage can retain stale entries briefly after a sim
+    switches jobs (old career object hangs around alongside the new
+    one) -- iterating that first meant the diff would see the stale
+    career, decide 'no change', and quietly miss a real Law-to-
+    Astronaut switch. Matches the read order sim_context.get_sim_career
+    uses, so milestone-scan careers match prompt-time careers."""
     try:
         tracker = _safe(sim_info, "career_tracker", None)
         if tracker is None:
             return (None, None)
-        careers = getattr(tracker, "_careers", None) or getattr(tracker, "careers", None)
+        careers = getattr(tracker, "careers", None) or getattr(tracker, "_careers", None)
         if not careers:
             return (None, None)
-        for career in careers.values():
+        career_iter = careers.values() if hasattr(careers, "values") else careers
+        for career in career_iter:
             try:
                 name = type(career).__name__
                 level = getattr(career, "level", None)

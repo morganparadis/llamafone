@@ -71,9 +71,27 @@ def _get_current_slot_id_int():
         slot = svc.get_save_slot_proto_buff()
         if slot is not None:
             slot_id = getattr(slot, "slot_id", None)
-            # proto3 reads an unset int32 as 0; treat 0 as no-save-loaded.
-            if slot_id:
-                return int(slot_id)
+            if slot_id is None:
+                return None
+            try:
+                slot_id = int(slot_id)
+            except (TypeError, ValueError):
+                return None
+            # Reject sentinels for "no save loaded":
+            #   0            -- proto3 default for unset int
+            #   0xffffffff   -- Sims 4's "no valid slot" marker during
+            #                   main-menu / save-load transitions; if we
+            #                   accept it we create a bogus Slot_ffffffff/
+            #                   folder the next time the snapshot thread
+            #                   or any other timer-driven write fires
+            #                   before the real save id is available.
+            #   negative     -- would appear if slot_id is exposed as
+            #                   signed int32 and the sentinel wraps.
+            # Real Sims 4 slot ids are small positive integers well below
+            # 2^32, so any value at or above the uint32 max is a sentinel.
+            if slot_id <= 0 or slot_id >= 0xffffffff:
+                return None
+            return slot_id
     except Exception:
         pass
     return None

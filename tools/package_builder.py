@@ -195,42 +195,51 @@ def build_pie_menu_category_simdata(
 def build_stbl_v5(strings):
     """Build a v5 STBL resource body from {key_int: utf8_string}.
 
-    Reverted to the original S4PE-style header layout because the
-    "21-byte header + flags byte" variant I reverse-engineered from
-    WorldTour/Basemental causes Sims 4 to refuse to open with the
-    .package loaded -- it appears the loader validates a specific
-    field that our reduced header didn't satisfy.
+    Format reverse-engineered from World Tour's shipping STBLs. All 18
+    of thatssojordy_WorldTour_CORE's STBLs and all 18 of the album
+    STBLs walk cleanly with this layout (walk consumes exactly N bytes
+    for an N-byte resource).
 
-    With this layout the game LOADS the .package and the interactions
-    work, but display_name hashes don't resolve so menu rows show as
-    blank rows. That's a known cosmetic issue we'll address separately
-    (likely by referencing an existing base-game string hash or by
-    matching the metadata bytes that real mods set at offsets 14-20).
+    Header (21 bytes):
+      4  MAGIC 'STBL'
+      1  version         = 0x05
+      2  compressed      (u16 LE) = 0
+      8  numEntries      (u64 LE)
+      2  reserved        (u16 LE) = 0
+      4  mnStringLength  (u32 LE) = sum(len(s)) + numEntries
+                                    (World Tour counts one extra byte
+                                    per entry -- probably a virtual nul
+                                    terminator that isn't on disk)
 
-    Layout (22-byte header):
-      'STBL'            (4 bytes)
-      version           (1 byte)   = 0x05
-      compressed        (1 byte)   = 0x00
-      count             (u64 LE)
-      mn_string_length  (u32 LE)   = 0
-      total_str_len     (u32 LE)
+    Entry (7-byte header + N bytes string, repeated numEntries times):
+      4  key     (u32 LE)
+      1  flags   (u8)     = 0
+      2  length  (u16 LE)
+      N  string bytes UTF-8 (no null terminator on disk)
 
-    Entries (no flags byte):
-      key       (u32 LE)
-      length    (u16 LE)
-      string    (length bytes UTF-8)
+    Prior attempts used a 22-byte header (extra padding u32) and no
+    per-entry flags byte, which parses "well enough" that the game
+    doesn't reject the .package outright but silently fails hash
+    lookup so display_names never resolve. This layout matches World
+    Tour byte-for-byte for the same input -- see
+    tools/analyze_stbl in scratchpad.
     """
+    encoded = [(k, s.encode('utf-8')) for k, s in strings.items()]
+    total_str_bytes = sum(len(b) for _, b in encoded)
+    num_entries = len(encoded)
+
     out = bytearray()
     out += b'STBL'
-    out += bytes([0x05, 0x00])
-    out += struct.pack('<Q', len(strings))
-    encoded = [(k, s.encode('utf-8')) for k, s in strings.items()]
-    total_len = sum(len(b) for _, b in encoded)
-    out += struct.pack('<II', 0, total_len)
+    out += bytes([0x05])                                    # version
+    out += struct.pack('<H', 0)                             # compressed
+    out += struct.pack('<Q', num_entries)                   # numEntries
+    out += struct.pack('<H', 0)                             # reserved
+    out += struct.pack('<I', total_str_bytes + num_entries) # mnStringLength
     for key, raw in encoded:
-        out += struct.pack('<I', key)
-        out += struct.pack('<H', len(raw))
-        out += raw
+        out += struct.pack('<I', key)                       # key
+        out += bytes([0])                                   # flags
+        out += struct.pack('<H', len(raw))                  # length
+        out += raw                                          # UTF-8 bytes
     return bytes(out)
 
 
@@ -382,17 +391,20 @@ def build_package(resources, out_path):
 # Driver
 # -----------------------------------------------------------------------------
 
-# No STBL is shipped with this mod -- our tunings reference existing
-# base-game string hashes ("Call Someone", "Send Text", "Settings") so
-# the player's installed Sims 4 already has the display names loaded.
+# STBL strings shipped by this mod. Keys are the u32 hashes that
+# tunings reference via <T n="_display_name">HASH</T>. Values are the
+# UTF-8 text the game renders. Adding a string here + referencing its
+# hash from a tuning is all that's needed -- build_stbl_v5() takes it
+# from there.
 #
-# Rationale: authoring a STBL turned out to be unreliable. The on-disk
-# format used by shipping mods has a 15-byte metadata block in the
-# header (between the count field and the first entry) whose meaning we
-# couldn't crack -- with the metadata zeroed out, the game's package
-# loader refused to start at all. Borrowing base-game hashes sidesteps
-# the STBL problem entirely.
-STRINGS = {}
+# 0x00CA1E00 -> "Llamafone": hover text for the top-level phone tile,
+# referenced by package_src/phoneCategory_Llamafone.xml. Top byte of
+# the hash is 0 (matches the FNV-24 range shipping STBLs use for
+# authored hashes) but the value is arbitrary -- what matters is that
+# it matches the tuning reference exactly.
+STRINGS = {
+    0x00CA1E00: "Llamafone",
+}
 
 # STBL packaging:
 #   group    = 0x80000000 (convention used by every shipping mod we've

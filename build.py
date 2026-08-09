@@ -141,7 +141,7 @@ def _refresh_icon_dds():
     # safe-area border built in; without it, the icon reads as
     # oversized relative to its neighbors. Content ~205x205 in a
     # 256x256 canvas.
-    CONTENT_SIZE = 236
+    CONTENT_SIZE = 244
     img = img.resize((CONTENT_SIZE, CONTENT_SIZE), Image.LANCZOS)
     canvas = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
     canvas.paste(img, ((256 - CONTENT_SIZE) // 2, (256 - CONTENT_SIZE) // 2))

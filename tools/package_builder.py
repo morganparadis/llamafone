@@ -27,15 +27,15 @@ TYPE_STBL = 0x220557DA            # String Table
 TYPE_TUNING = 0xE882D22F          # Generic XML tuning (interactions, snippets)
 TYPE_PIE_MENU_CATEGORY = 0x03E9D964  # PieMenuCategory tuning
 TYPE_SIMDATA = 0x545AC67A         # SimData binary companion (read by UI client)
-# Sims 4 stores UI image resources (icons, thumbnails) at type
-# 0x00B2D882 under group 0x80000000. The `2f7d0004` type ID that shows
-# up in tuning XML's `_icon` field is a *reference alias* -- the game
-# looks up the actual resource at 0x00B2D882 regardless. Verified
-# against World Tour's package (thatssojordy_WorldTour_CORE): every
-# custom image resource sits at (type=0x00B2D882, group=0x80000000)
-# even though its tunings reference them with `2f7d0004:...`.
+# Sims 4 stores UI image resources at type 0x00B2D882. The tuning
+# XML's `_icon` field references the resource via a type alias
+# (2f7d0004 -> 0x00B2D882). World Tour ships images at group=0x80000000
+# but their SimData references them at group=0x00000000 -- some kind
+# of aliasing. Since the aliasing might not work reliably for third-
+# party mods, shipping the actual resource at the group our SimData
+# points to (0x00000000) is the direct route.
 TYPE_IMAGE = 0x00B2D882
-IMAGE_GROUP = 0x80000000
+IMAGE_GROUP = 0x00000000
 
 # Instance ID used for our own bundled phone-app icon. Deterministic
 # (FNV-64 of the filename) so the SimData / PieMenuCategory / interaction
@@ -85,36 +85,51 @@ COMPRESSION_ZLIB = 0x5A42
 # identical across all PieMenuCategory tunings so we don't have to
 # regenerate them.
 PIE_MENU_CATEGORY_SIMDATA_TEMPLATE = bytes.fromhex(
-    "4441544101010000180000000100000070000000010000000000008000000000"
-    "70010000f3e143ce580000000d000000380000000c0000000100000000000000"
-    "0000000078bf61a50800000000000000ae31a1dcd32edb0e82d8b20000000000"
-    "0000000000000000000000000000000000000080000000000000000000000000"
-    "00010000ccad21dbc1652002380000000800000007000000bf000000806d6139"
-    "120000002000000000000080b30000002c57a95b080000002800000000000080"
-    "64000000a85f00920000000000000000000000806b000000296a5da406000000"
-    "0800000000000080690000001b7ef1ae13000000100000000000008035000000"
-    "b8be3ad2140000000400000000000080610000009e304bda0e00000030000000"
-    "000000805f636f6c6c61707369626c65005f646973706c61795f6e616d65005f"
-    "646973706c61795f7072696f72697479005f69636f6e005f706172656e74005f"
-    "7370656369616c5f63617465676f7279006d6f6f645f6f766572726964657300"
-    "5069654d656e7543617465676f727900426173656d656e74616c3a70686f6e65"
-    "43617465676f727900"
+    # Extracted from thatssojordy_WorldTour_CORE_V2.1 -- the SimData for
+    # tuning `thatssojordy_WorldTour_PieMenu`. This is a top-level phone-
+    # home category (no _parent), display_name is a real STBL hash, and
+    # every field required by the CURRENT game schema is present including
+    # `always_show_disabled_interactions` which Basemental's older
+    # template lacked. Basemental's 425-byte template loaded without a
+    # crash but the game silently skipped the icon field lookup because
+    # the schema didn't match what the current client expects.
+    "4441544101010000180000000100000070000000010000000000000000000000"
+    "a601000050a1ea08580000000d000000400000000c0000000100000000000000"
+    "0000000077893fa0010000000000000043ee06a0e365f69382d8b20000000000"
+    "0000000000000000000000000000000001000000000000800000000000000000"
+    "36010000ccad21db41a1eae2400000000800000008000000d3000000806d6139"
+    "120000002000000000000080c70000002c57a95b080000002800000000000080"
+    "78000000a85f00920000000000000000000000807f000000296a5da406000000"
+    "08000000000000807d0000001b7ef1ae13000000100000000000008049000000"
+    "b8be3ad2140000000400000000000080970000009e304bda0e00000034000000"
+    "00000080610000007f07c2e00000000030000000000000805f636f6c6c617073"
+    "69626c65005f646973706c61795f6e616d65005f646973706c61795f7072696f"
+    "72697479005f69636f6e005f706172656e74005f7370656369616c5f63617465"
+    "676f727900616c776179735f73686f775f64697361626c65645f696e74657261"
+    "6374696f6e73006d6f6f645f6f7665727269646573005069654d656e75436174"
+    "65676f7279007468617473736f6a6f7264795f576f726c64546f75725f506965"
+    "4d656e7500"
 )
-# Patch points within the template, byte-aligned offsets:
+# Patch points within the World Tour-derived template. The schema
+# gained `always_show_disabled_interactions` between Basemental's
+# capture and World Tour's, which shifted the display_name field to
+# 0x44 and pushed the trailing instance-name string to 0x1C6.
 #   0x24-0x27  TableInfo.NameHash -- FNV-1 32-bit of lowercased tuning name
-#   0x40-0x43  display_name STBL hash (u32 LE)
-#   0x44       display_priority (u8 -- low byte, surrounding bytes are 0)
+#   0x44-0x47  display_name STBL hash (u32 LE)
 #   0x50-0x57  _icon instance (u64 LE)
 #   0x58-0x5B  _icon type (u32 LE)
 #   0x5C-0x5F  _icon group (u32 LE)
-#   0x190+     null-terminated tuning instance name string
+#   0x1C6+     null-terminated tuning instance name string
+#
+# display_priority isn't patched anymore: the World Tour template
+# ships with priority=1 which is fine for a phone-home tile. If we
+# ever need to override it we'll need to find the shifted offset.
 _SD_NAME_HASH_OFFSET = 0x24
-_SD_DISPLAY_NAME_OFFSET = 0x40
-_SD_DISPLAY_PRIORITY_OFFSET = 0x44
+_SD_DISPLAY_NAME_OFFSET = 0x44
 _SD_ICON_INSTANCE_OFFSET = 0x50
 _SD_ICON_TYPE_OFFSET = 0x58
 _SD_ICON_GROUP_OFFSET = 0x5C
-_SD_NAME_STRING_OFFSET = 0x190
+_SD_NAME_STRING_OFFSET = 0x1C6
 _SD_NAME_STRING_REGION = len(PIE_MENU_CATEGORY_SIMDATA_TEMPLATE) - _SD_NAME_STRING_OFFSET
 
 # Icon resource keys in SimData use type 0x00B2D882, NOT the 0x2F7D0004
@@ -143,22 +158,23 @@ def fnv1_32_lower(name):
 
 
 def build_pie_menu_category_simdata(
-    display_name_hash, instance_name, display_priority=1,
+    display_name_hash, instance_name,
     icon_type=_SD_ICON_TYPE,
     icon_group=_DEFAULT_ICON_GROUP,
     icon_instance=_DEFAULT_ICON_INSTANCE,
 ):
     """Patch the captured template with this category's display_name hash,
-    icon ResourceKey, display_priority, and trailing name string (plus the
-    recomputed NameHash that maps to it). Returns a 425-byte SimData blob
-    ready to pack."""
+    icon ResourceKey, and trailing instance-name string (plus the
+    recomputed NameHash that maps to it). Returns a 485-byte SimData
+    blob ready to pack.
+
+    display_priority is intentionally left as the template's baked-in
+    value (1) -- the current schema shifted its offset and I don't
+    have a solid mapping yet. All the phone-home tiles we care about
+    look fine at priority=1."""
     data = bytearray(PIE_MENU_CATEGORY_SIMDATA_TEMPLATE)
     struct.pack_into('<I', data, _SD_NAME_HASH_OFFSET, fnv1_32_lower(instance_name))
     struct.pack_into('<I', data, _SD_DISPLAY_NAME_OFFSET, display_name_hash)
-    # display_priority is a single byte at 0x44, with the next 3 bytes left zero.
-    data[_SD_DISPLAY_PRIORITY_OFFSET] = display_priority & 0xFF
-    for i in range(_SD_DISPLAY_PRIORITY_OFFSET + 1, _SD_DISPLAY_PRIORITY_OFFSET + 4):
-        data[i] = 0
     struct.pack_into('<Q', data, _SD_ICON_INSTANCE_OFFSET, icon_instance)
     struct.pack_into('<I', data, _SD_ICON_TYPE_OFFSET, icon_type)
     struct.pack_into('<I', data, _SD_ICON_GROUP_OFFSET, icon_group)

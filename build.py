@@ -95,9 +95,14 @@ def compile_py_to_pyc(py_path, pyc_path):
 
 def _refresh_icon_dds():
     """Regenerate package_src/llamafone_icon.dds from the source PNG in
-    docs/img/. Auto-runs before the .package build so any icon swap by
+    assets/. Auto-runs before the .package build so any icon swap by
     the user just requires overwriting the source PNG and rebuilding --
     no manual conversion step.
+
+    Source lives in assets/ (not docs/img/) because docs/ is purely
+    website content -- images there get published via GitHub Pages,
+    they never ship with the mod. Keeping the mod's authoritative
+    icon source under assets/ makes it obvious what belongs where.
 
     The source PNG typically has transparent padding around a rounded-
     square design; we crop to the tight non-transparent bounding box
@@ -106,7 +111,7 @@ def _refresh_icon_dds():
     available (dev machines that don't have it installed still get a
     build using whatever .dds is already in package_src/).
     """
-    src_png = os.path.join(SCRIPT_DIR, "docs", "img", "llamafone-icon.png")
+    src_png = os.path.join(SCRIPT_DIR, "assets", "llamafone-icon.png")
     dst_dds = os.path.join(SCRIPT_DIR, "package_src", "llamafone_icon.dds")
     if not os.path.isfile(src_png):
         return

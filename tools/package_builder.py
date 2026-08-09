@@ -27,7 +27,15 @@ TYPE_STBL = 0x220557DA            # String Table
 TYPE_TUNING = 0xE882D22F          # Generic XML tuning (interactions, snippets)
 TYPE_PIE_MENU_CATEGORY = 0x03E9D964  # PieMenuCategory tuning
 TYPE_SIMDATA = 0x545AC67A         # SimData binary companion (read by UI client)
-TYPE_IMAGE_PNG = 0x2F7D0004       # PNG texture resource (the one tuning XMLs reference via `_icon`).
+# Sims 4 stores UI image resources (icons, thumbnails) at type
+# 0x00B2D882 under group 0x80000000. The `2f7d0004` type ID that shows
+# up in tuning XML's `_icon` field is a *reference alias* -- the game
+# looks up the actual resource at 0x00B2D882 regardless. Verified
+# against World Tour's package (thatssojordy_WorldTour_CORE): every
+# custom image resource sits at (type=0x00B2D882, group=0x80000000)
+# even though its tunings reference them with `2f7d0004:...`.
+TYPE_IMAGE = 0x00B2D882
+IMAGE_GROUP = 0x80000000
 
 # Instance ID used for our own bundled phone-app icon. Deterministic
 # (FNV-64 of the filename) so the SimData / PieMenuCategory / interaction
@@ -407,18 +415,20 @@ def main():
         print(f"  + STBL ({len(STRINGS)} strings)")
 
     # PNG image assets. Any .png in package_src/ gets embedded as an
-    # IMAGE resource. The instance ID is deterministic (FNV-64 of the
-    # bare filename) so tuning XMLs can hard-reference it without a
-    # lookup pass. When we ship more icons later, each just needs to
-    # sit in package_src/ with the name it's referenced by.
+    # IMAGE resource. Type/group are Sims 4's UI-image conventions
+    # (see TYPE_IMAGE / IMAGE_GROUP above); instance ID is
+    # deterministic (FNV-64 of the bare filename) so tuning XMLs can
+    # hard-reference it without a lookup pass. When we ship more
+    # icons later, each just needs to sit in package_src/ with the
+    # name it's referenced by.
     for png_path in sorted(package_src.glob("*.png")):
         stem = png_path.stem  # e.g. "llamafone_icon"
         instance = fnv1_64_lower(stem)
         body = png_path.read_bytes()
-        resources.append((TYPE_IMAGE_PNG, 0, instance, body))
+        resources.append((TYPE_IMAGE, IMAGE_GROUP, instance, body))
         print(f"  + PNG                 {png_path.name} "
-              f"(instance={hex(instance)}, type={hex(TYPE_IMAGE_PNG)}, "
-              f"{len(body):,} bytes)")
+              f"(instance={hex(instance)}, type={hex(TYPE_IMAGE)}, "
+              f"group={hex(IMAGE_GROUP)}, {len(body):,} bytes)")
 
     # Tuning XMLs -- pick the resource type from the root <I i="..."> attribute
     for xml_path in xml_files:

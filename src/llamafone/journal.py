@@ -19,7 +19,7 @@ from . import save_id as _save_id
 
 _JOURNAL_FILENAME = "Journal.json"
 _PROMPT_ENTRIES = 6         # how many recent entries to include in prompts
-_PREVIEW_CHARS = 220        # max chars per entry shown in prompts
+_PREVIEW_CHARS = 700        # max chars per entry shown in prompts -- was 220, which cut off the AI's reply on almost every text/call entry (a two-message reply hits 220 fast).
 
 # In-memory cache + the save id it was loaded for. The cache is
 # invalidated whenever the current save id changes (player switched
@@ -150,7 +150,16 @@ def _save(entries):
         _cached_for_save_id = _save_id.get_current_save_id()
         path = _journal_path()
         if path is None:
-            return  # no save loaded -- nothing to persist
+            # save_id transiently unresolvable at write time (main-menu /
+            # save-load window). We can't persist the entry now, but we
+            # can log so it's visible instead of a silent data-loss risk.
+            # The entry stays in _cache for this session; if save_id
+            # resolves before the next add_entry, the followup _save
+            # will flush both. If the game exits first, the entry is
+            # lost -- track how often that happens so we know whether
+            # to add a retry.
+            _log(f"_save skipped: no save_id resolvable (in-memory cache has {len(entries)} entries; disk NOT updated)")
+            return
         tmp = path + ".tmp"
         try:
             with open(tmp, "w", encoding="utf-8") as f:

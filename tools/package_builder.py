@@ -27,6 +27,29 @@ TYPE_STBL = 0x220557DA            # String Table
 TYPE_TUNING = 0xE882D22F          # Generic XML tuning (interactions, snippets)
 TYPE_PIE_MENU_CATEGORY = 0x03E9D964  # PieMenuCategory tuning
 TYPE_SIMDATA = 0x545AC67A         # SimData binary companion (read by UI client)
+# Sims 4 stores UI image resources at type 0x00B2D882. The tuning
+# XML's `_icon` field references the resource via a type alias
+# (2f7d0004 -> 0x00B2D882). World Tour ships images at group=0x80000000
+# but their SimData references them at group=0x00000000 -- some kind
+# of aliasing. Since the aliasing might not work reliably for third-
+# party mods, shipping the actual resource at the group our SimData
+# points to (0x00000000) is the direct route.
+TYPE_IMAGE = 0x00B2D882
+IMAGE_GROUP = 0x00000000
+
+# Instance ID used for our own bundled phone-app icon. Deterministic
+# (FNV-64 of the filename) so the SimData / PieMenuCategory / interaction
+# XMLs can hard-reference the same instance without a build step lookup.
+# Any 64-bit unique value would work; using a hash keeps it reproducible
+# and out of any obvious collision range.
+def fnv1_64_lower(name):
+    h = 0xCBF29CE484222325
+    for c in name.lower().encode('ascii'):
+        h = (h * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+        h ^= c
+    return h
+
+LLAMAFONE_ICON_INSTANCE = fnv1_64_lower("llamafone_icon")  # 0x27... (stable)
 
 # Magic group that SimData companions for PieMenuCategory tunings use.
 # Verified across multiple shipping mods (Basemental Drugs, World Tour);
@@ -62,36 +85,51 @@ COMPRESSION_ZLIB = 0x5A42
 # identical across all PieMenuCategory tunings so we don't have to
 # regenerate them.
 PIE_MENU_CATEGORY_SIMDATA_TEMPLATE = bytes.fromhex(
-    "4441544101010000180000000100000070000000010000000000008000000000"
-    "70010000f3e143ce580000000d000000380000000c0000000100000000000000"
-    "0000000078bf61a50800000000000000ae31a1dcd32edb0e82d8b20000000000"
-    "0000000000000000000000000000000000000080000000000000000000000000"
-    "00010000ccad21dbc1652002380000000800000007000000bf000000806d6139"
-    "120000002000000000000080b30000002c57a95b080000002800000000000080"
-    "64000000a85f00920000000000000000000000806b000000296a5da406000000"
-    "0800000000000080690000001b7ef1ae13000000100000000000008035000000"
-    "b8be3ad2140000000400000000000080610000009e304bda0e00000030000000"
-    "000000805f636f6c6c61707369626c65005f646973706c61795f6e616d65005f"
-    "646973706c61795f7072696f72697479005f69636f6e005f706172656e74005f"
-    "7370656369616c5f63617465676f7279006d6f6f645f6f766572726964657300"
-    "5069654d656e7543617465676f727900426173656d656e74616c3a70686f6e65"
-    "43617465676f727900"
+    # Extracted from thatssojordy_WorldTour_CORE_V2.1 -- the SimData for
+    # tuning `thatssojordy_WorldTour_PieMenu`. This is a top-level phone-
+    # home category (no _parent), display_name is a real STBL hash, and
+    # every field required by the CURRENT game schema is present including
+    # `always_show_disabled_interactions` which Basemental's older
+    # template lacked. Basemental's 425-byte template loaded without a
+    # crash but the game silently skipped the icon field lookup because
+    # the schema didn't match what the current client expects.
+    "4441544101010000180000000100000070000000010000000000000000000000"
+    "a601000050a1ea08580000000d000000400000000c0000000100000000000000"
+    "0000000077893fa0010000000000000043ee06a0e365f69382d8b20000000000"
+    "0000000000000000000000000000000001000000000000800000000000000000"
+    "36010000ccad21db41a1eae2400000000800000008000000d3000000806d6139"
+    "120000002000000000000080c70000002c57a95b080000002800000000000080"
+    "78000000a85f00920000000000000000000000807f000000296a5da406000000"
+    "08000000000000807d0000001b7ef1ae13000000100000000000008049000000"
+    "b8be3ad2140000000400000000000080970000009e304bda0e00000034000000"
+    "00000080610000007f07c2e00000000030000000000000805f636f6c6c617073"
+    "69626c65005f646973706c61795f6e616d65005f646973706c61795f7072696f"
+    "72697479005f69636f6e005f706172656e74005f7370656369616c5f63617465"
+    "676f727900616c776179735f73686f775f64697361626c65645f696e74657261"
+    "6374696f6e73006d6f6f645f6f7665727269646573005069654d656e75436174"
+    "65676f7279007468617473736f6a6f7264795f576f726c64546f75725f506965"
+    "4d656e7500"
 )
-# Patch points within the template, byte-aligned offsets:
+# Patch points within the World Tour-derived template. The schema
+# gained `always_show_disabled_interactions` between Basemental's
+# capture and World Tour's, which shifted the display_name field to
+# 0x44 and pushed the trailing instance-name string to 0x1C6.
 #   0x24-0x27  TableInfo.NameHash -- FNV-1 32-bit of lowercased tuning name
-#   0x40-0x43  display_name STBL hash (u32 LE)
-#   0x44       display_priority (u8 -- low byte, surrounding bytes are 0)
+#   0x44-0x47  display_name STBL hash (u32 LE)
 #   0x50-0x57  _icon instance (u64 LE)
 #   0x58-0x5B  _icon type (u32 LE)
 #   0x5C-0x5F  _icon group (u32 LE)
-#   0x190+     null-terminated tuning instance name string
+#   0x1C6+     null-terminated tuning instance name string
+#
+# display_priority isn't patched anymore: the World Tour template
+# ships with priority=1 which is fine for a phone-home tile. If we
+# ever need to override it we'll need to find the shifted offset.
 _SD_NAME_HASH_OFFSET = 0x24
-_SD_DISPLAY_NAME_OFFSET = 0x40
-_SD_DISPLAY_PRIORITY_OFFSET = 0x44
+_SD_DISPLAY_NAME_OFFSET = 0x44
 _SD_ICON_INSTANCE_OFFSET = 0x50
 _SD_ICON_TYPE_OFFSET = 0x58
 _SD_ICON_GROUP_OFFSET = 0x5C
-_SD_NAME_STRING_OFFSET = 0x190
+_SD_NAME_STRING_OFFSET = 0x1C6
 _SD_NAME_STRING_REGION = len(PIE_MENU_CATEGORY_SIMDATA_TEMPLATE) - _SD_NAME_STRING_OFFSET
 
 # Icon resource keys in SimData use type 0x00B2D882, NOT the 0x2F7D0004
@@ -120,22 +158,23 @@ def fnv1_32_lower(name):
 
 
 def build_pie_menu_category_simdata(
-    display_name_hash, instance_name, display_priority=1,
+    display_name_hash, instance_name,
     icon_type=_SD_ICON_TYPE,
     icon_group=_DEFAULT_ICON_GROUP,
     icon_instance=_DEFAULT_ICON_INSTANCE,
 ):
     """Patch the captured template with this category's display_name hash,
-    icon ResourceKey, display_priority, and trailing name string (plus the
-    recomputed NameHash that maps to it). Returns a 425-byte SimData blob
-    ready to pack."""
+    icon ResourceKey, and trailing instance-name string (plus the
+    recomputed NameHash that maps to it). Returns a 485-byte SimData
+    blob ready to pack.
+
+    display_priority is intentionally left as the template's baked-in
+    value (1) -- the current schema shifted its offset and I don't
+    have a solid mapping yet. All the phone-home tiles we care about
+    look fine at priority=1."""
     data = bytearray(PIE_MENU_CATEGORY_SIMDATA_TEMPLATE)
     struct.pack_into('<I', data, _SD_NAME_HASH_OFFSET, fnv1_32_lower(instance_name))
     struct.pack_into('<I', data, _SD_DISPLAY_NAME_OFFSET, display_name_hash)
-    # display_priority is a single byte at 0x44, with the next 3 bytes left zero.
-    data[_SD_DISPLAY_PRIORITY_OFFSET] = display_priority & 0xFF
-    for i in range(_SD_DISPLAY_PRIORITY_OFFSET + 1, _SD_DISPLAY_PRIORITY_OFFSET + 4):
-        data[i] = 0
     struct.pack_into('<Q', data, _SD_ICON_INSTANCE_OFFSET, icon_instance)
     struct.pack_into('<I', data, _SD_ICON_TYPE_OFFSET, icon_type)
     struct.pack_into('<I', data, _SD_ICON_GROUP_OFFSET, icon_group)
@@ -156,42 +195,51 @@ def build_pie_menu_category_simdata(
 def build_stbl_v5(strings):
     """Build a v5 STBL resource body from {key_int: utf8_string}.
 
-    Reverted to the original S4PE-style header layout because the
-    "21-byte header + flags byte" variant I reverse-engineered from
-    WorldTour/Basemental causes Sims 4 to refuse to open with the
-    .package loaded -- it appears the loader validates a specific
-    field that our reduced header didn't satisfy.
+    Format reverse-engineered from World Tour's shipping STBLs. All 18
+    of thatssojordy_WorldTour_CORE's STBLs and all 18 of the album
+    STBLs walk cleanly with this layout (walk consumes exactly N bytes
+    for an N-byte resource).
 
-    With this layout the game LOADS the .package and the interactions
-    work, but display_name hashes don't resolve so menu rows show as
-    blank rows. That's a known cosmetic issue we'll address separately
-    (likely by referencing an existing base-game string hash or by
-    matching the metadata bytes that real mods set at offsets 14-20).
+    Header (21 bytes):
+      4  MAGIC 'STBL'
+      1  version         = 0x05
+      2  compressed      (u16 LE) = 0
+      8  numEntries      (u64 LE)
+      2  reserved        (u16 LE) = 0
+      4  mnStringLength  (u32 LE) = sum(len(s)) + numEntries
+                                    (World Tour counts one extra byte
+                                    per entry -- probably a virtual nul
+                                    terminator that isn't on disk)
 
-    Layout (22-byte header):
-      'STBL'            (4 bytes)
-      version           (1 byte)   = 0x05
-      compressed        (1 byte)   = 0x00
-      count             (u64 LE)
-      mn_string_length  (u32 LE)   = 0
-      total_str_len     (u32 LE)
+    Entry (7-byte header + N bytes string, repeated numEntries times):
+      4  key     (u32 LE)
+      1  flags   (u8)     = 0
+      2  length  (u16 LE)
+      N  string bytes UTF-8 (no null terminator on disk)
 
-    Entries (no flags byte):
-      key       (u32 LE)
-      length    (u16 LE)
-      string    (length bytes UTF-8)
+    Prior attempts used a 22-byte header (extra padding u32) and no
+    per-entry flags byte, which parses "well enough" that the game
+    doesn't reject the .package outright but silently fails hash
+    lookup so display_names never resolve. This layout matches World
+    Tour byte-for-byte for the same input -- see
+    tools/analyze_stbl in scratchpad.
     """
+    encoded = [(k, s.encode('utf-8')) for k, s in strings.items()]
+    total_str_bytes = sum(len(b) for _, b in encoded)
+    num_entries = len(encoded)
+
     out = bytearray()
     out += b'STBL'
-    out += bytes([0x05, 0x00])
-    out += struct.pack('<Q', len(strings))
-    encoded = [(k, s.encode('utf-8')) for k, s in strings.items()]
-    total_len = sum(len(b) for _, b in encoded)
-    out += struct.pack('<II', 0, total_len)
+    out += bytes([0x05])                                    # version
+    out += struct.pack('<H', 0)                             # compressed
+    out += struct.pack('<Q', num_entries)                   # numEntries
+    out += struct.pack('<H', 0)                             # reserved
+    out += struct.pack('<I', total_str_bytes + num_entries) # mnStringLength
     for key, raw in encoded:
-        out += struct.pack('<I', key)
-        out += struct.pack('<H', len(raw))
-        out += raw
+        out += struct.pack('<I', key)                       # key
+        out += bytes([0])                                   # flags
+        out += struct.pack('<H', len(raw))                  # length
+        out += raw                                          # UTF-8 bytes
     return bytes(out)
 
 
@@ -231,6 +279,54 @@ def read_display_name_hash(xml_text):
         return int(raw)
     except ValueError:
         return None
+
+
+def read_icon_key(xml_text):
+    """Pull the `_icon` resource key from a tuning XML. Returns
+    (type, group, instance) as ints, or (None, None, None) when the
+    field is missing or unparseable.
+
+    Two accepted XML shapes:
+
+    Flat (World Tour / MC Command Center / most modern mods):
+        <T n="_icon" p="path/for/humans">2f7d0004:00000000:XXXXXXX</T>
+
+    Nested (what Sims4Studio autogenerates from GUI edits):
+        <V n="_icon" t="resource_key">
+          <U n="resource_key">
+            <T n="key" p="...">2f7d0004:00000000:XXXXXXX</T>
+          </U>
+        </V>
+
+    The client-side ActionScript that renders phone tiles only
+    recognises the flat form for `_icon` on a PieMenuCategory --
+    the nested form parses server-side but produces a broken tile
+    (verified empirically). Interactions (tuning kind='interaction')
+    happily accept either form for their own `_icon` field.
+    """
+    # Try flat form first (single <T n="_icon"> with the resource-key
+    # text as its body).
+    m = re.search(
+        r'<T\s+n="_icon"[^>]*>([0-9a-fA-F:]+)</T>',
+        xml_text,
+    )
+    if not m:
+        # Try nested form.
+        m = re.search(
+            r'<V\s+n="_icon"\s+t="resource_key"\s*>\s*'
+            r'<U\s+n="resource_key"\s*>\s*'
+            r'<T\s+n="key"[^>]*>([^<]+)</T>',
+            xml_text,
+        )
+    if not m:
+        return (None, None, None)
+    parts = m.group(1).strip().split(':')
+    if len(parts) != 3:
+        return (None, None, None)
+    try:
+        return (int(parts[0], 16), int(parts[1], 16), int(parts[2], 16))
+    except ValueError:
+        return (None, None, None)
 
 
 def build_package(resources, out_path):
@@ -295,17 +391,20 @@ def build_package(resources, out_path):
 # Driver
 # -----------------------------------------------------------------------------
 
-# No STBL is shipped with this mod -- our tunings reference existing
-# base-game string hashes ("Call Someone", "Send Text", "Settings") so
-# the player's installed Sims 4 already has the display names loaded.
+# STBL strings shipped by this mod. Keys are the u32 hashes that
+# tunings reference via <T n="_display_name">HASH</T>. Values are the
+# UTF-8 text the game renders. Adding a string here + referencing its
+# hash from a tuning is all that's needed -- build_stbl_v5() takes it
+# from there.
 #
-# Rationale: authoring a STBL turned out to be unreliable. The on-disk
-# format used by shipping mods has a 15-byte metadata block in the
-# header (between the count field and the first entry) whose meaning we
-# couldn't crack -- with the metadata zeroed out, the game's package
-# loader refused to start at all. Borrowing base-game hashes sidesteps
-# the STBL problem entirely.
-STRINGS = {}
+# 0x00CA1E00 -> "Llamafone": hover text for the top-level phone tile,
+# referenced by package_src/phoneCategory_Llamafone.xml. Top byte of
+# the hash is 0 (matches the FNV-24 range shipping STBLs use for
+# authored hashes) but the value is arbitrary -- what matters is that
+# it matches the tuning reference exactly.
+STRINGS = {
+    0x00CA1E00: "Llamafone",
+}
 
 # STBL packaging:
 #   group    = 0x80000000 (convention used by every shipping mod we've
@@ -343,6 +442,27 @@ def main():
         resources.append((TYPE_STBL, STBL_GROUP, STBL_INSTANCE, stbl_body))
         print(f"  + STBL ({len(STRINGS)} strings)")
 
+    # DDS image assets. Any .dds in package_src/ gets embedded as an
+    # IMAGE resource. Type/group are Sims 4's UI-image conventions
+    # (see TYPE_IMAGE / IMAGE_GROUP above); instance ID is
+    # deterministic (FNV-64 of the bare filename) so tuning XMLs can
+    # hard-reference it without a lookup pass.
+    #
+    # DDS specifically (not PNG): the game's image decoder at type
+    # 0x00B2D882 expects DDS magic bytes. Feeding it a PNG resource
+    # decodes to "?" and the phone tile renders with the fallback
+    # placeholder. Every shipping mod that gets icons working uses
+    # DDS. Convert source PNGs via Pillow's Image.save(fmt='DDS')
+    # before dropping them in package_src/.
+    for dds_path in sorted(package_src.glob("*.dds")):
+        stem = dds_path.stem  # e.g. "llamafone_icon"
+        instance = fnv1_64_lower(stem)
+        body = dds_path.read_bytes()
+        resources.append((TYPE_IMAGE, IMAGE_GROUP, instance, body))
+        print(f"  + DDS                 {dds_path.name} "
+              f"(instance={hex(instance)}, type={hex(TYPE_IMAGE)}, "
+              f"group={hex(IMAGE_GROUP)}, {len(body):,} bytes)")
+
     # Tuning XMLs -- pick the resource type from the root <I i="..."> attribute
     for xml_path in xml_files:
         xml_text = xml_path.read_text(encoding='utf-8')
@@ -359,12 +479,23 @@ def main():
         # WorldTour). At group=0 the UI ignores it.
         if kind == "pie_menu_category":
             display_name = read_display_name_hash(xml_text) or 0
-            simdata_body = build_pie_menu_category_simdata(display_name, tuning_name)
+            # Pull the icon resource key from the XML so the SimData
+            # references the SAME icon the tuning does. Without this,
+            # the SimData would default to the base-game cellphone icon
+            # and the phone home would show our tuning's category with
+            # a plain phone icon instead of our custom PNG.
+            icon_type, icon_group, icon_inst = read_icon_key(xml_text)
+            simdata_body = build_pie_menu_category_simdata(
+                display_name, tuning_name,
+                icon_group=icon_group if icon_type else _DEFAULT_ICON_GROUP,
+                icon_instance=icon_inst if icon_type else _DEFAULT_ICON_INSTANCE,
+            )
             resources.append((TYPE_SIMDATA, SIMDATA_PMC_GROUP, instance, simdata_body))
             print(f"  + SimData              {xml_path.stem} "
                   f"(instance={hex(instance)}, type={hex(TYPE_SIMDATA)}, "
                   f"group={hex(SIMDATA_PMC_GROUP)}, "
-                  f"display_name=0x{display_name:08X})")
+                  f"display_name=0x{display_name:08X}, "
+                  f"icon_instance={hex(icon_inst) if icon_inst else '(default)'})")
 
     build_package(resources, out_path)
     size_kb = os.path.getsize(out_path) / 1024

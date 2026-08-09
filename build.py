@@ -93,6 +93,63 @@ def compile_py_to_pyc(py_path, pyc_path):
         sys.exit(1)
 
 
+def _refresh_icon_dds():
+    """Regenerate package_src/llamafone_icon.dds from the source PNG in
+    assets/. Auto-runs before the .package build so any icon swap by
+    the user just requires overwriting the source PNG and rebuilding --
+    no manual conversion step.
+
+    Source lives in assets/ (not docs/img/) because docs/ is purely
+    website content -- images there get published via GitHub Pages,
+    they never ship with the mod. Keeping the mod's authoritative
+    icon source under assets/ makes it obvious what belongs where.
+
+    The source PNG typically has transparent padding around a rounded-
+    square design; we crop to the tight non-transparent bounding box
+    before resizing so the icon fills its phone tile the same way the
+    other apps' icons fill theirs. Skipped silently when Pillow isn't
+    available (dev machines that don't have it installed still get a
+    build using whatever .dds is already in package_src/).
+    """
+    src_png = os.path.join(SCRIPT_DIR, "assets", "llamafone-icon.png")
+    dst_dds = os.path.join(SCRIPT_DIR, "package_src", "llamafone_icon.dds")
+    if not os.path.isfile(src_png):
+        return
+    try:
+        from PIL import Image
+    except ImportError:
+        print("  WARN: Pillow not installed -- skipping icon regeneration.")
+        print("        Existing package_src/llamafone_icon.dds will be reused.")
+        print("        pip install Pillow to enable auto-regeneration.")
+        return
+    img = Image.open(src_png).convert("RGBA")
+    bbox = img.getbbox()
+    if bbox:
+        img = img.crop(bbox)
+    w, h = img.size
+    if w != h:
+        # Pad the shorter side to keep the design centered; Sims 4
+        # phone tiles are square and rectangle icons would render
+        # stretched.
+        size = max(w, h)
+        square = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        square.paste(img, ((size - w) // 2, (size - h) // 2))
+        img = square
+    # Bake in ~10% transparent padding on each side so the phone tile's
+    # green selection highlight has room to sit OUTSIDE the artwork
+    # instead of overlapping it. Base game / mod icons all have this
+    # safe-area border built in; without it, the icon reads as
+    # oversized relative to its neighbors. Content ~205x205 in a
+    # 256x256 canvas.
+    CONTENT_SIZE = 244
+    img = img.resize((CONTENT_SIZE, CONTENT_SIZE), Image.LANCZOS)
+    canvas = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
+    canvas.paste(img, ((256 - CONTENT_SIZE) // 2, (256 - CONTENT_SIZE) // 2))
+    img = canvas
+    img.save(dst_dds, format="DDS")
+    print(f"  + icon DDS regenerated from assets/llamafone-icon.png ({os.path.getsize(dst_dds):,} bytes)")
+
+
 def build_package():
     """Build Llamafone.package from XML sources in package_src/.
     Uses our own DBPF writer (tools/package_builder.py) -- no S4S required."""
@@ -100,6 +157,7 @@ def build_package():
     if not os.path.isfile(builder_path):
         print(f"  WARN: {builder_path} not found, skipping package build")
         return
+    _refresh_icon_dds()
     print()  # blank line between script and package output
     result = subprocess.run(
         [sys.executable, builder_path],

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<I c="PieMenuCategory" i="pie_menu_category" m="interactions.pie_menu_category" n="phoneCategory_Llamafone" s="13371000010">
+  <!--
+    Top-level phone-home category for Llamafone. All three Llamafone
+    interactions (Call, Text, Settings) reference this by instance
+    ID (13371000010) via their `category` field, which turns them into
+    a submenu under a single tile on the phone's home grid.
+
+    _parent is disabled (no parent), which is what makes this a
+    top-level tile instead of a nested subcategory.
+
+    _display_name is 0 -- we don't ship an STBL because previous
+    attempts at authoring one broke the .package loader entirely.
+    The icon carries the Llamafone branding so a text label under
+    the tile isn't essential.
+
+    _icon references our bundled 256x256 PNG. The instance ID
+    (0x62893b30f9952eee) is FNV-64 of "llamafone_icon" -- the
+    package builder embeds llamafone_icon.png at that instance
+    automatically, so this key is deterministic.
+  -->
+  <T n="_display_name">0</T>
+  <V n="_icon" t="resource_key">
+    <U n="resource_key">
+      <T n="key" p="llamafone_icon.png">2f7d0004:00000000:62893b30f9952eee</T>
+    </U>
+  </V>
+  <T n="_collapsible">False</T>
+  <V n="_parent" t="disabled" />
+  <E n="_special_category">NO_CATEGORY</E>
+  <T n="_display_priority">50</T>
+</I>

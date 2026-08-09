@@ -27,6 +27,21 @@ TYPE_STBL = 0x220557DA            # String Table
 TYPE_TUNING = 0xE882D22F          # Generic XML tuning (interactions, snippets)
 TYPE_PIE_MENU_CATEGORY = 0x03E9D964  # PieMenuCategory tuning
 TYPE_SIMDATA = 0x545AC67A         # SimData binary companion (read by UI client)
+TYPE_IMAGE_PNG = 0x2F7D0004       # PNG texture resource (the one tuning XMLs reference via `_icon`).
+
+# Instance ID used for our own bundled phone-app icon. Deterministic
+# (FNV-64 of the filename) so the SimData / PieMenuCategory / interaction
+# XMLs can hard-reference the same instance without a build step lookup.
+# Any 64-bit unique value would work; using a hash keeps it reproducible
+# and out of any obvious collision range.
+def fnv1_64_lower(name):
+    h = 0xCBF29CE484222325
+    for c in name.lower().encode('ascii'):
+        h = (h * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+        h ^= c
+    return h
+
+LLAMAFONE_ICON_INSTANCE = fnv1_64_lower("llamafone_icon")  # 0x27... (stable)
 
 # Magic group that SimData companions for PieMenuCategory tunings use.
 # Verified across multiple shipping mods (Basemental Drugs, World Tour);
@@ -233,6 +248,37 @@ def read_display_name_hash(xml_text):
         return None
 
 
+def read_icon_key(xml_text):
+    """Pull the `_icon` resource key from a tuning XML. Returns
+    (type, group, instance) as ints, or (None, None, None) when the
+    field is missing or unparseable.
+
+    The XML shape we're parsing looks like:
+        <V n="_icon" t="resource_key">
+          <U n="resource_key">
+            <T n="key" p="..."\">2f7d0004:00000000:6189ced9570b8609</T>
+          </U>
+        </V>
+    We only need the `key` string; the leading `p="..."` path attribute
+    is a source-file comment for humans.
+    """
+    m = re.search(
+        r'<V\s+n="_icon"\s+t="resource_key"\s*>\s*'
+        r'<U\s+n="resource_key"\s*>\s*'
+        r'<T\s+n="key"[^>]*>([^<]+)</T>',
+        xml_text,
+    )
+    if not m:
+        return (None, None, None)
+    parts = m.group(1).strip().split(':')
+    if len(parts) != 3:
+        return (None, None, None)
+    try:
+        return (int(parts[0], 16), int(parts[1], 16), int(parts[2], 16))
+    except ValueError:
+        return (None, None, None)
+
+
 def build_package(resources, out_path):
     """Write a .package file from a list of (type_id, group, instance, body_bytes).
 
@@ -343,6 +389,20 @@ def main():
         resources.append((TYPE_STBL, STBL_GROUP, STBL_INSTANCE, stbl_body))
         print(f"  + STBL ({len(STRINGS)} strings)")
 
+    # PNG image assets. Any .png in package_src/ gets embedded as an
+    # IMAGE resource. The instance ID is deterministic (FNV-64 of the
+    # bare filename) so tuning XMLs can hard-reference it without a
+    # lookup pass. When we ship more icons later, each just needs to
+    # sit in package_src/ with the name it's referenced by.
+    for png_path in sorted(package_src.glob("*.png")):
+        stem = png_path.stem  # e.g. "llamafone_icon"
+        instance = fnv1_64_lower(stem)
+        body = png_path.read_bytes()
+        resources.append((TYPE_IMAGE_PNG, 0, instance, body))
+        print(f"  + PNG                 {png_path.name} "
+              f"(instance={hex(instance)}, type={hex(TYPE_IMAGE_PNG)}, "
+              f"{len(body):,} bytes)")
+
     # Tuning XMLs -- pick the resource type from the root <I i="..."> attribute
     for xml_path in xml_files:
         xml_text = xml_path.read_text(encoding='utf-8')
@@ -359,12 +419,23 @@ def main():
         # WorldTour). At group=0 the UI ignores it.
         if kind == "pie_menu_category":
             display_name = read_display_name_hash(xml_text) or 0
-            simdata_body = build_pie_menu_category_simdata(display_name, tuning_name)
+            # Pull the icon resource key from the XML so the SimData
+            # references the SAME icon the tuning does. Without this,
+            # the SimData would default to the base-game cellphone icon
+            # and the phone home would show our tuning's category with
+            # a plain phone icon instead of our custom PNG.
+            icon_type, icon_group, icon_inst = read_icon_key(xml_text)
+            simdata_body = build_pie_menu_category_simdata(
+                display_name, tuning_name,
+                icon_group=icon_group if icon_type else _DEFAULT_ICON_GROUP,
+                icon_instance=icon_inst if icon_type else _DEFAULT_ICON_INSTANCE,
+            )
             resources.append((TYPE_SIMDATA, SIMDATA_PMC_GROUP, instance, simdata_body))
             print(f"  + SimData              {xml_path.stem} "
                   f"(instance={hex(instance)}, type={hex(TYPE_SIMDATA)}, "
                   f"group={hex(SIMDATA_PMC_GROUP)}, "
-                  f"display_name=0x{display_name:08X})")
+                  f"display_name=0x{display_name:08X}, "
+                  f"icon_instance={hex(icon_inst) if icon_inst else '(default)'})")
 
     build_package(resources, out_path)
     size_kb = os.path.getsize(out_path) / 1024

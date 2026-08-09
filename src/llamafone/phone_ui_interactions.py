@@ -688,6 +688,36 @@ def _setting_definitions():
             "getter": lambda: "",
             "hint":   "Set per-contact preferences: mute, paused ('asked for space'), priority, or freeform notes.",
         },
+        {
+            "key":    "dating_enabled",
+            "label":  "Dating layer: {value}",
+            "kind":   "bool",
+            "getter": config.get_dating_enabled,
+            "hint":   "Master switch for the dating flows (cold outreach + friend setups). Off by default -- turn on to have random single sims text you and to enable 'know anyone single?' friend-introductions.",
+        },
+        {
+            "key":    "dating_orientation",
+            "label":  "Dating orientation: {value}",
+            "kind":   "enum",
+            "getter": config.get_dating_orientation,
+            "values": ("auto", "men", "women", "anyone"),
+            "hint":   "Which sims are considered as candidates. 'auto' reads your sim's CAS preferences; the others explicitly override. Tap to cycle.",
+        },
+        {
+            "key":    "dating_cold_outreach_weight",
+            "label":  "Cold outreach weight: {value}",
+            "kind":   "int",
+            "getter": config.get_dating_cold_outreach_weight,
+            "bounds": (0, 100),
+            "hint":   "How often the cold-outreach flow fires vs. regular auto-events. 0 = off. Compares to auto_event_weights -- e.g. weight 20 alongside call:50/text:50 makes cold outreach roughly 17% of firings.",
+        },
+        {
+            "key":    "dating_setup_chain_enabled",
+            "label":  "Friend setups: {value}",
+            "kind":   "bool",
+            "getter": config.get_dating_setup_chain_enabled,
+            "hint":   "When on, outgoing texts to friends are scanned for setup-request phrases ('know anyone single', 'set me up'). Match triggers a delayed introduction chain + friend follow-up.",
+        },
     ]
 
 
@@ -699,6 +729,10 @@ def _format_value(setting):
         val = "?"
     if setting["kind"] == "bool":
         val = "ON" if val else "OFF"
+    elif setting["kind"] == "enum":
+        # Show value as-is; the enum-cycle handler stringifies before
+        # writing so the getter always returns a display-ready string.
+        val = str(val).upper() if val is not None else "?"
     return setting["label"].format(value=val)
 
 
@@ -795,6 +829,26 @@ def _on_setting_picked(anchor_sim, setting):
         return
     if kind == "int":
         _show_int_input(anchor_sim, setting)
+        return
+    if kind == "enum":
+        # Cycle to the next value in the tuple. No sub-dialog: tapping
+        # again just advances the cycle, and the row label re-renders
+        # to show the new selection.
+        values = setting.get("values") or ()
+        if not values:
+            _show_settings_picker(anchor_sim)
+            return
+        try:
+            current = str(setting["getter"]()).lower()
+        except Exception:
+            current = ""
+        try:
+            idx = list(values).index(current)
+        except ValueError:
+            idx = -1
+        next_val = values[(idx + 1) % len(values)]
+        config.set_setting(setting["key"], next_val)
+        _show_settings_picker(anchor_sim)
         return
     if kind == "action":
         # Action items open a sub-flow. Route by key -- we intentionally

@@ -567,11 +567,15 @@ section > p { max-width: 780px; margin-left: auto; margin-right: auto; }
   margin-top: 2.5rem;
 }
 
-/* Hero row (Phone Calls / Text / Auto-Events / Llamadate) -- needs
- * to fit four cards on a single line on desktop, so its minmax is
- * tighter than the default context grid. */
+/* Hero row (Phone Calls / Text Messages / Auto-Events / Llamadate /
+ * Interacts-with-game) -- five cards on a single desktop line. The
+ * features section overrides .container's default max-width to give
+ * these cards enough room to render 2-3 lines of copy each. */
 .feature-grid-hero {
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+#features.container {
+  max-width: 1360px;
 }
 
 .feature-card {
@@ -669,6 +673,7 @@ section > p { max-width: 780px; margin-left: auto; margin-right: auto; }
 .icon-storyline { background: linear-gradient(135deg, #c8a8ff, #9b75e8); }
 .icon-auto      { background: linear-gradient(135deg, #ffb88c, #ff7e5f); }
 .icon-dating    { background: linear-gradient(135deg, #ff9d9d, #e94b4b); }
+.icon-interact  { background: linear-gradient(135deg, #b3e0f2, #4a9bc4); }
 
 /* -------- Screenshots -------- */
 

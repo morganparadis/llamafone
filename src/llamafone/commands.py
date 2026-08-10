@@ -239,6 +239,77 @@ try:
             output("[Llamafone] fire_now() raised an exception -- see log.")
 
     # -------------------------------------------------------------------------
+    # Dating (v3.5)
+    # -------------------------------------------------------------------------
+
+    @sims4.commands.Command("llama.dating_status", command_type=sims4.commands.CommandType.Live)
+    def cmd_dating_status(_connection=None):
+        """Report the dating layer state: opt-ins, frequency, and how
+        many candidates the active sim's world yields under the active
+        CAS-preference filter."""
+        from . import dating
+        output = sims4.commands.CheatOutput(_connection)
+        opted_ids = dating.get_opted_in_sim_ids()
+        output(f"[Llamafone] opted-in sims: {len(opted_ids)}")
+        try:
+            weight = config.get_dating_cold_outreach_weight()
+        except Exception:
+            weight = 0
+        output(f"[Llamafone] cold_outreach frequency weight: {weight}")
+        output(f"[Llamafone] cold_outreach_enabled: {dating.cold_outreach_enabled()}")
+        main = sim_context.get_main_sim_info()
+        if main is None:
+            output("[Llamafone] No main sim -- enter a household first.")
+            return
+        output(f"[Llamafone] active sim: {main.first_name} {main.last_name}")
+        main_id = getattr(main, "sim_id", None)
+        output(f"[Llamafone] active sim opted-in: {dating.is_sim_opted_in(main_id)}")
+        output(f"[Llamafone] resolved orientation: {dating.resolve_orientation(main)}")
+        candidates = dating.get_candidates_for(main)
+        output(f"[Llamafone] unmet candidates: {len(candidates)}")
+        # Also report mutual-friend eligibility -- helps testing the
+        # "Alice gave me your number" narrative frame vs the "we've
+        # never met, saw you on the app" fallback.
+        with_mutual = []
+        without_mutual = []
+        for c in candidates:
+            try:
+                mutual = dating.find_mutual_friend(main, c.get("sim_info"))
+            except Exception:
+                mutual = None
+            if mutual is not None:
+                with_mutual.append((c.get("name", "?"),
+                                    getattr(mutual, "first_name", "?")))
+            else:
+                without_mutual.append(c.get("name", "?"))
+        output(f"[Llamafone]   with mutual friend: {len(with_mutual)}")
+        for name, mutual in with_mutual[:5]:
+            output(f"    - {name} (via {mutual})")
+        if len(with_mutual) > 5:
+            output(f"    ... and {len(with_mutual) - 5} more")
+        output(f"[Llamafone]   solo (no mutual): {len(without_mutual)}")
+        for name in without_mutual[:3]:
+            output(f"    - {name}")
+        if len(without_mutual) > 3:
+            output(f"    ... and {len(without_mutual) - 3} more")
+
+    @sims4.commands.Command("llama.dating_outreach", command_type=sims4.commands.CommandType.Live)
+    def cmd_dating_outreach(_connection=None):
+        """Force-fire one cold-outreach text now (skips the auto_events
+        cadence). Useful for smoke-testing the dating layer without
+        waiting for a random fire."""
+        from . import dating
+        output = sims4.commands.CheatOutput(_connection)
+        if not _require_config(output):
+            return
+        if not dating.cold_outreach_enabled():
+            output("[Llamafone] Cold outreach is disabled. Opt at least one sim in from "
+                   "Llamafone Settings > Dating, and make sure frequency isn't Off.")
+            return
+        output("[Llamafone] Firing a cold-outreach text now... check the phone for an incoming text.")
+        dating.generate_cold_outreach()
+
+    # -------------------------------------------------------------------------
     # Moodlet investigation (debug)
     # -------------------------------------------------------------------------
 

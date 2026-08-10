@@ -26,7 +26,7 @@ import traceback
 
 from interactions.base.super_interaction import SuperInteraction
 
-from . import phone, notifications, config, sim_context
+from . import phone, notifications, config, sim_context, dating
 
 
 _MESSAGE_INPUT = "message"
@@ -688,6 +688,13 @@ def _setting_definitions():
             "getter": lambda: "",
             "hint":   "Set per-contact preferences: mute, paused ('asked for space'), priority, or freeform notes.",
         },
+        {
+            "key":    "dating_submenu",
+            "label":  "Dating...",
+            "kind":   "action",
+            "getter": lambda: "",
+            "hint":   "Turn dating suggestions on/off per household sim, and set how often they arrive. Dating is off by default for every sim -- you have to opt each one in.",
+        },
     ]
 
 
@@ -697,8 +704,29 @@ def _format_value(setting):
         val = setting["getter"]()
     except Exception:
         val = "?"
-    if setting["kind"] == "bool":
+    kind = setting["kind"]
+    if kind == "bool":
         val = "ON" if val else "OFF"
+    elif kind == "enum":
+        # Show value as-is; the enum-cycle handler stringifies before
+        # writing so the getter always returns a display-ready string.
+        val = str(val).upper() if val is not None else "?"
+    elif kind == "preset_int":
+        # Map the stored int back to its preset label. Pick the preset
+        # whose value is closest to (but not exceeding) the current
+        # value; a stored value larger than the biggest preset shows
+        # the biggest preset's label. Keeps the display honest even
+        # if a user edits the JSON directly.
+        presets = setting.get("presets") or ()
+        try:
+            current = int(val)
+        except Exception:
+            current = 0
+        chosen_label = presets[0][0] if presets else "?"
+        for label, preset_val in presets:
+            if current >= preset_val:
+                chosen_label = label
+        val = chosen_label
     return setting["label"].format(value=val)
 
 
@@ -779,6 +807,339 @@ def _show_settings_picker(anchor_sim):
         return False
 
 
+# Frequency presets shared between the sub-picker row and the setting
+# writer. Duplicated in the format helper so the display label matches
+# _on_setting_picked's cycle logic. Keep in sync.
+_DATING_FREQUENCY_PRESETS = (
+    ("Off",       0),
+    ("Rarely",    10),
+    ("Sometimes", 25),
+    ("Often",     50),
+)
+
+
+def _current_dating_frequency_label():
+    try:
+        current = int(config.get_dating_cold_outreach_weight())
+    except Exception:
+        current = 0
+    label = _DATING_FREQUENCY_PRESETS[0][0]
+    for lbl, val in _DATING_FREQUENCY_PRESETS:
+        if current >= val:
+            label = lbl
+    return label
+
+
+# Cycle order for the per-sim gender preference. Default is 'anyone'
+# (no filter) -- we don't auto-detect from CAS because that API is
+# unreliable across pack combos. Players narrow the pool from here.
+_GENDER_PREF_CYCLE = ("anyone", "men", "women")
+_GENDER_PREF_LABELS = {
+    "anyone": "Anyone",
+    "men":    "Men",
+    "women":  "Women",
+}
+
+# Full cycle order for the per-sim age preference. The picker filters
+# this down based on the acting sim's own age band -- teens can only
+# match teens, adults never match teens, so it makes no sense to
+# offer 'teen only' to an adult (they'd get zero candidates).
+_AGE_PREF_CYCLE_FULL = ("auto", "teen", "young_adult", "adult", "elder", "any")
+_AGE_PREF_LABELS = {
+    "auto":        "Auto (same age tier)",
+    "teen":        "Teen only",
+    "young_adult": "Young Adult only",
+    "adult":       "Adult only",
+    "elder":       "Elder only",
+    "any":         "Any adult age",
+}
+
+
+def _age_pref_cycle_for_sim(sim_info):
+    """Which age_pref values make sense to offer this sim. Teens
+    only ever match teens (hard rule in dating._pass_age_pref), so
+    the picker shows just 'auto' and 'teen'. Adults get every adult-
+    tier option plus 'any'. If we can't determine the seeker's age,
+    fall through to the full list (permissive)."""
+    from . import dating as _d
+    try:
+        rank = _d._age_rank(sim_info)
+    except Exception:
+        rank = None
+    if rank == 0:
+        return ("auto", "teen")
+    if rank is None:
+        return _AGE_PREF_CYCLE_FULL
+    return ("auto", "young_adult", "adult", "elder", "any")
+
+
+def _extract_sim_info(anchor):
+    """The Sims 4 interaction system hands us the Sim (game object)
+    on `self.sim`; the sim_info is the persistent representation of
+    that Sim's data. Some helpers pass one, some the other -- normalize
+    so downstream code just gets sim_info."""
+    if anchor is None:
+        return None
+    si = getattr(anchor, "sim_info", None)
+    return si if si is not None else anchor
+
+
+def _show_bio_edit_dialog(anchor_sim, sim_id):
+    """Text-input dialog for editing the player's Llamadate bio for
+    the current sim. Reuses the multi-line height trick from
+    _show_message_input so the player has room to write a paragraph.
+    On submit or cancel, re-opens the dating settings picker so the
+    player stays in the flow."""
+    try:
+        from sims4.localization import LocalizationHelperTuning
+        from ui.ui_dialog_generic import UiDialogTextInputOkCancel
+
+        sim_info = _extract_sim_info(anchor_sim)
+        first = getattr(sim_info, "first_name", "you")
+        existing = dating.get_sim_player_bio(sim_id)
+
+        loc_title = LocalizationHelperTuning.get_raw_text(f"{first}'s Llamadate bio")
+        loc_text = LocalizationHelperTuning.get_raw_text(
+            f"Write a bio for {first}'s Llamadate profile. Matches you "
+            "message will see this alongside your first text, so make "
+            "it a good pitch. Leave blank to clear."
+        )
+        loc_ok = LocalizationHelperTuning.get_raw_text("Save")
+        loc_cancel = LocalizationHelperTuning.get_raw_text("Cancel")
+
+        _FIELD = "bio"
+
+        class _BioInputDialog(UiDialogTextInputOkCancel):
+            def on_text_input(self, text_input_name='', text_input=''):
+                self.text_input_responses[text_input_name] = text_input
+                return True
+
+            def build_msg(self, text_input_overrides=None, additional_tokens=(), **kwargs):
+                msg = super().build_msg(additional_tokens=additional_tokens, **kwargs)
+                ti = msg.text_input.add()
+                ti.text_input_name = _FIELD
+                # Multi-line height so a paragraph doesn't feel cramped.
+                ti.height = 140
+                if existing:
+                    try:
+                        ti.initial_value = LocalizationHelperTuning.get_raw_text(existing)
+                    except Exception:
+                        pass
+                return msg
+
+        dialog = _BioInputDialog.TunableFactory().default(
+            anchor_sim,
+            text=lambda *_a, **_kw: loc_text,
+            title=lambda *_a, **_kw: loc_title,
+            text_ok=lambda *_a, **_kw: loc_ok,
+            text_cancel=lambda *_a, **_kw: loc_cancel,
+        )
+
+        def _on_response(response_dialog):
+            try:
+                if response_dialog.accepted:
+                    new_bio = (response_dialog.text_input_responses or {}).get(_FIELD, "")
+                    dating.set_sim_player_bio(sim_id, new_bio)
+            except Exception:
+                _log_exc("bio edit on_response failed")
+            # Re-open the settings picker whether they saved or canceled.
+            _show_dating_settings_picker(anchor_sim)
+
+        dialog.add_listener(_on_response)
+        dialog.show_dialog()
+        return True
+    except Exception:
+        _log_exc("_show_bio_edit_dialog outer failure")
+        _show_dating_settings_picker(anchor_sim)
+        return False
+
+
+def _show_dating_settings_picker(anchor_sim):
+    """Llamadate settings for the sim whose phone this is. Per-sim,
+    not per-household: opening Llamadate on Ingrid's phone shows
+    Ingrid's settings; opening it on Aksel's phone shows Aksel's.
+
+    Rows:
+      1. Llamadate: ON/OFF -- inbound cold outreach toggle for THIS sim
+      2. Interested in: Auto (CAS) / Men / Women / Anyone
+      3. Age range: Auto / Teen / Young Adult / Adult / Elder / Any
+      4. Frequency: Off / Rarely / Sometimes / Often (global; affects
+         all opted-in sims because it's the auto-events cadence knob)
+    """
+    try:
+        from sims4.localization import LocalizationHelperTuning
+        from ui.ui_dialog_picker import UiItemPicker, BasePickerRow
+
+        sim_info = _extract_sim_info(anchor_sim)
+        sim_id = getattr(sim_info, "sim_id", None)
+        first = getattr(sim_info, "first_name", "you")
+        entry = dating.get_sim_dating_entry(sim_id)
+
+        loc_title = LocalizationHelperTuning.get_raw_text(f"Llamadate — {first}")
+        loc_text = LocalizationHelperTuning.get_raw_text(
+            f"Turn Llamadate on to start getting messages from local "
+            f"singles {first} hasn't met -- each text explains how they "
+            "got the number. Filters below narrow the pool."
+        )
+        loc_ok = LocalizationHelperTuning.get_raw_text("Change")
+        loc_cancel = LocalizationHelperTuning.get_raw_text("Done")
+
+        dialog = UiItemPicker.TunableFactory().default(
+            anchor_sim,
+            title=lambda *_a, **_kw: loc_title,
+            text=lambda *_a, **_kw: loc_text,
+            text_ok=lambda *_a, **_kw: loc_ok,
+            text_cancel=lambda *_a, **_kw: loc_cancel,
+        )
+        try:
+            dialog.max_selectable = 1
+        except Exception:
+            pass
+        try:
+            dialog.min_selectable = 1
+        except Exception:
+            pass
+
+        # row_actions[idx] = (kind, payload)
+        row_actions = []
+
+        opted_in = entry.get("opted_in", False)
+        row_actions.append(("toggle_optin", sim_id))
+        dialog.add_row(BasePickerRow(
+            option_id=len(row_actions) - 1,
+            name=LocalizationHelperTuning.get_raw_text(
+                f"Llamadate: {'ON' if opted_in else 'OFF'}"
+            ),
+            row_description=LocalizationHelperTuning.get_raw_text(
+                f"When on, {first} occasionally receives a first-time "
+                "text from an unmet sim. Off by default."
+            ),
+            is_enable=True,
+        ))
+
+        gp = entry.get("gender_pref", "anyone")
+        gp_label = _GENDER_PREF_LABELS.get(gp, gp)
+        row_actions.append(("cycle_gender", sim_id))
+        dialog.add_row(BasePickerRow(
+            option_id=len(row_actions) - 1,
+            name=LocalizationHelperTuning.get_raw_text(f"Interested in: {gp_label}"),
+            row_description=LocalizationHelperTuning.get_raw_text(
+                "Filter your dating pool by gender."
+            ),
+            is_enable=True,
+        ))
+
+        ap = entry.get("age_pref", "auto")
+        # Filter the offered age options to what makes sense for this
+        # sim's age band -- teens see auto/teen only; adults see the
+        # adult tiers (no teen). Prevents "0 candidates" states where
+        # the user set a value that can never match anyone.
+        age_cycle = _age_pref_cycle_for_sim(sim_info)
+        # If the stored pref isn't in the cycle for this sim, snap it
+        # to 'auto' so the display isn't lying.
+        if ap not in age_cycle:
+            ap = "auto"
+        ap_label = _AGE_PREF_LABELS.get(ap, ap)
+        row_actions.append(("cycle_age", sim_id))
+        dialog.add_row(BasePickerRow(
+            option_id=len(row_actions) - 1,
+            name=LocalizationHelperTuning.get_raw_text(f"Age range: {ap_label}"),
+            row_description=LocalizationHelperTuning.get_raw_text(
+                "Filter your dating pool by age. Auto uses the default "
+                "rule (teens match teens; adults match within one age "
+                "tier of their own)."
+            ),
+            is_enable=True,
+        ))
+
+        # Player-written bio -- gets sent alongside every outbound
+        # Llamadate intro so the recipient's LLM has context to react
+        # to. Shows a short preview of the current bio in the row
+        # label, or "(not set)" when empty.
+        current_bio = (entry.get("bio") or "").strip()
+        bio_preview = current_bio[:40] + ("..." if len(current_bio) > 40 else "") if current_bio else "(not set)"
+        row_actions.append(("edit_bio", sim_id))
+        dialog.add_row(BasePickerRow(
+            option_id=len(row_actions) - 1,
+            name=LocalizationHelperTuning.get_raw_text(f"Your bio: {bio_preview}"),
+            row_description=LocalizationHelperTuning.get_raw_text(
+                f"Write {first}'s Llamadate bio. This gets sent along "
+                "with every intro you send, so your matches see who "
+                "they're talking to. Tap to edit."
+            ),
+            is_enable=True,
+        ))
+
+        freq_label = _current_dating_frequency_label()
+        row_actions.append(("cycle_frequency", None))
+        dialog.add_row(BasePickerRow(
+            option_id=len(row_actions) - 1,
+            name=LocalizationHelperTuning.get_raw_text(f"Frequency: {freq_label}"),
+            row_description=LocalizationHelperTuning.get_raw_text(
+                "How often Llamadate texts arrive. Global setting -- "
+                "Off silences the feature even for opted-in sims."
+            ),
+            is_enable=True,
+        ))
+
+        def _on_response(response_dialog):
+            try:
+                if not response_dialog.accepted:
+                    _show_settings_picker(anchor_sim)
+                    return
+                picked = list(getattr(response_dialog, "picked_results", None) or ())
+                if not picked:
+                    _show_settings_picker(anchor_sim)
+                    return
+                idx = picked[0]
+                if idx is None or idx < 0 or idx >= len(row_actions):
+                    _show_dating_settings_picker(anchor_sim)
+                    return
+                kind, payload = row_actions[idx]
+                if kind == "toggle_optin":
+                    dating.set_sim_opted_in(payload, not dating.is_sim_opted_in(payload))
+                elif kind == "cycle_gender":
+                    current = dating.get_sim_gender_pref(payload)
+                    try:
+                        i = _GENDER_PREF_CYCLE.index(current)
+                    except ValueError:
+                        i = -1
+                    dating.set_sim_gender_pref(payload, _GENDER_PREF_CYCLE[(i + 1) % len(_GENDER_PREF_CYCLE)])
+                elif kind == "cycle_age":
+                    current = dating.get_sim_age_pref(payload)
+                    cycle = _age_pref_cycle_for_sim(_extract_sim_info(anchor_sim))
+                    try:
+                        i = cycle.index(current)
+                    except ValueError:
+                        i = -1
+                    dating.set_sim_age_pref(payload, cycle[(i + 1) % len(cycle)])
+                elif kind == "edit_bio":
+                    _show_bio_edit_dialog(anchor_sim, payload)
+                    return  # dialog reopens itself on submit / cancel
+                elif kind == "cycle_frequency":
+                    try:
+                        current = int(config.get_dating_cold_outreach_weight())
+                    except Exception:
+                        current = 0
+                    cur_idx = 0
+                    for i, (_l, v) in enumerate(_DATING_FREQUENCY_PRESETS):
+                        if current >= v:
+                            cur_idx = i
+                    next_idx = (cur_idx + 1) % len(_DATING_FREQUENCY_PRESETS)
+                    _lbl, next_val = _DATING_FREQUENCY_PRESETS[next_idx]
+                    config.set_setting("dating_cold_outreach_weight", int(next_val))
+                _show_dating_settings_picker(anchor_sim)
+            except Exception:
+                _log_exc("dating settings: on_response failed")
+
+        dialog.add_listener(_on_response)
+        dialog.show_dialog()
+        return True
+    except Exception:
+        _log_exc("_show_dating_settings_picker outer failure")
+        return False
+
+
 def _on_setting_picked(anchor_sim, setting):
     """Handler for a picked row -- toggle a bool, open a numeric input,
     or invoke a named action. Re-opens the settings picker after so the
@@ -790,11 +1151,58 @@ def _on_setting_picked(anchor_sim, setting):
         except Exception:
             current = False
         config.set_setting(setting["key"], not current)
-        # Re-open the picker to show the new state.
-        _show_settings_picker(anchor_sim)
+        # Re-open whichever picker this setting belongs to.
+        _reopen_home_for(anchor_sim, setting)
         return
     if kind == "int":
         _show_int_input(anchor_sim, setting)
+        return
+    if kind == "enum":
+        # Cycle to the next value in the tuple. No sub-dialog: tapping
+        # again just advances the cycle, and the row label re-renders
+        # to show the new selection.
+        values = setting.get("values") or ()
+        if not values:
+            _show_settings_picker(anchor_sim)
+            return
+        try:
+            current = str(setting["getter"]()).lower()
+        except Exception:
+            current = ""
+        try:
+            idx = list(values).index(current)
+        except ValueError:
+            idx = -1
+        next_val = values[(idx + 1) % len(values)]
+        config.set_setting(setting["key"], next_val)
+        # Re-open whichever picker the setting lives in. Dating rows
+        # live in the dating sub-picker; everything else in the main
+        # settings picker.
+        _reopen_home_for(anchor_sim, setting)
+        return
+    if kind == "preset_int":
+        # Cycle to the next preset value. Compares CURRENT int to the
+        # preset values (not labels) so a stored 25 correctly advances
+        # from "Sometimes" to "Often" even if the config was hand-
+        # edited to a non-preset value like 27.
+        presets = setting.get("presets") or ()
+        if not presets:
+            _reopen_home_for(anchor_sim, setting)
+            return
+        try:
+            current = int(setting["getter"]())
+        except Exception:
+            current = 0
+        # Find the preset closest to (but not exceeding) current; that's
+        # the "logical" current selection.
+        idx = 0
+        for i, (_label, pval) in enumerate(presets):
+            if current >= pval:
+                idx = i
+        next_idx = (idx + 1) % len(presets)
+        _next_label, next_val = presets[next_idx]
+        config.set_setting(setting["key"], int(next_val))
+        _reopen_home_for(anchor_sim, setting)
         return
     if kind == "action":
         # Action items open a sub-flow. Route by key -- we intentionally
@@ -804,10 +1212,21 @@ def _on_setting_picked(anchor_sim, setting):
         if key == "manage_contacts":
             _show_contact_manager_picker(anchor_sim)
             return
+        if key == "dating_submenu":
+            _show_dating_settings_picker(anchor_sim)
+            return
         # Unknown action -- log and re-open the picker
         _log(f"_on_setting_picked: unknown action key {key!r}")
         _show_settings_picker(anchor_sim)
         return
+
+
+def _reopen_home_for(anchor_sim, setting):
+    """After editing a setting row, re-open the picker it lives in.
+    Dating rows are all handled by _show_dating_settings_picker
+    directly (they don't go through _on_setting_picked), so every
+    remaining setting belongs to the main picker."""
+    _show_settings_picker(anchor_sim)
 
 
 def _show_int_input(anchor_sim, setting):
@@ -1275,6 +1694,315 @@ def _show_contact_note_input(anchor_sim, sim_id, contact):
         _show_contact_actions(anchor_sim, sim_id, contact)
         return False
     return True
+
+
+# ---------------------------------------------------------------------------
+# Outbound Send-Intro flow (v3.5 dating)
+# ---------------------------------------------------------------------------
+#
+# Player picks an unmet sim from a filtered sim picker, then writes their
+# OWN intro text (the mod never generates outbound intros). On submit we
+# establish a real Sims 4 relationship between the two sims and route the
+# message through phone.send_text -- from that point the recipient is in
+# the seeker's relationship tracker like any other contact.
+
+
+def _gather_intro_target_choices(seeker_sim_info):
+    """(sim_id, contact_dict) pairs for sims eligible as new-intro
+    targets. Wraps dating.eligible_intro_targets_for(); kept here so
+    the picker uses the same option_id -> contact index trick the
+    existing recipient picker uses."""
+    if not seeker_sim_info:
+        return []
+    try:
+        candidates = dating.eligible_intro_targets_for(seeker_sim_info)
+    except Exception:
+        _log_exc("_gather_intro_target_choices: eligible_intro_targets_for raised")
+        return []
+    out = []
+    seen = set()
+    for contact in candidates:
+        si = contact.get("sim_info")
+        sid = getattr(si, "sim_id", None) if si is not None else None
+        if sid is None or sid in seen:
+            continue
+        seen.add(sid)
+        out.append((sid, contact))
+    return out
+
+
+def _show_intro_target_picker(seeker_sim_info, on_picked):
+    """Sim picker filtered to unmet eligible dating candidates. Mirrors
+    _show_recipient_picker's structure but pulls from the dating
+    candidate pool instead of the seeker's existing contacts."""
+    _log(f"_show_intro_target_picker(seeker={getattr(seeker_sim_info, 'first_name', '?')})")
+    choices = _gather_intro_target_choices(seeker_sim_info)
+    _log(f"  {len(choices)} intro-target choices")
+    if not choices:
+        notifications.show_error(
+            "No eligible sims available to introduce yourself to. This "
+            "usually means either the world has no unmet sims matching "
+            "your CAS romantic preferences, or your active sim doesn't "
+            "have romantic preferences set. Set them in Change Sim and "
+            "try again."
+        )
+        return False
+    try:
+        from sims4.localization import LocalizationHelperTuning
+        from ui.ui_dialog_picker import UiSimPicker, SimPickerRow
+
+        loc_title = LocalizationHelperTuning.get_raw_text("Llamadate")
+        loc_text = LocalizationHelperTuning.get_raw_text(
+            "Swipe through your feed. Someone catching your eye? Tap "
+            "to peek at their profile before you slide into their DMs."
+        )
+        loc_ok = LocalizationHelperTuning.get_raw_text("View profile")
+        loc_cancel = LocalizationHelperTuning.get_raw_text("Not tonight")
+
+        dialog = UiSimPicker.TunableFactory().default(
+            seeker_sim_info,
+            title=lambda *_a, **_kw: loc_title,
+            text=lambda *_a, **_kw: loc_text,
+            text_ok=lambda *_a, **_kw: loc_ok,
+            text_cancel=lambda *_a, **_kw: loc_cancel,
+        )
+        try:
+            dialog.max_selectable = 1
+        except Exception:
+            pass
+        try:
+            dialog.min_selectable = 1
+        except Exception:
+            pass
+
+        option_to_contact = {}
+        for idx, (sid, contact) in enumerate(choices):
+            try:
+                row = SimPickerRow(sid)
+                row.option_id = idx
+                dialog.add_row(row)
+                option_to_contact[idx] = contact
+            except Exception:
+                _log_exc(f"intro-picker add_row failed for sid={sid}")
+                continue
+
+        def _on_response(response_dialog):
+            try:
+                if not response_dialog.accepted:
+                    return
+                picked = list(getattr(response_dialog, "picked_results", None) or ())
+                if not picked:
+                    return
+                contact = option_to_contact.get(picked[0])
+                if not contact:
+                    notifications.show_error("Couldn't resolve the selected sim. Try again.")
+                    return
+                on_picked(contact)
+            except Exception:
+                _log_exc("intro-picker on_response failed")
+
+        dialog.add_listener(_on_response)
+        dialog.show_dialog()
+        return True
+    except Exception:
+        _log_exc("_show_intro_target_picker outer failure")
+        return False
+
+
+def _show_bio_dialog(seeker_sim_info, contact, bio_text, on_write_intro, on_back=None):
+    """Present the picked sim's dating-app bio with two options:
+      OK     -> proceed to the text-input dialog (calls on_write_intro).
+      Cancel -> Back to the picker (calls on_back if provided) -- the
+                player didn't like this profile and wants to swipe on.
+
+    The bio text is shown in the dialog body; the sim's portrait is
+    used as the dialog icon so the player has a visual anchor.
+    """
+    try:
+        from sims4.localization import LocalizationHelperTuning
+        from ui.ui_dialog import UiDialogOkCancel
+        from distributor.shared_messages import IconInfoData
+
+        target_si = contact.get("sim_info")
+        target_name = contact.get("name", "this sim")
+        loc_title = LocalizationHelperTuning.get_raw_text(f"{target_name}")
+        loc_text = LocalizationHelperTuning.get_raw_text(
+            bio_text if bio_text else
+            "(no bio yet -- their profile is pretty sparse.)"
+        )
+        loc_ok = LocalizationHelperTuning.get_raw_text("Message")
+        loc_cancel = LocalizationHelperTuning.get_raw_text("Back")
+
+        dialog = UiDialogOkCancel.TunableFactory().default(
+            seeker_sim_info,
+            title=lambda *_a, **_kw: loc_title,
+            text=lambda *_a, **_kw: loc_text,
+            text_ok=lambda *_a, **_kw: loc_ok,
+            text_cancel=lambda *_a, **_kw: loc_cancel,
+        )
+
+        def _on_response(response_dialog):
+            try:
+                if getattr(response_dialog, "accepted", False):
+                    on_write_intro()
+                elif on_back is not None:
+                    on_back()
+            except Exception:
+                _log_exc("bio dialog on_response failed")
+
+        dialog.add_listener(_on_response)
+        try:
+            icon = IconInfoData(obj_instance=target_si) if target_si is not None else None
+            if icon is not None:
+                dialog.show_dialog(icon_override=icon)
+            else:
+                dialog.show_dialog()
+        except Exception:
+            dialog.show_dialog()
+        return True
+    except Exception:
+        _log_exc("_show_bio_dialog outer failure")
+        return False
+
+
+def _start_outbound_intro(sim_info):
+    """Target picker -> generate bio -> bio dialog -> text-input ->
+    establish relationship -> phone.send_text. Player writes their own
+    intro; the mod never generates the outbound message body.
+
+    The Back button on the bio dialog re-opens the target picker
+    rather than dropping the player back to the phone home -- that
+    matches what a real dating app does (swipe left != quit).
+    """
+    def _reopen_picker():
+        _show_intro_target_picker(sim_info, _on_target)
+
+    def _on_target(contact):
+        target_si = contact.get("sim_info")
+        _log(f"_start_outbound_intro picked target name={contact.get('name','?')} "
+             f"sid={getattr(target_si, 'sim_id', '?')}")
+
+        def _on_message(message):
+            _log(f"_start_outbound_intro dispatching intro to {contact.get('name','?')}")
+            # DO NOT establish the relationship on send. We wait for the
+            # recipient's LLM reply and only add them to contacts if the
+            # reply signals interest -- matches real dating-app behavior
+            # where a rejection doesn't turn into an ongoing relationship.
+            # Journal the outbound intro NOW so it's recorded even if the
+            # reply LLM never comes back or fails. phone.send_text writes
+            # a second, fuller entry when the reply arrives; the two
+            # coexist (send record + full-exchange record) and give us
+            # the outbound history either way.
+            try:
+                from . import journal
+                seeker_name = getattr(sim_info, "first_name", "?")
+                target_name = contact.get("name", "?")
+                target_id = getattr(target_si, "sim_id", None) if target_si else None
+                seeker_id = getattr(sim_info, "sim_id", None)
+                journal.add_entry(
+                    "text",
+                    f"Sent Llamadate intro to {target_name}:\n"
+                    f"{seeker_name}: {message}",
+                    sim_name=target_name,
+                    recipient_name=seeker_name,
+                    sim_id=target_id,
+                    recipient_id=seeker_id,
+                )
+            except Exception:
+                _log_exc("journal.add_entry (outbound intro) raised")
+
+            try:
+                intro_suffix = dating.build_outbound_intro_suffix(sim_info, target_si)
+            except Exception:
+                _log_exc("build_outbound_intro_suffix raised")
+                intro_suffix = None
+            try:
+                rel_override = dating.build_outbound_relationship_override(sim_info, target_si)
+            except Exception:
+                _log_exc("build_outbound_relationship_override raised")
+                rel_override = None
+            # When the player has authored a Llamadate bio, that bio is
+            # the ONLY thing about the player's sim the recipient LLM
+            # should see -- no career, no aspiration, no traits. When
+            # they haven't, this returns None and the default
+            # _describe_recipient block runs (the fallback behavior).
+            try:
+                recipient_override = dating.build_outbound_recipient_override(sim_info)
+            except Exception:
+                _log_exc("build_outbound_recipient_override raised")
+                recipient_override = None
+
+            def _on_reply_generated(reply_text, error):
+                if error or not reply_text:
+                    _log(f"outbound reply not generated (error={error!r}); "
+                         "skipping relationship classify")
+                    return
+                try:
+                    dating.classify_reply_and_maybe_establish(
+                        seeker_si=sim_info,
+                        target_si=target_si,
+                        reply_text=reply_text,
+                    )
+                except Exception:
+                    _log_exc("classify_reply_and_maybe_establish raised")
+
+            phone.send_text(
+                contact, message,
+                callback=_on_reply_generated,
+                prompt_suffix=intro_suffix,
+                relationship_override=rel_override,
+                recipient_override=recipient_override,
+            )
+
+        def _open_intro_dialog():
+            if not _show_message_input("text", sim_info, contact, _on_message):
+                notifications.show_error(
+                    "Couldn't open the text input dialog. Try again, and if "
+                    "it keeps failing, check Llamafone_Log.txt."
+                )
+
+        def _on_bio(bio_text, error):
+            # Callback fires from the api_client background thread. The
+            # Sims 4 dialog API is threadsafe enough for direct calls
+            # here -- phone.py's reply flow does the same thing from
+            # the same callback context (see phone.py _show_reply).
+            if error:
+                _log(f"bio generation error: {error}; showing empty-bio dialog")
+            shown = _show_bio_dialog(
+                sim_info, contact, bio_text,
+                on_write_intro=_open_intro_dialog,
+                on_back=_reopen_picker,
+            )
+            if not shown:
+                # Bio dialog failed to open -- fall back to going
+                # straight to the intro so the flow doesn't dead-end.
+                _open_intro_dialog()
+
+        try:
+            dating.generate_bio_for(target_si, _on_bio)
+        except Exception:
+            _log_exc("generate_bio_for raised synchronously")
+            # If bio generation blows up synchronously, skip the bio
+            # step entirely and go straight to the intro dialog rather
+            # than leaving the player stranded.
+            _open_intro_dialog()
+
+    if not _show_intro_target_picker(sim_info, _on_target):
+        # The picker itself already surfaced an error notification if
+        # applicable; nothing more to do here.
+        pass
+
+
+class LlamafoneDatingInteraction(_LlamafonePhoneInteractionBase):
+    """Llamafone > Send Intro -- outbound flow for meeting NEW sims.
+    Opens a sim picker filtered to unmet, age/orientation-appropriate,
+    uncommitted sims. Player picks one, writes their own intro text,
+    and the mod establishes the relationship + routes the message
+    through the normal Llamafone text pipeline."""
+
+    def _fire(self):
+        sim_info = getattr(self.sim, "sim_info", None) or self.sim
+        _start_outbound_intro(sim_info)
 
 
 class LlamafoneSettingsInteraction(_LlamafonePhoneInteractionBase):

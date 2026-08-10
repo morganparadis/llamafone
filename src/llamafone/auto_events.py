@@ -149,6 +149,18 @@ def _pick_and_fire():
         return
 
     weights_map = get_event_weights()
+    # Dating cold outreach is a separate auto-event type. It's injected
+    # into the type/weight lists at pick time (not into the base cfg
+    # keys) so opting sims in is enough to make it available -- users
+    # never touch auto_event_types or auto_event_weights directly.
+    from . import dating as _dating
+    if _dating.cold_outreach_enabled():
+        dating_weight = config.get_dating_cold_outreach_weight()
+        if dating_weight > 0 and "dating" not in types:
+            types = list(types) + ["dating"]
+            weights_map = dict(weights_map) if weights_map else {}
+            weights_map["dating"] = dating_weight
+
     if weights_map:
         # Use configured weights (types not in weights_map get weight 0 and are skipped)
         weighted_types = [t for t in types if weights_map.get(t, 0) > 0]
@@ -194,6 +206,8 @@ def _pick_and_fire():
         phone.generate_call(callback=phone_done)
     elif chosen == "text":
         phone.generate_text(callback=phone_done)
+    elif chosen == "dating":
+        _dating.generate_cold_outreach(callback=phone_done)
     else:
         _log(f"Unknown event type: {chosen}")
 

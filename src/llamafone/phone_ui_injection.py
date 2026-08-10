@@ -21,6 +21,7 @@ import datetime
 _PHONE_INTERACTION_NAMES = (
     "Llamafone_Call",
     "Llamafone_Text",
+    "Llamafone_Dating",
     "Llamafone_Settings",
 )
 

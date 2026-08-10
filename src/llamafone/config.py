@@ -292,3 +292,26 @@ def get_reply_delay_max_seconds():
     return _int_setting_with_config_fallback("reply_delay_max_seconds", "reply_delay_max_seconds", 90)
 
 
+# ---------------------------------------------------------------------------
+# Dating (v3.5): opt-in dating-app layer.
+#
+# The feature is gated per-played-household-sim, not by a global switch.
+# Per-sim opt-in state lives in <save>/DatingOptIns.json (see dating.py);
+# users who never toggle any sim on see zero behavior change.
+#
+# The only knob in config is the cold-outreach frequency weight, which
+# tunes how often inbound dating texts fire relative to the other
+# auto-event types. Set to 0 to keep the feature disabled globally
+# without touching individual sim opt-ins.
+# ---------------------------------------------------------------------------
+
+
+def get_dating_cold_outreach_weight():
+    """Weight for cold-outreach auto-events relative to call/text. 0
+    disables the flow globally even if sims are opted-in. Default 20
+    lands at roughly 17% of firings alongside the stock call:50 /
+    text:50 weights."""
+    val = _int_setting_with_config_fallback("dating_cold_outreach_weight", "dating_cold_outreach_weight", 20)
+    return max(0, val)
+
+

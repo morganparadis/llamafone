@@ -149,10 +149,23 @@ def _get_trait_name(trait):
 
 def _read_relationship_for_target(rt, target_sim_id, sim_manager):
     """Read relationship data for a specific target sim using the tracker API."""
+    # Substring keywords (case-insensitive) that identify a bit as
+    # meaningful enough to surface. Only real matches against actual
+    # Sims 4 bit tuning names -- verified from live diagnostic dumps.
     _MEANINGFUL_BITS = (
-        "Friend", "Enemy", "Romantic", "Married", "Engaged",
-        "Divorced", "BFF", "Crush", "Partner", "Hate",
-        "Family", "Despise", "Sibling", "Parent", "Child",
+        "friend", "enemy", "romantic", "romance", "married", "spouse",
+        "engaged", "engagement", "fiance", "divorced", "bff", "crush",
+        "partner", "lover", "soulmate", "sweetheart", "dating",
+        "hate", "despise", "rival",
+        "family", "sibling", "brother", "sister", "parent", "mother",
+        "father", "child", "son", "daughter", "grand", "aunt", "uncle",
+        "niece", "nephew", "cousin", "inlaw",
+        # Post-breakup / strained
+        "broken", "ex", "former", "rejected", "awkward", "estranged",
+        "cheat", "betrayal", "bad", "nolonger", "hasbeen", "havebeen",
+        # Sentiments -- lowercase 'sentiment' catches sentimentBit_
+        "sentiment", "bitter", "spiteful", "adored", "guilty",
+        "motivating", "grateful",
     )
     _ROMANTIC_BITS = (
         "Romantic", "Married", "Engaged", "Crush", "Lover", "Partner",
@@ -163,14 +176,18 @@ def _read_relationship_for_target(rt, target_sim_id, sim_manager):
     if not other_si:
         return None
 
-    # Get relationship bits (collect raw bit names first, filter romantic ones later if romance==0)
+    # Get relationship bits (collect raw bit names first, filter romantic ones later if romance==0).
+    # Case-insensitive substring match on the tuning name -- sims 4 uses
+    # mixed casing (`sentimentBit_`, `RomanticCombo_`, `HasBeenExes`,
+    # etc.) so a case-sensitive check misses half the interesting bits.
     raw_bits = []
     try:
         bits = rt.get_all_bits(target_sim_id)
         if bits:
             for bit in bits:
                 bn = _get_trait_name(bit)
-                if any(kw in bn for kw in _MEANINGFUL_BITS):
+                bn_lc = bn.lower()
+                if any(kw in bn_lc for kw in _MEANINGFUL_BITS):
                     raw_bits.append(bn)
     except Exception:
         pass
@@ -258,32 +275,89 @@ def _read_relationship_for_target(rt, target_sim_id, sim_manager):
     # Whitelist of meaningful relationship words. Bits that don't match any
     # whitelisted word are internal/system bits and get dropped entirely
     # (instead of showing as "bit NoLongerFriends" or "sentimentBit Actor CloseTo Target...").
-    _STATUS_WHITELIST = (
-        "Friend", "Friends", "Friendly", "Good", "Best", "BFF",
-        "Enemy", "Hate", "Despise", "Rival",
-        "Married", "Spouse", "Engaged", "Fiance",
-        "Crush", "Lover", "Soulmate", "Sweetheart", "Dating",
-        "Romantic", "Partner",
-        "Broken", "BrokenUp", "Ex", "Former", "Divorced",
-        "NoLonger", "Estranged", "Lost", "HasBeen",
-        "Sibling", "Brother", "Sister",
-        "Parent", "Mother", "Father", "Mom", "Dad",
-        "Child", "Son", "Daughter",
-        "Grandparent", "Grandfather", "Grandmother", "Granny", "Grandpa",
-        "Grandchild", "Grandson", "Granddaughter",
-        "Aunt", "Uncle", "Niece", "Nephew", "Cousin",
-        "Family", "Inlaw", "InLaw", "Acquaintance",
+    # Junk bits that describe mechanics (social context, compatibility
+    # scoring, greetings, milestones) rather than actual relationship
+    # narrative. Filtered out entirely.
+    _JUNK_PATTERNS = (
+        "socialcontext", "compatibility", "attraction",
+        "hasmet", "greeted", "specialbits",
+        "getawaysuggested", "grieftarget",
+        "firstkiss", "havedonewoohoo",
+        "lifemilestone",
     )
+    # Standalone tokens to strip from the readable label (Sims 4
+    # internal directional markers, not user-facing words).
+    _NOISE_TOKENS = frozenset({
+        "actor", "target", "casual", "casually", "lt", "st",
+    })
 
     def _clean_status_label(bn):
-        stripped = bn.replace("RelationshipBit_", "").replace("Romantic_", "")
-        # Drop sentimentBit/familyRelationshipBitsAcquired and similar internal prefixes
-        parts = stripped.split("_")
-        kept = [p for p in parts if p in _STATUS_WHITELIST]
-        if kept:
-            # Combine adjacent tokens nicely (e.g. NoLonger + Friends -> "No Longer Friends")
-            return " ".join(kept).replace("NoLonger", "No Longer").replace("HasBeen", "Has Been").strip()
-        return ""
+        """Convert a Sims 4 relationship-bit tuning name into a short
+        human-readable label. Preserves direction for bits that name
+        Actor/Target explicitly so the LLM knows whose feeling/action
+        this is:
+
+          sentimentBit_Actor_BitterAt_Target_LT_PhoneBreakup
+            -> "You feel Bitter At Phone Breakup toward them"
+          romantic_Target_CheatedWith_Actor
+            -> "They Cheated With you"
+          RomanticCombo_BadRomance (no Actor/Target)
+            -> "Bad Romance"
+
+        Actor = the tracker owner (who we're building the message FROM
+        in this call). Target = the other sim. Whichever appears
+        first in the bit name is the subject of the action/feeling.
+        """
+        import re as _re
+        lbn_stripped = bn.lower().replace("_", "").replace("-", "")
+        # Reject junk (social-context, compatibility, attraction, etc.)
+        if any(pat in lbn_stripped for pat in _JUNK_PATTERNS):
+            return ""
+        # Determine direction from Actor/Target position in the bit name.
+        bn_lc = bn.lower()
+        actor_pos = bn_lc.find("actor")
+        target_pos = bn_lc.find("target")
+        if actor_pos >= 0 and target_pos >= 0:
+            direction = "you_them" if actor_pos < target_pos else "they_you"
+        else:
+            direction = None
+        is_sentiment = bn_lc.startswith("sentimentbit") or bn_lc.startswith("sentiment_")
+        # Strip one common prefix (longest / most specific first).
+        s = bn
+        for prefix in (
+            "RelationshipBit_", "relationshipbit_",
+            "sentimentBit_", "Sentiment_", "sentiment_",
+            "RomanticCombo_",
+            "Rel_Bit_", "relBit_", "relbit_",
+            "romantic-", "romantic_", "Romantic_",
+            "SpecialBits_",
+            "ShortTerm_", "shortterm_",
+            "friendship-", "friendship_",
+            "bit_",
+        ):
+            if s.startswith(prefix):
+                s = s[len(prefix):]
+                break
+        # Separators to spaces, then camelCase split (BadRomance -> Bad Romance).
+        s = s.replace("_", " ").replace("-", " ")
+        s = _re.sub(r"([a-z])([A-Z])", r"\1 \2", s)
+        # Drop noise tokens (Actor/Target/Casual/LT/ST).
+        parts = [w for w in s.split() if w.lower() not in _NOISE_TOKENS]
+        if not parts:
+            return ""
+        label = " ".join(w[:1].upper() + w[1:] for w in parts).strip()
+        # Wrap with direction so the LLM knows whose action / feeling.
+        if is_sentiment:
+            if direction == "you_them":
+                return f"You feel {label} toward them"
+            if direction == "they_you":
+                return f"They feel {label} toward you"
+            return f"Sentiment: {label}"
+        if direction == "you_them":
+            return f"You {label} them"
+        if direction == "they_you":
+            return f"They {label} you"
+        return label
 
     # Filter out romantic bits if platonic-now is set OR romance score is 0
     bit_labels = []
@@ -295,11 +369,16 @@ def _read_relationship_for_target(rt, target_sim_id, sim_manager):
         if label and label not in bit_labels:
             bit_labels.append(label)
 
+    # Sentiments (Sims 4 Growing Together+) already come through as
+    # `sentimentBit_*` entries in the relationship tracker above -- the
+    # keyword filter catches them, and _clean_status_label preserves
+    # their direction via the Actor/Target logic. So a separate pass
+    # against `sim_info.sentiment_tracker` would just duplicate.
     return {
         "sim_info": other_si,
         "sim_id": target_sim_id,
         "name": f"{other_si.first_name} {other_si.last_name}".strip(),
-        "status": ", ".join(bit_labels[:3]),
+        "status": ", ".join(bit_labels[:6]),
         "friendship": friendship,
         "romance": romance,
     }
@@ -589,9 +668,12 @@ def get_sim_relationships(sim_info, limit=8):
                     for bit in rel.relationship_bit_tracker.relationship_bits:
                         bit_name = bit.__name__
                         _visible_keywords = (
-                            "Friend", "Enemy", "Romantic", "Married", "Divorced",
-                            "BFF", "Acquaintance", "Hate", "Despise", "Crush",
-                            "Partner", "Engaged", "FamilyRelationship",
+                            "Friend", "Enemy", "Romantic", "Romance", "Married",
+                            "Divorced", "BFF", "Acquaintance", "Hate", "Despise",
+                            "Crush", "Partner", "Engaged", "Engagement",
+                            "FamilyRelationship", "Broken", "BrokenUp",
+                            "Ex_", "Rejected", "Awkward", "Estranged",
+                            "Cheat", "Betrayal", "Bad_", "Bitter",
                         )
                         if any(kw in bit_name for kw in _visible_keywords):
                             label = (bit_name
@@ -617,9 +699,14 @@ def get_sim_relationships(sim_info, limit=8):
                 except Exception:
                     pass
 
+                # Sentiments already come through as sentimentBit_
+                # entries in bit_labels above (the relationship tracker
+                # stores them alongside relationship bits). Reading
+                # sim_info.sentiment_tracker separately just duplicates.
+
                 entry = {"name": name}
                 if bit_labels:
-                    entry["status"] = ", ".join(bit_labels[:3])
+                    entry["status"] = ", ".join(bit_labels[:4])
                 if friendship is not None:
                     entry["friendship"] = friendship
                 if romance is not None and romance != 0:

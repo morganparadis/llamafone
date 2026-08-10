@@ -567,6 +567,13 @@ section > p { max-width: 780px; margin-left: auto; margin-right: auto; }
   margin-top: 2.5rem;
 }
 
+/* Hero row (Phone Calls / Text / Auto-Events / Llamadate) -- needs
+ * to fit four cards on a single line on desktop, so its minmax is
+ * tighter than the default context grid. */
+.feature-grid-hero {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+
 .feature-card {
   background: var(--paper);
   border-radius: var(--r-md);
@@ -661,6 +668,7 @@ section > p { max-width: 780px; margin-left: auto; margin-right: auto; }
 .icon-event     { background: linear-gradient(135deg, #ffd166, #f5a623); }
 .icon-storyline { background: linear-gradient(135deg, #c8a8ff, #9b75e8); }
 .icon-auto      { background: linear-gradient(135deg, #ffb88c, #ff7e5f); }
+.icon-dating    { background: linear-gradient(135deg, #ff9d9d, #e94b4b); }
 
 /* -------- Screenshots -------- */
 

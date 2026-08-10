@@ -404,6 +404,7 @@ def build_package(resources, out_path):
 # it matches the tuning reference exactly.
 STRINGS = {
     0x00CA1E00: "Llamafone",
+    0x00CA1F00: "Llamadate",
 }
 
 # STBL packaging:

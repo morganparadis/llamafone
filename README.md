@@ -2,7 +2,7 @@
 
 A phone-first AI mod for The Sims 4. Random sims call and text you in character — voices shaped by their traits, mood, relationships, and what's actually happening in your save. Bring your own AI — Claude, OpenAI, Gemini, or a local Ollama model — and pick up calls and texts that read like they were written for the people in front of you.
 
-**v3.4 highlights:** group texts, per-relationship contact preferences ("asked for space" auto-detected), weather + holiday awareness, past-event memory. Story updates, random events, and 3-act storylines are in the box too, for when you want them.
+**v3.5 highlights:** Llamadate (opt-in dating layer with Hinge-style profiles, per-sim bios, and reply-gated relationships), standalone Llamafone tile on the phone home screen, breakup context finally lands in every prompt. Plus everything from v3.4 — group texts, per-relationship contact preferences ("asked for space" auto-detected), weather + holiday awareness, past-event memory. Story updates, random events, and 3-act storylines are in the box too, for when you want them.
 
 **Site:** [morganparadis.github.io/llamafone](https://morganparadis.github.io/llamafone/)
 
@@ -17,7 +17,9 @@ A phone-first AI mod for The Sims 4. Random sims call and text you in character 
    - **Linux (Steam Proton):** `~/.steam/steam/steamapps/compatdata/<sims-4-app-id>/pfx/drive_c/users/steamuser/Documents/Electronic Arts/The Sims 4/Mods/`
 3. **Open `llamafone.cfg`** in any text editor, pick your `provider`, and paste your API key in `api_key`.
 4. **In The Sims 4:** **Game Options > Other > enable Custom Content and Script Mods**, then restart the game.
-5. You'll see a notification popup when the mod loads. Type `llama.status` in the cheat console to confirm setup and see all commands. Or tap your sim's phone → Social → Settings.
+5. You'll see a notification popup when the mod loads. Type `llama.status` in the cheat console to confirm setup and see all commands. Or tap your sim's phone → the Llamafone tile.
+
+If you forget the cfg, the mod writes a default one to your Mods folder on first launch with `api_key = YOUR_API_KEY_HERE`. You'll get a "not configured yet" notification directing you to edit it.
 
 No Python install required for end users — the release ships compiled `.pyc` bytecode.
 
@@ -68,18 +70,35 @@ Every call and text reads live save state and sends it to the AI as context. Nob
 
 ---
 
+## Llamadate (v3.5)
+
+An opt-in dating layer, per played sim. Set your bio, browse Hinge-style profiles of eligible strangers in your world, and either send an intro yourself or wait for a match to text you first.
+
+- **Phone → Llamafone → Llamadate** — pick a played sim, then Set Bio, Browse Profiles, or Send Intro. Each household sim opts in independently.
+- **Opt-in state is per-sim, per-save.** Turn it on / off individually under **Llamafone Settings → Dating**. Also configurable there: gender preference, age preference, and cold-outreach frequency (Off / Rarely / Sometimes / Often).
+- **Bio-only privacy.** If a sim has written a Llamadate bio, matches see *only* that bio — not their career, engagement, aspirations, kids, or traits. Skip the bio and matches see the usual sim context.
+- **Reply-gated relationships.** Replying to a match's intro (whether inbound cold outreach or your outbound intro) adds them to your contacts. A polite decline classifier means uninterested replies don't force the relationship.
+- **Mutual-friend intros when they exist.** When a real shared friend (friendship ≥ 20 on both sides) exists between sender and recipient, the outreach frames as a warm friend-of-a-friend intro without ever mentioning Llamadate. When there's no mutual, it frames as an explicit dating-app match with an invented plausible detail tied to the sender's traits.
+- **Committed sims filtered on both sides.** Married / engaged sims don't appear as candidates and don't send outreach. Age filter is symmetric — teens only match teens, adults default to within one age tier.
+- **Sims you already know are filtered out.** Exes, old friends, and coworkers don't appear in the Llamadate pool — it's for meeting new people.
+- **Same sim can't cold-outreach you twice.** Once a stranger has reached out, they're permanently excluded from your future pool for that save.
+
+Config: `dating_cold_outreach_weight` in `llamafone.cfg` (default `20`) controls global frequency of dating cold outreach in the auto-events pool. Set to `0` to disable inbound outreach entirely; outbound intros still work.
+
+---
+
 ## Group texts (v3.4)
 
 Send one message to 2–4 sims at once. Each recipient replies in their own voice, staggered like real texts arriving over a few minutes. Every reply sees what the others just said, so responses stay distinct instead of a chorus of "same".
 
-- **Phone → Social → Send Text** — the picker now allows multi-select. Pick 1 sim for a normal text, 2–4 for a group thread.
+- **Phone → Llamafone → Send Text** — the picker now allows multi-select. Pick 1 sim for a normal text, 2–4 for a group thread.
 - Dialog titles and reply prompts list the full roster: *"Group text with Sarah, Bob, Alice, and Kate"*.
 - Reply button fans out to the whole group — every active participant may respond.
 - A one-time briefing call at group creation (uses the default model) synthesizes each participant's voice and cross-relationships, then gets cached for every subsequent reply. Per-turn cost stays sane.
 - Group turns land in 1:1 prompts between shared participants as a `SHARED GROUP TEXT` excerpt block. When Alice later texts Sarah 1:1, the AI knows they were both just in a group with Bob and Kate.
 - Restarting a group with the same people resumes the existing thread (cached briefing intact) instead of spawning a duplicate.
 
-Configurable via **Phone → Social → Llamafone Settings**: `group_text_max_participants` (default 4, hard-cap 8), `group_text_enabled` (master toggle), `group_text_dropoff_enabled` (gentle "someone got busy" drop-off in later rounds, default on).
+Configurable via **Phone → Llamafone → Settings**: `group_text_max_participants` (default 4, hard-cap 8), `group_text_enabled` (master toggle), `group_text_dropoff_enabled` (gentle "someone got busy" drop-off in later rounds, default on).
 
 ---
 
@@ -87,7 +106,7 @@ Configurable via **Phone → Social → Llamafone Settings**: `group_text_max_pa
 
 Mute, "asked for space" (paused), or favorite (priority), plus a freeform note field — all scoped to a specific (household sim, contact) pair. Alice muting her ex doesn't affect Bob's phone activity with the same sim.
 
-- **Phone → Social → Llamafone Settings → Manage contacts** — pick a sim, pick an action. Contacts with an existing state or note surface first, tagged in brackets ([paused], [muted], note).
+- **Phone → Llamafone → Settings → Manage contacts** — pick a sim, pick an action. Contacts with an existing state or note surface first, tagged in brackets ([paused], [muted], note).
 - **Cheat command:** `llama.contact First Last muted|paused|priority|clear|note <text>` (scoped to the currently active household sim).
 - **The paused state is the interesting one.** Instead of blocking the contact, it drops their auto-event rate to 20% AND injects a boundary note into every AI prompt for that pair. A love-heavy ex might ignore it and keep calling; a decent friend apologizes; a mean one guilt-trips. The drama plays out based on who they are.
 - **Auto-detects distance signals.** "Leave me alone", "we're done", "need space", "back off", etc. in either direction (their message OR yours) auto-applies the matching state. Priority-tier contacts are exempt.
@@ -111,14 +130,15 @@ Open the cheat console with `Ctrl+Shift+C`, type a command, press Enter.
 
 Calls and texts show as in-game phone dialogs with the sim's portrait. **Click Reply on the popup** to type a response directly in a text-input dialog. Realistic reply delays make texts feel asynchronous; calls fire instantly. Weather, holidays, past shared events, in-person recency, and your contact preferences all shape the voice.
 
-### Phone UI (Phone → Social)
-The phone itself has three Llamafone items under the Social tile — no cheat console needed for everyday use:
+### Phone UI (Phone → Llamafone)
+Llamafone has its own home-screen tile on the phone — no more digging through Social. Tap it and you get:
 
-| Tile | What it does |
+| Item | What it does |
 |---|---|
 | **Call Someone** | Sim picker → recipient → topic input → Llamafone crafts and delivers the call |
 | **Send Text** | Same flow, but for texts. **Picker allows multi-select — 2 to 4 sims starts a group text.** |
-| **Llamafone Settings** | In-game settings panel with toggles for auto-events, reply delays, ghost contacts, group text size, plus a **Manage contacts** entry for per-relationship prefs |
+| **Llamadate** | Opt-in dating layer (see below). Set your bio, browse profiles, send intros. |
+| **Llamafone Settings** | In-game settings panel with toggles for auto-events, reply delays, ghost contacts, group text size, per-sim Llamadate opt-ins, plus a **Manage contacts** entry for per-relationship prefs |
 
 ### Storytelling
 | Command | What it does |
@@ -177,7 +197,7 @@ Available auto-event types: `call`, `text`, `event`, `goals`, `story`, `drama`. 
 
 With the defaults (20 min interval, 40% chance), you get something roughly every 50 real minutes on average.
 
-**Or toggle mid-session** via the in-game Settings panel (Phone → Social → Llamafone Settings) or via cheats:
+**Or toggle mid-session** via the in-game Settings panel (Phone → Llamafone → Settings) or via cheats:
 ```
 llama.auto_events on
 llama.auto_events off
@@ -189,7 +209,7 @@ llama.auto_events off
 
 Two paths to change settings:
 
-1. **In-game Settings panel** — Phone → Social → Llamafone Settings. Toggles + numeric inputs for runtime-tunable values. Writes back to `llamafone.cfg`, preserving your comments, and applies immediately.
+1. **In-game Settings panel** — Phone → Llamafone → Settings. Toggles + numeric inputs for runtime-tunable values. Writes back to `llamafone.cfg`, preserving your comments, and applies immediately.
 2. **Edit `llamafone.cfg` by hand** — then run `llama.reload` to pick up changes without restarting.
 
 ### Key settings
@@ -281,7 +301,7 @@ src/
     event_generator.py          random events, challenges, weekly goals
     phone.py                    AI-generated calls, texts, group texts
     phone_ui_injection.py       grafts SuperInteractions onto Sim _phone_affordances
-    phone_ui_interactions.py    Phone > Social > Call / Text / Settings handlers + multi-select picker
+    phone_ui_interactions.py    Phone > Llamafone > Call / Text / Llamadate / Settings handlers + multi-select picker
     auto_events.py              background thread for random auto-events
     events.py                   reads upcoming + ongoing calendar events with focal sims
     past_events.py              logs shared calendar events after they end (per save)
@@ -289,14 +309,18 @@ src/
     interactions.py             logs in-person interactions via Relationship.add_relationship_bit
     group_texts.py              persistent group thread storage (per save)
     contact_prefs.py            per-pair contact preferences (state + note) + auto-detection
+    dating.py                   Llamadate: opt-ins, bios, candidate filtering, cold outreach, reply classifier
+    moodlets.py                 buff/moodlet application from AI messages (per-recipient reactions)
     notifications.py            in-game notification popups (top-right panel)
     commands.py                 all llama.* cheat commands
     journal.py                  persistent cross-session story memory (per save)
 
 package_src/                    XML tunings packed into Llamafone.package
-  Llamafone_Call.xml            SuperInteraction for Phone > Social > Call Someone
-  Llamafone_Text.xml            SuperInteraction for Phone > Social > Send Text
-  Llamafone_Settings.xml        SuperInteraction for Phone > Social > Llamafone Settings
+  phoneCategory_Llamafone.xml   PieMenuCategory for the standalone Llamafone tile
+  Llamafone_Call.xml            SuperInteraction for Llamafone > Call Someone
+  Llamafone_Text.xml            SuperInteraction for Llamafone > Send Text
+  Llamafone_Dating.xml          SuperInteraction for Llamafone > Llamadate
+  Llamafone_Settings.xml        SuperInteraction for Llamafone > Settings
 
 tools/
   package_builder.py            DBPF v2.1 packer (no S4S dependency)

@@ -25,5 +25,4 @@ decompile_test.py
 
 # Local decompile + parser scripts, game-package extracts
 .research/
-</content>
-</invoke>
+_dump_*.py

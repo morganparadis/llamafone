@@ -1952,6 +1952,7 @@ def _start_outbound_intro(sim_info):
                 prompt_suffix=intro_suffix,
                 relationship_override=rel_override,
                 recipient_override=recipient_override,
+                first_contact=True,
             )
 
         def _open_intro_dialog():

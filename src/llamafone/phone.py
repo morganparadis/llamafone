@@ -3572,7 +3572,8 @@ def generate_text(callback=None, output=None):
 
 def generate_text_for(recipient, contact, callback=None, output=None,
                       system_override=None, prompt_suffix=None,
-                      journal_type_override=None, recipient_override=None):
+                      journal_type_override=None, recipient_override=None,
+                      first_contact=False):
     """Generate an incoming text with a specific (recipient, contact)
     pair. Public entry point so extension modules (e.g. dating) can
     surface their own senders using the full context-building
@@ -3604,18 +3605,18 @@ def generate_text_for(recipient, contact, callback=None, output=None,
     contact_id = getattr(contact.get("sim_info"), "sim_id", None)
     recipient_sim_id = getattr(recipient, "sim_id", None)
 
-    # recipient_override lets Llamadate cold outreach limit what the
-    # sender's LLM sees about the recipient to the bio-only content
-    # they chose to share. When set, we're in "bio-only privacy" mode
-    # -- suppress every block that could leak recipient private
-    # context the stranger shouldn't plausibly know: past life events
-    # (career switches, moves), recent in-person interactions, shared
-    # calendar events (they haven't met, they can't have plans), and
-    # prior conversation history (there is none). Journalism doesn't
-    # stop at the bio just because the "About Me" section did.
-    bio_only_privacy = bool(recipient_override)
+    # first_contact=True marks this as a stranger-to-stranger message
+    # (Llamadate cold outreach). We suppress every block that could
+    # leak private context the stranger wouldn't plausibly know:
+    # past life events (career switches, moves), recent in-person
+    # interactions, shared calendar events (unmet sims don't share
+    # plans), and prior conversation history (there is none).
+    # `recipient_override` independently replaces the recipient
+    # description with a player-authored bio when one exists --
+    # composes cleanly with first_contact.
+    is_stranger_contact = bool(first_contact)
 
-    if bio_only_privacy:
+    if is_stranger_contact:
         history_block = ""
     else:
         sim_history = journal.format_sim_history_for_prompt(
@@ -3633,7 +3634,7 @@ def generate_text_for(recipient, contact, callback=None, output=None,
 
     recipient_block = recipient_override if recipient_override else _describe_recipient(recipient, contact=contact)
 
-    if bio_only_privacy:
+    if is_stranger_contact:
         events_block = ""
         past_events_block = ""
         interaction_tag = ""
@@ -3882,7 +3883,7 @@ def generate_reply(player_message, callback=None, output=None):
 
 def send_text(contact, player_message, callback=None, output=None,
               prompt_suffix=None, relationship_override=None,
-              recipient_override=None):
+              recipient_override=None, first_contact=False):
     """
     Send a text TO a specific sim. The player writes the message,
     and the sim responds in character.
@@ -3956,15 +3957,18 @@ def send_text(contact, player_message, callback=None, output=None,
     main_sim_id = getattr(main_si, "sim_id", None)
 
     # When recipient_override is set we're in "bio-only privacy" mode
-    # (outbound Llamadate intro with the player's bio limiting what
-    # the recipient sees). Suppress every other block that could leak
-    # private context the recipient wouldn't plausibly know from just
-    # the bio: past life events (career switches, moves), shared
-    # calendar events, recent in-person interactions, and prior
-    # conversation history (there is none between strangers).
-    bio_only_privacy = bool(recipient_override)
+    # first_contact=True marks this as a stranger-to-stranger message
+    # (outbound Llamadate intro). Suppress every block that could
+    # leak private context the recipient wouldn't plausibly know:
+    # past life events (career switches, moves), shared calendar
+    # events, recent in-person interactions, and prior conversation
+    # history (strangers have none). Independent of recipient_override
+    # -- both need to fire even when the player didn't author a bio,
+    # since the recipient is still a stranger who can't reasonably
+    # know the player's history.
+    is_stranger_contact = bool(first_contact)
 
-    if bio_only_privacy:
+    if is_stranger_contact:
         history_block = ""
     else:
         sim_history = journal.format_sim_history_for_prompt(
@@ -3989,7 +3993,7 @@ def send_text(contact, player_message, callback=None, output=None,
     # to what the player chose to share on their profile.
     recipient_block = recipient_override if recipient_override else _describe_recipient(main_si, contact=contact)
 
-    if bio_only_privacy:
+    if is_stranger_contact:
         events_block = ""
         past_events_block = ""
     else:
@@ -3998,7 +4002,7 @@ def send_text(contact, player_message, callback=None, output=None,
         past_events_text = past_events.format_for_prompt(contact_id, main_sim_id)
         past_events_block = f"\n\n{past_events_text}" if past_events_text else ""
 
-    if bio_only_privacy:
+    if is_stranger_contact:
         interaction_tag = ""
     else:
         last_conv_iso = journal.last_entry_timestamp_for_pair(contact_id, main_sim_id)

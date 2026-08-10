@@ -1440,6 +1440,7 @@ def generate_cold_outreach(callback=None, output=None):
         prompt_suffix=frame,
         journal_type_override="dating_outreach",
         recipient_override=recipient_override,
+        first_contact=True,
     )
 
 

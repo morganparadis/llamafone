@@ -244,29 +244,54 @@ try:
 
     @sims4.commands.Command("llama.dating_status", command_type=sims4.commands.CommandType.Live)
     def cmd_dating_status(_connection=None):
-        """Report the dating layer's current config + how many candidates
-        the player's network yields under the active filter."""
+        """Report the dating layer state: opt-ins, frequency, and how
+        many candidates the active sim's world yields under the active
+        CAS-preference filter."""
         from . import dating
         output = sims4.commands.CheatOutput(_connection)
-        enabled = dating.is_enabled()
-        output(f"[Llamafone] dating_enabled: {enabled}")
-        if not enabled:
-            output("[Llamafone] Set 'dating_enabled = true' in llamafone.cfg, then llama.reload.")
-            return
+        opted_ids = dating.get_opted_in_sim_ids()
+        output(f"[Llamafone] opted-in sims: {len(opted_ids)}")
+        try:
+            weight = config.get_dating_cold_outreach_weight()
+        except Exception:
+            weight = 0
+        output(f"[Llamafone] cold_outreach frequency weight: {weight}")
         output(f"[Llamafone] cold_outreach_enabled: {dating.cold_outreach_enabled()}")
-        output(f"[Llamafone] setup_chain_enabled:   {dating.setup_chain_enabled()}")
         main = sim_context.get_main_sim_info()
         if main is None:
             output("[Llamafone] No main sim -- enter a household first.")
             return
-        output(f"[Llamafone] player: {main.first_name} {main.last_name}")
+        output(f"[Llamafone] active sim: {main.first_name} {main.last_name}")
+        main_id = getattr(main, "sim_id", None)
+        output(f"[Llamafone] active sim opted-in: {dating.is_sim_opted_in(main_id)}")
         output(f"[Llamafone] resolved orientation: {dating.resolve_orientation(main)}")
-        candidates = dating.get_candidates(main)
-        output(f"[Llamafone] dating candidates: {len(candidates)}")
-        for c in candidates[:8]:
-            output(f"  - {c.get('name', '?')}  (friendship={c.get('friendship')})")
-        if len(candidates) > 8:
-            output(f"  ... and {len(candidates) - 8} more")
+        candidates = dating.get_candidates_for(main)
+        output(f"[Llamafone] unmet candidates: {len(candidates)}")
+        # Also report mutual-friend eligibility -- helps testing the
+        # "Alice gave me your number" narrative frame vs the "we've
+        # never met, saw you on the app" fallback.
+        with_mutual = []
+        without_mutual = []
+        for c in candidates:
+            try:
+                mutual = dating.find_mutual_friend(main, c.get("sim_info"))
+            except Exception:
+                mutual = None
+            if mutual is not None:
+                with_mutual.append((c.get("name", "?"),
+                                    getattr(mutual, "first_name", "?")))
+            else:
+                without_mutual.append(c.get("name", "?"))
+        output(f"[Llamafone]   with mutual friend: {len(with_mutual)}")
+        for name, mutual in with_mutual[:5]:
+            output(f"    - {name} (via {mutual})")
+        if len(with_mutual) > 5:
+            output(f"    ... and {len(with_mutual) - 5} more")
+        output(f"[Llamafone]   solo (no mutual): {len(without_mutual)}")
+        for name in without_mutual[:3]:
+            output(f"    - {name}")
+        if len(without_mutual) > 3:
+            output(f"    ... and {len(without_mutual) - 3} more")
 
     @sims4.commands.Command("llama.dating_outreach", command_type=sims4.commands.CommandType.Live)
     def cmd_dating_outreach(_connection=None):
@@ -278,46 +303,11 @@ try:
         if not _require_config(output):
             return
         if not dating.cold_outreach_enabled():
-            output("[Llamafone] Cold outreach is disabled. Enable dating in llamafone.cfg.")
+            output("[Llamafone] Cold outreach is disabled. Opt at least one sim in from "
+                   "Llamafone Settings > Dating, and make sure frequency isn't Off.")
             return
         output("[Llamafone] Firing a cold-outreach text now... check the phone for an incoming text.")
         dating.generate_cold_outreach()
-
-    @sims4.commands.Command("llama.dating_queue", command_type=sims4.commands.CommandType.Live)
-    def cmd_dating_queue(_connection=None):
-        """List pending introduction / follow-up entries in the setup-chain
-        queue. Shows fire time relative to now in sim-hours."""
-        from . import dating
-        output = sims4.commands.CheatOutput(_connection)
-        now = dating._now_ticks()
-        data = dating._queue_load()
-        pending = data.get("pending", []) if isinstance(data, dict) else []
-        if not pending:
-            output("[Llamafone] Dating queue is empty.")
-            return
-        output(f"[Llamafone] {len(pending)} pending dating entries:")
-        for e in pending:
-            fire_at = e.get("fire_at_ticks", 0)
-            if now is not None:
-                delta_hours = (fire_at - now) / dating._TICKS_PER_HOUR_DATING
-                when = f"in {delta_hours:.1f} sim-hours" if delta_hours > 0 else f"{-delta_hours:.1f}h overdue"
-            else:
-                when = "?"
-            output(f"  [{e.get('kind')}] setter={e.get('setter_name')} "
-                   f"introducee={e.get('introducee_name')} target={e.get('target_name')} "
-                   f"fires {when}")
-
-    @sims4.commands.Command("llama.dating_tick", command_type=sims4.commands.CommandType.Live)
-    def cmd_dating_tick(_connection=None):
-        """Force one queue tick -- fires any dating entries whose sim-time
-        has already elapsed. Useful for smoke testing without waiting
-        the full ~2 sim-day intro delay."""
-        from . import dating
-        output = sims4.commands.CheatOutput(_connection)
-        if not _require_config(output):
-            return
-        dating.tick_queue()
-        output("[Llamafone] Ticked dating queue -- ready entries have been fired. Check the phone.")
 
     # -------------------------------------------------------------------------
     # Moodlet investigation (debug)

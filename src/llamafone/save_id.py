@@ -44,13 +44,32 @@ def _log(message):
         pass
 
 
+_LAST_LOGGED_SLOT_ID_MISS = [None]  # single-slot cache to rate-limit noise
+
+
+def _slot_id_is_sentinel(slot_id):
+    """A slot_id we can't use as a real save folder identifier."""
+    return slot_id is None or slot_id <= 0 or slot_id >= 0xffffffff
+
+
 def _get_current_slot_id_int():
     """Resolve the loaded save's slot id as a Python int, or None when
-    no save is loaded."""
+    no save is loaded.
+
+    Tries multiple accessor paths because a transient state (CAS
+    session, main-menu roundtrip, some Lovestruck/Growing Together
+    interaction hooks) can leave the persistence service with an
+    unset slot proto while the game is otherwise fully in-world.
+    Zone-level accessors sometimes still hold the real slot id in
+    those windows, so we fall back to them before giving up.
+    """
     try:
         import services
     except Exception:
         return None
+
+    # Path 1: persistence service's save_slot proto (the canonical
+    # source; works most of the time, misses the transient windows).
     svc = None
     for accessor_name in ("get_persistence_service", "persistence_service"):
         accessor = getattr(services, accessor_name, None)
@@ -62,38 +81,78 @@ def _get_current_slot_id_int():
                 break
         except Exception:
             continue
-    if svc is None:
-        return None
+    if svc is not None:
+        try:
+            slot = svc.get_save_slot_proto_buff()
+            if slot is not None:
+                slot_id_raw = getattr(slot, "slot_id", None)
+                try:
+                    slot_id = int(slot_id_raw) if slot_id_raw is not None else None
+                except (TypeError, ValueError):
+                    slot_id = None
+                if not _slot_id_is_sentinel(slot_id):
+                    return slot_id
+                # Sentinel or missing -- fall through to zone.
+                if slot_id != _LAST_LOGGED_SLOT_ID_MISS[0]:
+                    _log(f"persistence_service returned sentinel/missing slot_id={slot_id_raw!r}; "
+                         "trying zone fallback")
+                    _LAST_LOGGED_SLOT_ID_MISS[0] = slot_id
+        except Exception:
+            pass
+
+    # Path 2: current zone's save_slot_id (populated during gameplay
+    # even when the persistence service's proto is transiently empty).
     try:
-        # `get_save_slot_proto_buff()` returns the save_slot proto directly
-        # (decompiled body: `return self._save_game_data_proto.save_slot`),
-        # so slot_id lives at the top level -- NOT proto.save_slot.slot_id.
-        slot = svc.get_save_slot_proto_buff()
-        if slot is not None:
-            slot_id = getattr(slot, "slot_id", None)
-            if slot_id is None:
-                return None
-            try:
-                slot_id = int(slot_id)
-            except (TypeError, ValueError):
-                return None
-            # Reject sentinels for "no save loaded":
-            #   0            -- proto3 default for unset int
-            #   0xffffffff   -- Sims 4's "no valid slot" marker during
-            #                   main-menu / save-load transitions; if we
-            #                   accept it we create a bogus Slot_ffffffff/
-            #                   folder the next time the snapshot thread
-            #                   or any other timer-driven write fires
-            #                   before the real save id is available.
-            #   negative     -- would appear if slot_id is exposed as
-            #                   signed int32 and the sentinel wraps.
-            # Real Sims 4 slot ids are small positive integers well below
-            # 2^32, so any value at or above the uint32 max is a sentinel.
-            if slot_id <= 0 or slot_id >= 0xffffffff:
-                return None
-            return slot_id
+        zone = services.current_zone()
+        if zone is not None:
+            for attr in ("save_slot_id", "_save_slot_id", "active_household_id"):
+                # active_household_id is a last-ditch discriminator we
+                # avoid unless nothing else works; households sometimes
+                # persist under a slot_id-shaped identifier in older
+                # builds, but this is imprecise. Skip it here -- only
+                # try the true slot_id attributes.
+                if attr == "active_household_id":
+                    continue
+                try:
+                    val = getattr(zone, attr, None)
+                except Exception:
+                    val = None
+                if val is None:
+                    continue
+                try:
+                    slot_id = int(val)
+                except (TypeError, ValueError):
+                    continue
+                if not _slot_id_is_sentinel(slot_id):
+                    return slot_id
     except Exception:
         pass
+
+    # Path 3: game_services.current_client / active session slot id.
+    # This is the last resort; some builds expose it via different
+    # paths that we simply don't know about.
+    try:
+        cs = getattr(services, "client_manager", None)
+        if callable(cs):
+            mgr = cs()
+            if mgr is not None:
+                for client in list(getattr(mgr, "_clients", {}).values()):
+                    for attr in ("save_slot_id", "_save_slot_id"):
+                        try:
+                            val = getattr(client, attr, None)
+                        except Exception:
+                            val = None
+                        if val is None:
+                            continue
+                        try:
+                            slot_id = int(val)
+                        except (TypeError, ValueError):
+                            continue
+                        if not _slot_id_is_sentinel(slot_id):
+                            return slot_id
+    except Exception:
+        pass
+
     return None
 
 
@@ -105,18 +164,33 @@ def get_current_save_id():
     names the actual save files in LOWERCASE HEX (8 zero-padded digits).
     Slot id 4373 decimal -> "Slot_00001115.save" on disk because
     0x1115 == 4373. We format with `:08x` to match the filename exactly.
-    WickedWhims uses the same scheme (uppercase) for its complex_save_data
-    folder; the .ver / .day / .week rotation files also share this format.
 
-    Pre-v3.1.4 the folder was named with DECIMAL formatting (`Slot_00004373`
-    for the same save) which didn't match the .save filename. data_dir()
-    contains a one-time migration that renames legacy decimal folders to
-    the correct hex names so existing journal/milestones history is
-    preserved across the upgrade."""
+    Falls back to the last save_id observed at save-load time when the
+    live persistence service reports a sentinel value. Some Sims 4
+    build/mod combos leave the service with an unset slot_id during
+    long stretches of gameplay (CAS sessions, menu roundtrips,
+    interaction hooks in packs like Growing Together / Lovestruck).
+    Without this fallback every write to per-save files (dating opt-
+    ins, journal, past_events, etc.) is dropped for those windows.
+
+    The fallback only applies WHILE a zone is loaded, so a player at
+    the main menu doesn't accidentally get their prior save's cached
+    id used for phantom writes."""
     slot_id = _get_current_slot_id_int()
-    if slot_id is None:
+    if slot_id is not None:
+        return f"Slot_{slot_id:08x}"
+    # Fallback: last-known-good id from the save-load hook. Guarded
+    # by an active-zone check so writes are only allowed when we're
+    # genuinely still in the same session as the cached id.
+    if _last_handled_save_id is None:
         return None
-    return f"Slot_{slot_id:08x}"
+    try:
+        import services
+        if services.current_zone() is None:
+            return None
+    except Exception:
+        return None
+    return _last_handled_save_id
 
 
 def _get_current_slot_name():

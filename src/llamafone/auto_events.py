@@ -149,13 +149,13 @@ def _pick_and_fire():
         return
 
     weights_map = get_event_weights()
-    # Dating cold outreach is a separate auto-event type gated on its
-    # own toggle in the cfg. Injected here (not into auto_event_types
-    # or auto_event_weights) so users don't have to touch those knobs
-    # to enable dating -- setting dating_enabled=true is enough.
+    # Dating cold outreach is a separate auto-event type. It's injected
+    # into the type/weight lists at pick time (not into the base cfg
+    # keys) so opting sims in is enough to make it available -- users
+    # never touch auto_event_types or auto_event_weights directly.
     from . import dating as _dating
     if _dating.cold_outreach_enabled():
-        dating_weight = config.get_config().getint(config._SECTION, "dating_cold_outreach_weight", fallback=20)
+        dating_weight = config.get_dating_cold_outreach_weight()
         if dating_weight > 0 and "dating" not in types:
             types = list(types) + ["dating"]
             weights_map = dict(weights_map) if weights_map else {}

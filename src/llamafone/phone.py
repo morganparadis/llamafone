@@ -3198,16 +3198,24 @@ def _describe_relationship(contact, recipient=None):
     status = contact.get("status", "") or ""
     status_low = status.lower().replace("_", "").replace(" ", "")
     is_ex = ("broken" in status_low or "ex" in status_low.split() or
-             "former" in status_low or "divorced" in status_low)
+             "former" in status_low or "divorced" in status_low or
+             "brokenup" in status_low or "brokenengagement" in status_low or
+             "badromance" in status_low or "spiteful" in status_low or
+             "bitter" in status_low or "rejected" in status_low)
     is_estranged = ("nolonger" in status_low or "estranged" in status_low or
-                    "hasbeenfriends" in status_low or "lostfriends" in status_low)
+                    "hasbeenfriends" in status_low or "lostfriends" in status_low or
+                    "awkward" in status_low or "betrayal" in status_low or
+                    "cheat" in status_low)
     if is_ex or is_estranged or (romance is not None and romance < 0):
         parts.append(
-            "RELATIONSHIP STATUS NOTE: This is a former romantic relationship — "
-            "they are NOT currently dating/together. Any past affectionate or flirty "
-            "journal history is from BEFORE the breakup and should NOT shape the "
-            "current tone. Treat the current dynamic as awkward, tense, or distant "
-            "depending on the romance score."
+            "RELATIONSHIP STATUS NOTE: This is a former OR strained romantic "
+            "relationship. They are NOT currently dating/together. Any past "
+            "affectionate or flirty journal history is from BEFORE the "
+            "breakup/tension and should NOT shape the current tone. "
+            "Read the status labels above (Broken Engagement, Bad Romance, "
+            "Spiteful sentiments, etc.) as ground truth for how this sim "
+            "feels RIGHT NOW -- treat the current dynamic as awkward, tense, "
+            "hurt, or hostile as those labels indicate."
         )
 
     if contact.get("in_household") is True:
@@ -3564,7 +3572,7 @@ def generate_text(callback=None, output=None):
 
 def generate_text_for(recipient, contact, callback=None, output=None,
                       system_override=None, prompt_suffix=None,
-                      journal_type_override=None):
+                      journal_type_override=None, recipient_override=None):
     """Generate an incoming text with a specific (recipient, contact)
     pair. Public entry point so extension modules (e.g. dating) can
     surface their own senders using the full context-building
@@ -3608,7 +3616,12 @@ def generate_text_for(recipient, contact, callback=None, output=None,
     mutual_block = _format_mutual_block(mutuals, casual=True)
 
 
-    recipient_block = _describe_recipient(recipient, contact=contact)
+    # recipient_override lets Llamadate cold outreach limit what the
+    # sender's LLM sees about the recipient to the bio-only content
+    # they chose to share (e.g. hide the recipient's engagement so
+    # the incoming stranger doesn't reference it). When None, the
+    # full _describe_recipient block runs as usual.
+    recipient_block = recipient_override if recipient_override else _describe_recipient(recipient, contact=contact)
 
     events_text = events.format_shared_events_for_prompt(recipient, contact.get("sim_info"))
     events_block = f"\n\n{events_text}" if events_text else ""
@@ -3680,6 +3693,22 @@ def generate_reply(player_message, callback=None, output=None):
     contact = conversation["contact"]
     history = conversation["history"]
     recipient = conversation.get("recipient")
+
+    # v3.5 dating: if this reply is to a cold-outreach text from an
+    # unmet sim, promote the pair from "pending" to a real Sims 4
+    # relationship (adds friendship score so the sender shows up as
+    # an acquaintance in the panel). Idempotent -- subsequent replies
+    # find no pending record and skip. Silent no-op for regular
+    # replies to existing contacts.
+    try:
+        from . import dating as _dating
+        _contact_si_for_dating = contact.get("sim_info") if contact else None
+        _recipient_id_for_dating = getattr(recipient, "sim_id", None) if recipient else None
+        _contact_id_for_dating = getattr(_contact_si_for_dating, "sim_id", None) if _contact_si_for_dating else None
+        if _dating.has_pending_new_relationship(_recipient_id_for_dating, _contact_id_for_dating):
+            _dating.establish_relationship_on_engagement(recipient, _contact_si_for_dating)
+    except Exception:
+        pass
 
     # Add the player's message to history
     history.append({"role": "you", "text": player_message})
@@ -3837,10 +3866,32 @@ def generate_reply(player_message, callback=None, output=None):
     )
 
 
-def send_text(contact, player_message, callback=None, output=None):
+def send_text(contact, player_message, callback=None, output=None,
+              prompt_suffix=None, relationship_override=None,
+              recipient_override=None):
     """
     Send a text TO a specific sim. The player writes the message,
     and the sim responds in character.
+
+    `prompt_suffix` -- optional extra instruction appended to the
+    reply-generation prompt. Used by extension flows (v3.5 Llamadate
+    outbound intro) to tell the LLM "this is a first-time contact,
+    the recipient shouldn't act like they know the sender."
+
+    `relationship_override` -- optional replacement for the "How X
+    feels about the player: {tier}" line that the reply-system prompt
+    keys off. Llamadate outbound uses this to prevent the recipient
+    from falling into the "barely know each other" tier ("wait, is
+    this X? remind me where we met") when the two sims have a low
+    friendship score but no prior contact.
+
+    `recipient_override` -- optional replacement for the recipient-
+    context block (traits, career, aspiration, mood, world, etc. of
+    the player's sim, which the recipient LLM normally sees). When
+    the player has authored their own Llamadate bio, we pass ONLY
+    that bio via this override so the recipient reacts to what the
+    player chose to share, not to their auto-derived facts. When
+    None the default _describe_recipient block runs as usual.
     """
     main_si = sim_context.get_main_sim_info()
     main_name = main_si.first_name if main_si else "your Sim"
@@ -3856,13 +3907,20 @@ def send_text(contact, player_message, callback=None, output=None):
         source_label="you texted",
     )
 
-    # Auto-detect setup-request intent (v3.5 dating). Silent no-op when
-    # the dating feature is disabled or the intent detector doesn't
-    # match. When it matches, enqueues an intro + follow-up pair to
-    # fire in a couple of sim-days.
+    # v3.5 dating: if the player is replying to a cold-outreach text
+    # from an unmet sim, this reply promotes the pair from "pending"
+    # to a real Sims 4 relationship (adds friendship score, which
+    # creates the tracker entry so the sender shows up as an
+    # acquaintance in the relationship panel). Idempotent -- subsequent
+    # replies find no pending record and skip. Silent no-op for
+    # regular replies to existing contacts.
     try:
         from . import dating as _dating
-        _dating.maybe_start_setup_chain(player_message, main_si, contact)
+        contact_si = contact.get("sim_info") if contact else None
+        main_id_for_dating = getattr(main_si, "sim_id", None)
+        contact_id_for_dating = getattr(contact_si, "sim_id", None) if contact_si else None
+        if _dating.has_pending_new_relationship(main_id_for_dating, contact_id_for_dating):
+            _dating.establish_relationship_on_engagement(main_si, contact_si)
     except Exception:
         pass
 
@@ -3879,7 +3937,7 @@ def send_text(contact, player_message, callback=None, output=None):
         other_name=other_name,
         main_name=main_name,
     )
-    rel_desc = _describe_relationship(contact)
+    rel_desc = relationship_override if relationship_override else _describe_relationship(contact)
     contact_id = getattr(contact.get("sim_info"), "sim_id", None)
     main_sim_id = getattr(main_si, "sim_id", None)
     sim_history = journal.format_sim_history_for_prompt(
@@ -3897,7 +3955,12 @@ def send_text(contact, player_message, callback=None, output=None):
     # back to. Without this, the AI generates the contact's reply knowing
     # nothing about who they're talking to (no career callback, no mood
     # awareness, no aspiration context, no skills).
-    recipient_block = _describe_recipient(main_si, contact=contact)
+    #
+    # `recipient_override` lets an extension replace this block entirely
+    # -- Llamadate outbound uses it to pass ONLY the player-authored bio
+    # when one is set, keeping the recipient's view of the player limited
+    # to what the player chose to share on their profile.
+    recipient_block = recipient_override if recipient_override else _describe_recipient(main_si, contact=contact)
 
     events_text = events.format_shared_events_for_prompt(main_si, contact.get("sim_info"))
     events_block = f"\n\n{events_text}" if events_text else ""
@@ -3923,6 +3986,8 @@ def send_text(contact, player_message, callback=None, output=None):
         f"If {main_name} mentions people or events you don't have details about, "
         f"improvise naturally as {other_name} would — react in character, never refuse."
     )
+    if prompt_suffix:
+        prompt = prompt + "\n\n" + prompt_suffix
 
     def _on_send_text_result(text, error):
         if error:

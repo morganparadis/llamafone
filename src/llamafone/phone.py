@@ -3603,33 +3603,47 @@ def generate_text_for(recipient, contact, callback=None, output=None,
 
     contact_id = getattr(contact.get("sim_info"), "sim_id", None)
     recipient_sim_id = getattr(recipient, "sim_id", None)
-    sim_history = journal.format_sim_history_for_prompt(
-        contact["name"],
-        recipient_name=recipient_name,
-        trailing_note=_journal_obsolescence_note(contact),
-        sim_id=contact_id,
-        recipient_id=recipient_sim_id,
-    )
-    history_block = f"\n\n{sim_history}" if sim_history else ""
+
+    # recipient_override lets Llamadate cold outreach limit what the
+    # sender's LLM sees about the recipient to the bio-only content
+    # they chose to share. When set, we're in "bio-only privacy" mode
+    # -- suppress every block that could leak recipient private
+    # context the stranger shouldn't plausibly know: past life events
+    # (career switches, moves), recent in-person interactions, shared
+    # calendar events (they haven't met, they can't have plans), and
+    # prior conversation history (there is none). Journalism doesn't
+    # stop at the bio just because the "About Me" section did.
+    bio_only_privacy = bool(recipient_override)
+
+    if bio_only_privacy:
+        history_block = ""
+    else:
+        sim_history = journal.format_sim_history_for_prompt(
+            contact["name"],
+            recipient_name=recipient_name,
+            trailing_note=_journal_obsolescence_note(contact),
+            sim_id=contact_id,
+            recipient_id=recipient_sim_id,
+        )
+        history_block = f"\n\n{sim_history}" if sim_history else ""
 
     mutuals = _get_mutual_contacts(contact, recipient=recipient)
     mutual_block = _format_mutual_block(mutuals, casual=True)
 
 
-    # recipient_override lets Llamadate cold outreach limit what the
-    # sender's LLM sees about the recipient to the bio-only content
-    # they chose to share (e.g. hide the recipient's engagement so
-    # the incoming stranger doesn't reference it). When None, the
-    # full _describe_recipient block runs as usual.
     recipient_block = recipient_override if recipient_override else _describe_recipient(recipient, contact=contact)
 
-    events_text = events.format_shared_events_for_prompt(recipient, contact.get("sim_info"))
-    events_block = f"\n\n{events_text}" if events_text else ""
-    past_events_text = past_events.format_for_prompt(contact_id, recipient_sim_id)
-    past_events_block = f"\n\n{past_events_text}" if past_events_text else ""
-
-    last_conv_iso = journal.last_entry_timestamp_for_pair(contact_id, recipient_sim_id)
-    interaction_tag = interactions.format_for_prompt(contact_id, recipient_sim_id, last_conv_iso=last_conv_iso)
+    if bio_only_privacy:
+        events_block = ""
+        past_events_block = ""
+        interaction_tag = ""
+    else:
+        events_text = events.format_shared_events_for_prompt(recipient, contact.get("sim_info"))
+        events_block = f"\n\n{events_text}" if events_text else ""
+        past_events_text = past_events.format_for_prompt(contact_id, recipient_sim_id)
+        past_events_block = f"\n\n{past_events_text}" if past_events_text else ""
+        last_conv_iso = journal.last_entry_timestamp_for_pair(contact_id, recipient_sim_id)
+        interaction_tag = interactions.format_for_prompt(contact_id, recipient_sim_id, last_conv_iso=last_conv_iso)
 
     suffix = f"\n\n{prompt_suffix}" if prompt_suffix else ""
     prompt = (
@@ -3940,20 +3954,33 @@ def send_text(contact, player_message, callback=None, output=None,
     rel_desc = relationship_override if relationship_override else _describe_relationship(contact)
     contact_id = getattr(contact.get("sim_info"), "sim_id", None)
     main_sim_id = getattr(main_si, "sim_id", None)
-    sim_history = journal.format_sim_history_for_prompt(
-        other_name,
-        recipient_name=main_name,
-        trailing_note=_journal_obsolescence_note(contact),
-        sim_id=contact_id,
-        recipient_id=main_sim_id,
-    )
-    history_block = f"\n\n{sim_history}" if sim_history else ""
+
+    # When recipient_override is set we're in "bio-only privacy" mode
+    # (outbound Llamadate intro with the player's bio limiting what
+    # the recipient sees). Suppress every other block that could leak
+    # private context the recipient wouldn't plausibly know from just
+    # the bio: past life events (career switches, moves), shared
+    # calendar events, recent in-person interactions, and prior
+    # conversation history (there is none between strangers).
+    bio_only_privacy = bool(recipient_override)
+
+    if bio_only_privacy:
+        history_block = ""
+    else:
+        sim_history = journal.format_sim_history_for_prompt(
+            other_name,
+            recipient_name=main_name,
+            trailing_note=_journal_obsolescence_note(contact),
+            sim_id=contact_id,
+            recipient_id=main_sim_id,
+        )
+        history_block = f"\n\n{sim_history}" if sim_history else ""
     mutuals = _get_mutual_contacts(contact)
     mutual_block = _format_mutual_block(mutuals, casual=False)
 
     # Describe the PLAYER (main_si) -- the person the contact is texting
     # back to. Without this, the AI generates the contact's reply knowing
-    # nothing about who they're talking to (no career callback, no mood
+    # nothing about who they're talking to (no career callback, no
     # awareness, no aspiration context, no skills).
     #
     # `recipient_override` lets an extension replace this block entirely
@@ -3962,13 +3989,20 @@ def send_text(contact, player_message, callback=None, output=None,
     # to what the player chose to share on their profile.
     recipient_block = recipient_override if recipient_override else _describe_recipient(main_si, contact=contact)
 
-    events_text = events.format_shared_events_for_prompt(main_si, contact.get("sim_info"))
-    events_block = f"\n\n{events_text}" if events_text else ""
-    past_events_text = past_events.format_for_prompt(contact_id, main_sim_id)
-    past_events_block = f"\n\n{past_events_text}" if past_events_text else ""
+    if bio_only_privacy:
+        events_block = ""
+        past_events_block = ""
+    else:
+        events_text = events.format_shared_events_for_prompt(main_si, contact.get("sim_info"))
+        events_block = f"\n\n{events_text}" if events_text else ""
+        past_events_text = past_events.format_for_prompt(contact_id, main_sim_id)
+        past_events_block = f"\n\n{past_events_text}" if past_events_text else ""
 
-    last_conv_iso = journal.last_entry_timestamp_for_pair(contact_id, main_sim_id)
-    interaction_tag = interactions.format_for_prompt(contact_id, main_sim_id, last_conv_iso=last_conv_iso)
+    if bio_only_privacy:
+        interaction_tag = ""
+    else:
+        last_conv_iso = journal.last_entry_timestamp_for_pair(contact_id, main_sim_id)
+        interaction_tag = interactions.format_for_prompt(contact_id, main_sim_id, last_conv_iso=last_conv_iso)
     context_tags = (
         f"{_location_context(main_si, contact)}"
         f"{_season_context()}"

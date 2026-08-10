@@ -755,6 +755,44 @@ def _seeker_known_sim_ids(seeker_si):
     return ids
 
 
+def _seeker_knows_candidate(seeker_si, candidate_id, known_ids):
+    """True if the seeker has any relationship record with the candidate.
+    Belt-and-suspenders over `_seeker_known_sim_ids`: enumeration paths
+    on the tracker occasionally miss entries (varies by pack combo /
+    Sims 4 version), so also probe the tracker directly per-candidate
+    via get_relationship_score. A non-zero score is proof of an
+    existing relationship even if enumeration didn't surface the ID.
+    """
+    try:
+        cid = int(candidate_id)
+    except Exception:
+        return False
+    if cid in known_ids:
+        return True
+    tracker = getattr(seeker_si, "relationship_tracker", None)
+    if tracker is None:
+        return False
+    for method in ("get_relationship_score", "get_friendship_track_score",
+                   "get_romance_track_score"):
+        fn = getattr(tracker, method, None)
+        if not callable(fn):
+            continue
+        try:
+            val = fn(cid)
+            if val:  # non-zero, non-None
+                return True
+        except Exception:
+            continue
+    fn = getattr(tracker, "has_relationship", None)
+    if callable(fn):
+        try:
+            if fn(cid):
+                return True
+        except Exception:
+            pass
+    return False
+
+
 def _in_seeker_household(seeker_si, candidate_si):
     try:
         hh_a = getattr(seeker_si, "household", None)
@@ -836,7 +874,7 @@ def get_candidates_for(seeker_si):
             if not _is_human_sim(si):
                 counts["non_human"] += 1
                 continue
-            if int(sid) in known_ids:
+            if _seeker_knows_candidate(seeker_si, sid, known_ids):
                 counts["already_known"] += 1
                 continue
             if int(sid) in prior_outreach:

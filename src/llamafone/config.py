@@ -16,10 +16,160 @@ _SETTINGS_FILENAME = "Llamafone_Settings.json"
 _SECTION = "llamafone"
 
 
+# Default llamafone.cfg contents. Written to the Mods folder on first
+# mod load if no cfg exists yet -- users don't need to include a cfg
+# in the download anymore, dropping just the .ts4script + .package
+# into Mods is enough to get a working default config on first launch.
+# The api_key stays "YOUR_API_KEY_HERE" so is_configured() correctly
+# reports "not configured yet" and the mod's error notifications tell
+# the user to open the file and add their key.
+_DEFAULT_CONFIG_TEMPLATE = """[llamafone]
+; ── AI provider ────────────────────────────────────────────────────────────
+; Which AI service does the mod talk to? Pick one:
+;   claude   -- Anthropic (default, what the mod was built on)
+;   openai   -- OpenAI's chat completions API (GPT-4, GPT-4o, etc.)
+;   gemini   -- Google Gemini
+;   ollama   -- A local Ollama server (no API key required)
+provider = claude
+
+; API key for whichever provider you picked above. Only the matching one
+; is read -- the others can stay blank. Get a key:
+;   claude  -> https://console.anthropic.com/
+;   openai  -> https://platform.openai.com/api-keys
+;   gemini  -> https://aistudio.google.com/apikey
+;   ollama  -> not needed; runs locally
+api_key = YOUR_API_KEY_HERE
+
+; If using Ollama, point at your local server:
+ollama_endpoint = http://localhost:11434
+
+; ── Models ─────────────────────────────────────────────────────────────────
+; Model for detailed tasks (stories, storylines, drama)
+; Examples per provider:
+;   claude  -> claude-opus-4-8, claude-sonnet-4-6, claude-haiku-4-5
+;   openai  -> gpt-4o, gpt-4o-mini, gpt-4-turbo
+;   gemini  -> gemini-1.5-pro, gemini-1.5-flash
+;   ollama  -> llama3.1, mistral, qwen2.5 (whatever you've `ollama pull`-ed)
+default_model = claude-haiku-4-5
+
+; Model for quick tasks (dialogue, events, calls, texts). Cheaper/faster.
+fast_model = claude-haiku-4-5
+
+; Maximum tokens per response (higher = longer text, more API cost)
+; 512 is good for dialogue, bump to 1024+ for stories
+max_tokens = 512
+
+; Language for all generated content
+language = English
+
+; ── Misc ───────────────────────────────────────────────────────────────────
+
+; Allow ghosts to call/text your sim? (true or false)
+phone_allow_ghosts = true
+
+; ── Reply delays ──────────────────────────────────────────────────────────
+; When you text a sim (via Reply or llama.sendtext), how long should they
+; "think" before responding? Instant replies feel uncanny -- this adds a small
+; realistic delay scaled by friendship + traits.
+;   - Best friends + outgoing traits reply faster (often near the minimum)
+;   - Enemies + lazy/loner traits drag (often 2x or more the max)
+;   - Set reply_delay_enabled = false to restore instant replies
+reply_delay_enabled = true
+reply_delay_min_seconds = 15
+reply_delay_max_seconds = 90
+
+
+; ── Auto-events ────────────────────────────────────────────────────────────
+; Randomly fires events/content while you play without you having to ask.
+; Uses real-world time (not Sims game speed).
+
+; Set to true to turn on random auto-events
+auto_events_enabled = false
+
+; How many real-world minutes between each check
+; (actual firing also depends on the chance below)
+auto_event_interval_minutes = 20
+
+; Percent chance (1-100) that something fires each check
+; 40 = fires roughly every 50 real minutes on average
+auto_event_chance = 40
+
+; Which types of content can fire automatically
+; Options: event, goals, story, drama, call, text  (comma-separated)
+; Default is phone-only -- the mod is built around the phone, so auto-events
+; default to incoming calls/texts. Add event/goals/story/drama if you want
+; the full mix.
+auto_event_types = call, text
+
+; Weight per event type -- higher = more likely to be picked.
+; Format: type:weight, type:weight  (leave blank for equal chance)
+; Example: call:40, text:30, event:20, goals:10
+auto_event_weights = call:50, text:50
+
+
+; ── Dating (v3.5) ─────────────────────────────────────────────────────────
+; Optional inbound + outbound dating layer:
+;   INBOUND  -- opted-in sims occasionally receive texts from unmet
+;               sims who explain how they got the number (mutual
+;               friend if one exists, else a fun made-up reason based
+;               on the sender's traits/career/hobbies).
+;   OUTBOUND -- new "Send Intro" interaction on the Llamafone app.
+;               Player picks an eligible unmet sim from a filtered
+;               picker and writes their own intro text. The mod never
+;               generates outbound intros.
+;
+; Feature is opt-in PER PLAYED SIM. Turn it on inside the game via
+; Llamafone Settings > Dating > (per-sim toggle). Opt-in state lives
+; in <save>/DatingOptIns.json so it travels with the save.
+
+; Frequency weight for cold-outreach texts inside the auto_events pool.
+; 0 = off globally (even if sims are opted in). This is added on TOP
+; of auto_event_weights above -- so with call:50, text:50 and
+; dating_cold_outreach_weight = 20, roughly 17% (20 / 120) of
+; auto-events will be dating. Also toggleable in-game as
+; Off / Rarely / Sometimes / Often under Llamafone Settings > Dating.
+dating_cold_outreach_weight = 20
+"""
+
+
+def _log(msg):
+    """Best-effort log write to Documents/Llamafone_Log.txt. Config is
+    load-critical; we can't rely on the package's `_log` back here."""
+    try:
+        import datetime
+        path = os.path.join(os.path.expanduser("~"), "Documents", "Llamafone_Log.txt")
+        ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"[{ts}] [config] {msg}\n")
+    except Exception:
+        pass
+
+
+def _write_default_config(target_path):
+    """Materialize the default llamafone.cfg at `target_path`. Called
+    when no cfg exists anywhere yet -- lets users just drop the two
+    mod files into their Mods folder and have a working config the
+    first time they launch. Non-destructive: only fires when nothing
+    else was found."""
+    try:
+        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+        with open(target_path, "w", encoding="utf-8") as f:
+            f.write(_DEFAULT_CONFIG_TEMPLATE)
+        _log(f"wrote default cfg to {target_path}")
+        return True
+    except Exception as e:
+        _log(f"could not write default cfg to {target_path}: {type(e).__name__}: {e}")
+        return False
+
+
 def _find_config_file():
     """Search for the config file in the Mods folder, then walk up from
-    the script location as a dev-mode fallback. Returns the first
-    existing file or None."""
+    the script location as a dev-mode fallback. If nothing exists AND
+    the Mods folder is present, materialize a default cfg there so a
+    fresh install has a working config without the user having to
+    include one in the download. Returns the first existing / newly-
+    created file, or None if neither the Mods folder nor a dev-mode
+    parent directory is writable."""
     mods_folder = os.path.join(
         os.path.expanduser("~"), "Documents",
         "Electronic Arts", "The Sims 4", "Mods",
@@ -32,6 +182,13 @@ def _find_config_file():
         path = os.path.join(script_dir, up, _CONFIG_FILENAME)
         if os.path.isfile(path):
             return os.path.abspath(path)
+    # Nothing on disk yet. If the Mods folder exists (real game
+    # install), create a default cfg there so the mod comes up
+    # configured with placeholders on first launch. Skip when the
+    # folder isn't present (headless / dev-only environment).
+    if os.path.isdir(mods_folder):
+        if _write_default_config(mods_path):
+            return os.path.abspath(mods_path)
     return None
 
 

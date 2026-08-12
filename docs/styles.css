@@ -430,7 +430,8 @@ kbd {
   color: var(--muted);
   text-align: center;
 }
-.download-count #download-count-value {
+.download-count #download-count-value,
+.download-count #curseforge-count-value {
   font-weight: 700;
   color: var(--plumbob-dark);
 }

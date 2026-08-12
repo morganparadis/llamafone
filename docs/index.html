@@ -1031,7 +1031,7 @@ fast_model    = llama3.2:3b</code></pre>
     }
   } catch (_) { /* localStorage disabled -- carry on */ }
 
-  fetch('https://api.curse.tools/v1/cf/mods/' + PROJECT_ID)
+  fetch('https://api.curse.tools/v1/mods/' + PROJECT_ID)
     .then(function (r) {
       if (!r.ok) throw new Error('http ' + r.status);
       return r.json();

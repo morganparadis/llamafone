@@ -142,10 +142,29 @@ def _resolve_track_by_name(im, names):
     return None, None
 
 
+def _identity_matches(track, expected_keyword):
+    """True if the resolved track's class name contains the expected
+    keyword ('friendship' or 'romance'). Guards against a GUID
+    collision where a lookup returns SOME statistic that isn't the
+    one we wanted. Also guards against a rare rename between builds."""
+    if track is None or not expected_keyword:
+        return False
+    try:
+        cls_name = getattr(track, "__name__", "") or str(track)
+        return expected_keyword.lower() in cls_name.lower()
+    except Exception:
+        return False
+
+
 def _get_tracks():
     """Return (friendship_track, romance_track) or (None, None). Cached
     after first successful resolve so we don't pay the lookup cost on
-    every message. Logs which path succeeded so failures are diagnosable."""
+    every message. Logs which path succeeded so failures are diagnosable.
+
+    Each resolved track goes through _identity_matches so a lookup that
+    happens to return the wrong statistic (GUID collision, unexpected
+    rename) doesn't silently write scores to the wrong track. If the
+    identity check fails, the track is treated as unresolved."""
     if _TRACK_CACHE[2]:
         return _TRACK_CACHE[0], _TRACK_CACHE[1]
     _TRACK_CACHE[2] = True
@@ -164,24 +183,44 @@ def _get_tracks():
         "LTR_Friendship_Main", "LTR_Friendship",
         "relationship_LTR_Friendship_Main",
     ))
-    if f_track is not None:
+    if f_track is not None and _identity_matches(f_track, "friendship"):
         _log(f"friendship track resolved by name {tag!r} -> {getattr(f_track, '__name__', str(f_track))!r}")
     else:
-        f_track, tag = _resolve_track_by_guid(im, _LTR_FRIENDSHIP_GUIDS)
         if f_track is not None:
+            _log(f"friendship name lookup returned mismatched statistic "
+                 f"{getattr(f_track, '__name__', '?')!r} for name {tag!r}; "
+                 f"falling back to GUID")
+            f_track = None
+        f_track, tag = _resolve_track_by_guid(im, _LTR_FRIENDSHIP_GUIDS)
+        if f_track is not None and _identity_matches(f_track, "friendship"):
             _log(f"friendship track resolved by GUID {tag} -> {getattr(f_track, '__name__', str(f_track))!r}")
+        elif f_track is not None:
+            _log(f"friendship GUID lookup returned mismatched statistic "
+                 f"{getattr(f_track, '__name__', '?')!r}; REJECTING to "
+                 f"avoid writing to wrong track")
+            f_track = None
         else:
             _log("friendship track unresolved via name or GUID")
     r_track, tag = _resolve_track_by_name(im, (
         "LTR_Romance_Main", "LTR_Romance",
         "relationship_LTR_Romance_Main",
     ))
-    if r_track is not None:
+    if r_track is not None and _identity_matches(r_track, "romance"):
         _log(f"romance track resolved by name {tag!r} -> {getattr(r_track, '__name__', str(r_track))!r}")
     else:
-        r_track, tag = _resolve_track_by_guid(im, _LTR_ROMANCE_GUIDS)
         if r_track is not None:
+            _log(f"romance name lookup returned mismatched statistic "
+                 f"{getattr(r_track, '__name__', '?')!r} for name {tag!r}; "
+                 f"falling back to GUID")
+            r_track = None
+        r_track, tag = _resolve_track_by_guid(im, _LTR_ROMANCE_GUIDS)
+        if r_track is not None and _identity_matches(r_track, "romance"):
             _log(f"romance track resolved by GUID {tag} -> {getattr(r_track, '__name__', str(r_track))!r}")
+        elif r_track is not None:
+            _log(f"romance GUID lookup returned mismatched statistic "
+                 f"{getattr(r_track, '__name__', '?')!r}; REJECTING to "
+                 f"avoid writing to wrong track")
+            r_track = None
         else:
             _log("romance track unresolved via name or GUID")
             # Diagnostic: dump every STATISTIC whose name contains

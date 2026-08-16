@@ -1007,11 +1007,17 @@ def _show_save_notes_dialog(anchor_sim):
 
         loc_title = LocalizationHelperTuning.get_raw_text("Save notes")
         loc_text = LocalizationHelperTuning.get_raw_text(
-            "Free-form world context. Prepended to every AI-generated "
+            "Free-form world context. Injected into every AI-generated "
             "call, text, story, and event in this save. Great for "
             "challenge rulesets, long-running narrative context, or "
-            "house rules the AI should treat as universally binding. "
-            "Leave blank to clear."
+            "house rules the AI should treat as universally binding."
+            "\n\nA quick tip: shorter and more specific tends to work "
+            "better than longer and vaguer. Something like \"this save "
+            "is a Victorian-era challenge; letters only\" gives the AI "
+            "a clear anchor. Long or open-ended notes can produce "
+            "unexpected results since this is the highest-priority "
+            "instruction in every prompt."
+            "\n\nLeave blank to clear."
         )
         loc_ok = LocalizationHelperTuning.get_raw_text("Save")
         loc_cancel = LocalizationHelperTuning.get_raw_text("Cancel")
@@ -1213,7 +1219,13 @@ def _show_sim_bio_edit_dialog(anchor_sim, sim_id, sim_name):
             "secrets, quirks — anything you want the AI to know about "
             f"who {display_name} really is. Shapes their voice wherever "
             "they show up in a prompt. Distinct from any Llamadate "
-            "profile bio. Leave blank to clear."
+            "profile bio."
+            f"\n\nA quick tip: a few sentences tend to work better than "
+            f"a full page. This bio is emphasized in every prompt "
+            f"involving {display_name}, so a long one can crowd out "
+            f"other context. Focus on the most distinctive traits or "
+            f"the hidden truths that shape how they act."
+            "\n\nLeave blank to clear."
         )
         loc_ok = LocalizationHelperTuning.get_raw_text("Save")
         loc_cancel = LocalizationHelperTuning.get_raw_text("Cancel")

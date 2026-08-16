@@ -3299,6 +3299,13 @@ def _describe_relationship(contact, recipient=None):
     # If the relationship has explicitly changed (breakup, divorce, etc.) OR romance
     # has gone negative, surface that as a clear warning so the AI doesn't continue
     # treating them like a current partner based on past chat history.
+    #
+    # Gate on `not family_label` so this NEVER fires for family relationships.
+    # Family sentiment bits (bitter family argument, estrangement between siblings,
+    # etc.) share trigger words like 'bitter' / 'estranged' / 'broken' with the
+    # romantic ones, but family conflict is a different beast -- shouldn't be
+    # framed as a "former romantic relationship." Without this gate, a
+    # grandfather with any negative family sentiment would get flagged as an ex.
     status = contact.get("status", "") or ""
     status_low = status.lower().replace("_", "").replace(" ", "")
     is_ex = ("broken" in status_low or "ex" in status_low.split() or
@@ -3310,7 +3317,7 @@ def _describe_relationship(contact, recipient=None):
                     "hasbeenfriends" in status_low or "lostfriends" in status_low or
                     "awkward" in status_low or "betrayal" in status_low or
                     "cheat" in status_low)
-    if is_ex or is_estranged or (romance is not None and romance < 0):
+    if not family_label and (is_ex or is_estranged or (romance is not None and romance < 0)):
         parts.append(
             "RELATIONSHIP STATUS NOTE: This is a former OR strained romantic "
             "relationship. They are NOT currently dating/together. Any past "

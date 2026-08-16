@@ -380,7 +380,14 @@ def set_state(household_id, other_id, state):
         entry["updated"] = _now_iso()
         # If clearing state and no note, drop the whole entry to keep
         # the file small.
-        if not entry.get("state") and not entry.get("note"):
+        # Preserve the entry if there are relationship_events even
+        # when state + note are both empty -- events are structural
+        # facts about the pair that outlive the interaction prefs.
+        if (
+            not entry.get("state")
+            and not entry.get("note")
+            and not entry.get("relationship_events")
+        ):
             data["pairs"].pop(key, None)
         else:
             data["pairs"][key] = entry
@@ -409,7 +416,14 @@ def set_note(household_id, other_id, note):
         else:
             entry.pop("note", None)
         entry["updated"] = _now_iso()
-        if not entry.get("state") and not entry.get("note"):
+        # Preserve the entry if there are relationship_events even
+        # when state + note are both empty -- events are structural
+        # facts about the pair that outlive the interaction prefs.
+        if (
+            not entry.get("state")
+            and not entry.get("note")
+            and not entry.get("relationship_events")
+        ):
             data["pairs"].pop(key, None)
         else:
             data["pairs"][key] = entry
@@ -418,7 +432,7 @@ def set_note(household_id, other_id, note):
 
 
 def clear_prefs(household_id, other_id):
-    """Wipe all prefs for a pair (state + note)."""
+    """Wipe all prefs for a pair (state + note + relationship_events)."""
     if not household_id or not other_id:
         return
     key = _pair_key(household_id, other_id)
@@ -428,6 +442,131 @@ def clear_prefs(household_id, other_id):
             del data["pairs"][key]
             _save(data)
     _scrub_legacy(other_id)
+
+
+# ---------------------------------------------------------------------------
+# Relationship events (v3.6) -- structural facts about the pair beyond
+# interaction preferences. Origin ("met on Llamadate"), major arcs
+# (engaged, married, broken up), future auto-populated events (kissed
+# where role differs per side, etc.).
+#
+# Stored PER DIRECTION so events can be asymmetric ("kisser" on one
+# side, "kissed" on the other; "proposer" vs "proposed to"). Symmetric
+# events like Llamadate origin write the same payload to both sides.
+#
+# Schema (per entry):
+#   entry["relationship_events"] = [
+#     {
+#       "type": "llamadate_origin",
+#       "timestamp_iso": "2026-08-16T14:35:00",
+#       "timestamp_ticks": 12345678,
+#       "mutual_friend_name": null | "Sergio Vargas",
+#       ...role-specific fields for future asymmetric events
+#     },
+#     ...
+#   ]
+# ---------------------------------------------------------------------------
+
+
+def _append_event(household_id, other_id, event):
+    """Append one event dict to (household, other)'s entry. Preserves
+    other fields (state, note). Creates the entry if missing.
+    Idempotent-ish: if an event of the same `type` already exists on
+    this pair, we replace it (so re-firing doesn't double-record)."""
+    if not household_id or not other_id:
+        return False
+    key = _pair_key(household_id, other_id)
+    with _lock:
+        data = _load()
+        entry = data["pairs"].get(key, {
+            "household_sim_id": int(household_id),
+            "other_sim_id": int(other_id),
+        })
+        entry["household_sim_id"] = int(household_id)
+        entry["other_sim_id"] = int(other_id)
+        events = entry.get("relationship_events", [])
+        if not isinstance(events, list):
+            events = []
+        # Replace any existing event of same type (idempotent) rather
+        # than appending duplicates.
+        events = [e for e in events if isinstance(e, dict) and e.get("type") != event.get("type")]
+        events.append(event)
+        entry["relationship_events"] = events
+        entry["updated"] = _now_iso()
+        data["pairs"][key] = entry
+        _save(data)
+    _scrub_legacy(other_id)
+    return True
+
+
+def set_llamadate_origin(sim_a_id, sim_b_id, mutual_friend_name=None):
+    """Record that sim_a and sim_b became connected via Llamadate.
+    Writes the SAME event to BOTH directions since the fact is
+    symmetric. mutual_friend_name populated when the match came
+    through the mutual-friend intro flow instead of a direct match."""
+    if not sim_a_id or not sim_b_id:
+        return False
+    event = {
+        "type": "llamadate_origin",
+        "timestamp_iso": _now_iso(),
+        "timestamp_ticks": _now_ingame_ticks(),
+        "mutual_friend_name": mutual_friend_name,
+    }
+    ok_a = _append_event(sim_a_id, sim_b_id, dict(event))
+    ok_b = _append_event(sim_b_id, sim_a_id, dict(event))
+    if ok_a and ok_b:
+        _log(
+            f"set_llamadate_origin({sim_a_id}, {sim_b_id}, "
+            f"mutual={mutual_friend_name!r}) OK (both directions)"
+        )
+    return ok_a and ok_b
+
+
+def get_relationship_events(household_id, other_id):
+    """Return the list of event dicts for (household, other), or []."""
+    e = get_prefs(household_id, other_id)
+    if not e:
+        return []
+    events = e.get("relationship_events", [])
+    return list(events) if isinstance(events, list) else []
+
+
+def format_relationship_events_for_prompt(household_id, other_id, household_name, other_name):
+    """Return a prompt-ready block describing relationship events for
+    this pair, or empty string when none. Reads from (household, other)'s
+    entry -- direction matters so future asymmetric events (kisser vs
+    kissed, proposer vs proposed-to) can be rendered from each sim's
+    perspective."""
+    events = get_relationship_events(household_id, other_id)
+    if not events:
+        return ""
+    lines = []
+    a = household_name or "one of them"
+    b = other_name or "the other"
+    for e in events:
+        if not isinstance(e, dict):
+            continue
+        etype = e.get("type")
+        if etype == "llamadate_origin":
+            mutual = e.get("mutual_friend_name")
+            if mutual:
+                lines.append(
+                    f"{a} and {b} were introduced through {mutual} (via "
+                    f"Llamadate's mutual-friend intro flow). Frame their "
+                    f"history as a friend-of-a-friend connection, not an "
+                    f"app match."
+                )
+            else:
+                lines.append(
+                    f"{a} and {b} originally connected on Llamadate (a "
+                    f"dating app) -- that's how they first got in touch. "
+                    f"Reference this naturally if relevant; do not "
+                    f"pretend they met somewhere else."
+                )
+        # Future event types slot in here.
+    if not lines:
+        return ""
+    return "\n".join(lines)
 
 
 def list_all():

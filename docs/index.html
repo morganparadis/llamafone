@@ -15,7 +15,7 @@
 
   <title>Llamafone — AI calls & texts for The Sims 4 (Claude, OpenAI, Gemini, or local Ollama)</title>
   <meta name="description" content="A free phone-first script mod for The Sims 4: AI-generated calls and texts (bring your own AI -- Claude, OpenAI, Gemini, or local Ollama). Random sims call and text you in character, shaped by their traits, careers, relationships, and what's actually happening in your save.">
-  <meta name="keywords" content="sims 4, sims 4 mod, sims 4 phone mod, ai mod, llamafone, claude, openai, gemini, ollama, sims 4 ai, sims 4 dialogue mod, sims 4 text mod, scriptmod">
+  <meta name="keywords" content="sims 4, sims 4 mod, sims 4 phone mod, ai mod, llamafone, claude, openai, gemini, openrouter, ollama, sims 4 ai, sims 4 dialogue mod, sims 4 text mod, scriptmod">
   <meta name="author" content="morganparadis">
   <link rel="canonical" href="https://morganparadis.github.io/llamafone/">
 
@@ -189,7 +189,7 @@
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
       </div>
       <h3>Interacts with your game</h3>
-      <p>Writes back where it matters. Moodlets from emotional texts; new sims land in your relationships panel when you engage.</p>
+      <p>Writes back where it matters. Emotional texts apply moodlets and nudge friendship or romance up and down. New sims land in your relationships panel when you engage.</p>
     </article>
 
   </div>
@@ -229,6 +229,46 @@
       <figure class="screenshot">
         <img src="img/babyexample.jpg" alt="Phone call from an infant babbling goo goo ga ga">
         <figcaption><strong>Unpredictable moments</strong><br><span class="muted small">Yes, the baby called. Yes, it was babbling.</span></figcaption>
+      </figure>
+
+    </div>
+  </div>
+</section>
+
+<section id="v3-6-context" class="screenshot-strip">
+  <div class="container">
+    <h2>Messages move relationships, world context, sim bios, service NPCs <span class="muted small">(v3.6)</span></h2>
+    <p class="muted">Flirty and warm texts now nudge the game's own friendship and romance bars. Plus player-authored context that shapes every prompt, hired service NPCs that write in the right register, and a fifth AI provider option.</p>
+    <div class="screenshot-grid-masonry">
+
+      <figure class="screenshot">
+        <img src="img/newsettings3.6.PNG" alt="Llamafone Settings menu showing new v3.6 rows: Save notes, Sim bios, Messages affect relationships toggle, and a relationship-impact cap slider">
+        <figcaption><strong>New knobs</strong><br><span class="muted small">Save notes, sim bios, and the relationship-impact toggle all live under Settings alongside the existing controls.</span></figcaption>
+      </figure>
+
+      <figure class="screenshot">
+        <img src="img/enterbioexample.PNG" alt="Sim bio input dialog where the player types character notes for a specific sim">
+        <figcaption><strong>Bios you write yourself</strong><br><span class="muted small">Backstory, motivations, secrets, quirks &#8212; anything you want the AI to know about who this sim really is. Every call, text, or reply involving them reads from it.</span></figcaption>
+      </figure>
+
+      <figure class="screenshot">
+        <img src="img/worldcontext.PNG" alt="Save-level world context dialog where the player writes free-form notes that shape every AI prompt in this save">
+        <figcaption><strong>World context, save-wide</strong><br><span class="muted small">One field, injected as the top-priority instruction in every prompt. Set the era, the challenge rules, whatever binds the whole save.</span></figcaption>
+      </figure>
+
+      <figure class="screenshot">
+        <img src="img/butlerexample.PNG" alt="Text from a butler NPC written in professional, deferential register referencing household dinner arrangements">
+        <figcaption><strong>Your butler sounds like your butler</strong><br><span class="muted small">Hired service NPCs stay in role &#8212; formal for butlers, task-focused for maids, kid-first for nannies, plant-talk for gardeners.</span></figcaption>
+      </figure>
+
+      <figure class="screenshot">
+        <img src="img/addrelationshipexample.PNG" alt="Sim relationship panel showing the romance bar growing after flirty text exchanges">
+        <figcaption><strong>Romance and friendship build where they should</strong><br><span class="muted small">Flirty back-and-forth fills the romance bar; warm banter fills friendship. The game's own relationship bars respond to how the conversations actually go.</span></figcaption>
+      </figure>
+
+      <figure class="screenshot">
+        <img src="img/flirtyexample.PNG" alt="A flirty text exchange between two sims building romantic tension through the messages">
+        <figcaption><strong>Like this exchange</strong><br><span class="muted small">Flirty back-and-forth, in-character voice on both sides &#8212; the kind of message chain that moved the bar above.</span></figcaption>
       </figure>
 
     </div>
@@ -440,6 +480,14 @@
     </article>
 
     <article class="feature-card">
+      <div class="feature-icon icon-text" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11l-3-3-3 3"/><path d="M19 8v8"/></svg>
+      </div>
+      <h3>Service NPCs stay in role</h3>
+      <p>The butler, maid, babysitter, gardener, and repair tech write in the right register. Butlers stay professional and deferential; maids talk supplies and schedules; babysitters check in on the kids; gardeners talk plants and season; repair techs quote parts and timing. The mod reads the household's live service records so a hired NPC calling about tomorrow's schedule lands like they should, not like a random friend.</p>
+    </article>
+
+    <article class="feature-card">
       <div class="feature-icon icon-event" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v18"/><path d="M18 3v18"/><path d="M3 8h18"/><path d="M3 16h18"/></svg>
       </div>
@@ -497,10 +545,18 @@
 
     <article class="feature-card">
       <div class="feature-icon icon-auto" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
       </div>
-      <h3>Realistic reply delays</h3>
-      <p>When you text a sim, they "think" for a few seconds before replying — close friends fast, lazy or hostile sims drag. No more instant-psychic responses.</p>
+      <h3>What time it is</h3>
+      <p>Every prompt now carries the current in-game clock — 7:15 PM (evening), 9:03 AM (morning), etc. No more "dinner ready by six" from your butler when it's already 7. Times of day sound like real times of day, and future-tense references (tonight, tomorrow, next week) land in the right window.</p>
+    </article>
+
+    <article class="feature-card">
+      <div class="feature-icon icon-event" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/><path d="M8 2l-1 4M16 2l1 4"/></svg>
+      </div>
+      <h3>Remembers how they met</h3>
+      <p>Match with someone on Llamadate today, text them three in-game weeks later, and the AI still knows the origin — that's how they'll bring it up. Mutual-friend intros remember the mutual's name too. Stored on the pair alongside contact preferences, ready for future asymmetric events (who kissed who, who proposed to who).</p>
     </article>
 
   </div>
@@ -566,12 +622,12 @@
       <div class="step-num">2</div>
       <div class="step-body">
         <h3>Pick an AI provider and get a key</h3>
-        <p>Llamafone works with four different AI providers — pick whichever fits your budget, preferences, or paranoia. You only need credentials for the one you pick. Ollama is free because it runs entirely on your computer.</p>
+        <p>Llamafone works with five different AI providers — pick whichever fits your budget, preferences, or paranoia. You only need credentials for the one you pick. Ollama is free because it runs entirely on your computer.</p>
 
         <div class="provider-grid">
           <div class="provider-card">
-            <h4>🧡 Anthropic Claude <span class="provider-tag">recommended</span></h4>
-            <p>What the mod was built and tuned against. Best writing quality at the price.</p>
+            <h4>🧡 Anthropic Claude</h4>
+            <p>What the mod was built and tuned against.</p>
             <ol class="api-substeps">
               <li>Go to <a href="https://console.anthropic.com/" target="_blank" rel="noopener">console.anthropic.com</a> and sign up</li>
               <li>Verify email/phone if asked</li>
@@ -603,6 +659,18 @@
               <li>Copy the <code>AIza…</code> key</li>
             </ol>
             <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = gemini</code> + <code>default_model = gemini-1.5-flash</code> (free tier) or <code>gemini-1.5-pro</code></p>
+          </div>
+
+          <div class="provider-card">
+            <h4>🔀 OpenRouter <span class="provider-tag">one key, many models</span></h4>
+            <p>Aggregator that proxies dozens of models (Claude, GPT, Llama, Mistral, DeepSeek, etc.) behind one API key. Useful if you want to A/B-test models without juggling separate accounts.</p>
+            <ol class="api-substeps">
+              <li>Go to <a href="https://openrouter.ai/" target="_blank" rel="noopener">openrouter.ai</a> and sign up</li>
+              <li>Add credits under <em>Settings → Credits</em> ($5 minimum)</li>
+              <li>Go to <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a> and click <em>Create Key</em></li>
+              <li>Copy the <code>sk-or-…</code> key</li>
+            </ol>
+            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = openrouter</code> + <code>default_model = anthropic/claude-haiku-4-5</code> (browse the full catalog at <a href="https://openrouter.ai/models" target="_blank" rel="noopener">openrouter.ai/models</a>)</p>
           </div>
 
           <div class="provider-card">
@@ -643,7 +711,7 @@
       <div class="step-body">
         <h3>Set your provider + API key in the config</h3>
         <p>Open <code>llamafone.cfg</code> with any plain text editor (TextEdit, Notepad, VS Code — anything that saves plain text). Two lines to update near the top:</p>
-        <pre><code>provider = claude          # or: openai, gemini, ollama
+        <pre><code>provider = claude          # or: openai, gemini, openrouter, ollama
 api_key  = YOUR_API_KEY_HERE</code></pre>
         <p>Replace <code>YOUR_API_KEY_HERE</code> with the key you copied. Examples per provider:</p>
         <pre><code>provider = claude
@@ -658,6 +726,13 @@ api_key  = sk-proj-…
 
 provider = gemini
 api_key  = AIza…
+
+# or
+
+provider      = openrouter
+api_key       = sk-or-…
+default_model = anthropic/claude-haiku-4-5   # vendor/model form -- see openrouter.ai/models
+fast_model    = anthropic/claude-haiku-4-5
 
 # or (no key needed)
 
@@ -709,7 +784,7 @@ fast_model    = llama3.2:3b</code></pre>
       <summary>What does the AI know about my sims?</summary>
       <div class="faq-body">
         <p>Just what's needed for the current command — names, ages, traits, careers, aspirations, household members, and relationship history. Nothing personal about you, no real names beyond what your sims are named, no save file contents.</p>
-        <p>Your prompts go from your computer directly to whichever AI provider you configured — there's no middleman server. Each provider has its own data-retention policy: <a href="https://www.anthropic.com/legal/commercial-terms" target="_blank" rel="noopener">Anthropic</a>, <a href="https://openai.com/policies/api-data-usage-policies" target="_blank" rel="noopener">OpenAI</a>, and <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener">Google</a> all state that paid API traffic is not used to train models. If you really don't want any data to leave your machine, use <strong>Ollama</strong> — it runs entirely locally.</p>
+        <p>Your prompts go from your computer directly to whichever AI provider you configured — there's no middleman server. Each provider has its own data-retention policy: <a href="https://www.anthropic.com/legal/commercial-terms" target="_blank" rel="noopener">Anthropic</a>, <a href="https://openai.com/policies/api-data-usage-policies" target="_blank" rel="noopener">OpenAI</a>, <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener">Google</a>, and <a href="https://openrouter.ai/terms" target="_blank" rel="noopener">OpenRouter</a> all state that paid API traffic is not used to train models. If you really don't want any data to leave your machine, use <strong>Ollama</strong> — it runs entirely locally.</p>
       </div>
     </details>
 
@@ -789,6 +864,32 @@ fast_model    = llama3.2:3b</code></pre>
   <ol class="changelog-list">
 
     <li class="changelog-entry">
+      <div class="changelog-date">August 16, 2026</div>
+      <div class="changelog-body">
+        <h3>Messages move relationships, custom world context, sim bios, service NPCs, OpenRouter (v3.6)</h3>
+        <p>Player-authored context you can pass into every prompt, messages that actually move friendship and romance, service-NPC roles, time-of-day awareness, and a fifth AI provider. Drop-in over v3.5.</p>
+        <p><strong>New:</strong></p>
+        <ul>
+          <li><strong>Save notes.</strong> One free-form text field per save, prepended to every AI prompt as WORLD CONTEXT. Use it for challenge rulesets, long-running narrative context, or house rules the AI should treat as universally binding. Under Llamafone → Settings → Save notes.</li>
+          <li><strong>Sim bios.</strong> Per-sim character notes — backstory, motivations, secrets, quirks — that get injected into that sim's descriptor block anywhere they appear in a prompt. Distinct from the Llamadate bio (dating-facing) and the per-relationship contact note (scoped to one pair). Under Llamafone → Settings → Sim bios. Travels with the save.</li>
+          <li><strong>Service NPCs stay in role.</strong> Hired butlers, maids, babysitters, nannies, gardeners, and repair techs now write in the right register — butlers professional and deferential, maids task-focused, babysitters kids-first, gardeners talking plants and season, repair techs quoting parts and timing. Layered detection reads the household's live service records, the active zone's situation manager, direct household attributes, and the sim's career track, so it works across pack combinations. When a hired service NPC is on shift, the prompt says "currently on shift as the household's butler" instead of the generic "at work right now" — no more contradictions when you call your live-in butler.</li>
+          <li><strong>Messages move relationships.</strong> Warm, flirty, hostile, or otherwise emotionally-charged messages now nudge the actual Sims 4 friendship and romance tracks — bidirectional, hard-capped, tunable. Default cap is ±3 per message, well below the game's own social-action deltas, so exchanges accumulate naturally without one text reshaping a relationship. Toggle and cap under Llamafone → Settings.</li>
+          <li><strong>Time-of-day awareness.</strong> Every prompt now includes the current in-game clock (e.g. <code>[CURRENT IN-GAME TIME: 7:15 PM (evening)]</code>). No more "dinner ready by six" replies when it's already 7. Same for morning / afternoon / night phrasing.</li>
+          <li><strong>Llamadate origin persists across sessions.</strong> When two sims connect via Llamadate, that fact is now stored on both sides of the pair and referenced in every future prompt between them. Reconnect with a match three in-game weeks later and the AI still knows how you met. Includes mutual-friend intros (records the mutual's name too). Stored alongside contact preferences in a structure ready for future asymmetric events (who kissed who, who proposed to who, etc.).</li>
+          <li><strong>OpenRouter provider support.</strong> Fifth provider option in <code>llamafone.cfg</code>: one API key, dozens of models (Claude, GPT, Llama, Mistral, DeepSeek, etc.) via <code>vendor/model</code> naming. Useful if you want to A/B-test models without juggling separate accounts.</li>
+          <li><strong>Update-mod button in the startup notification.</strong> When a newer release is on GitHub, the startup popup now has an "Update now / Later" dialog. "Update now" opens the CurseForge project page in your default browser.</li>
+        </ul>
+        <p><strong>Bug fixes and polish:</strong></p>
+        <ul>
+          <li><strong>Llamadate matches now know your name.</strong> The bio-only privacy block was worded so vaguely ("this is ALL you know about them") that AI-driven matches occasionally asked what your sim's name was, even mid-conversation. Now explicit: they know your first name from your profile and can't ask.</li>
+          <li><strong>Llamadate initial friendship boost tuned down.</strong> Reduced from +15 to +5 on both sides at match, so subsequent messages have room to grow the relationship naturally under the new per-message impact.</li>
+          <li><strong>Llamadate outreach no longer fakes IRL sightings.</strong> Cold outreach messages used to open with "I swear I saw you at the coffee shop last week" or "I think we do the same gym" even for total strangers. Fixed — the sender stays in-character as someone who found an interesting profile online, no fabricated past encounters.</li>
+          <li><strong>Long-distance calls and texts now engage with your in-person visit proposals.</strong> The "different worlds" rule used to make sims push back three messages in a row when the player suggested "come see me this weekend." Now there's an explicit exception: when you propose a visit, the AI says yes, negotiates timing, or expresses excitement instead of stonewalling.</li>
+        </ul>
+      </div>
+    </li>
+
+    <li class="changelog-entry">
       <div class="changelog-date">August 9, 2026</div>
       <div class="changelog-body">
         <h3>Standalone app + Llamadate dating (v3.5)</h3>
@@ -836,25 +937,6 @@ fast_model    = llama3.2:3b</code></pre>
       </div>
     </li>
 
-    <li class="changelog-entry">
-      <div class="changelog-date">July 17, 2026</div>
-      <div class="changelog-body">
-        <h3>Hotfix: cache seeding + dialog verbiage (v3.4.1)</h3>
-        <p>A hardening pass and some copy cleanup on top of v3.4.0. Drop-in over v3.4.0.</p>
-        <ul>
-          <li><strong>Time-delta calculations were wildly wrong (600&#215;).</strong> The mod's ticks-per-minute constant was <code>100</code> in every module that reasoned about in-game time -- but Sims 4's <code>date_and_time.py</code> actually uses <code>REAL_MILLISECONDS_PER_SIM_SECOND = 1000</code> (so 60,000 ticks per sim minute, not 100). Every "N in-game days/hours ago" phrase across contact prefs, journal, past events, and interactions was off by 600&#215;. An in-person contact from 1 sim hour ago rendered as "25 in-game days ago". Fixed the constant across all 5 per-save modules; existing stored ticks values are unchanged (they were correct raw game time) &#8212; only the interpretation was wrong.</li>
-          <li><strong>Household members were rendering as "we saw each other X hours ago".</strong> Siblings and other sims living in the same household see each other constantly regardless of when the last Sims 4 relationship bit fired. Rendering "you two saw each other 6 in-game hours ago" for cohabiting sims read as absurd. Fixed by short-circuiting the in-person tag when both sims share a household id -- new tag says <em>"you two live in the same household. You see each other constantly at home."</em></li>
-          <li><strong>"Your mom" phrasing when the mom is shared.</strong> The mutual-reference rule said to use family roles from the RECIPIENT's perspective ("your dad", "your mom"), which was wrong when the mutual is family of both the sender AND the recipient (Luca calling Francesca about their shared mom Vivian). Added a SHARED-FAMILY EXCEPTION to the rule: when the mutual's family role is the same from both sides (both call her Mother, both call him Brother), use "our mom / our dad / our sister" or just "mom / dad". Never "your mom" when the mom is your mom too.</li>
-          <li><strong>Group text replies going to the wrong player-turn.</strong> When a group thread had multiple player-turns (e.g. an invite from morning + a thank-you from afternoon), the AI could respond to the older topic instead of the fresh one -- so Vivian/Luca/Martha replied about "tomorrow at 5" when the player had moved on to thanking them for last night's party. Fixed by finding the most-recent player-turn in the thread and pinning it explicitly in each participant's reply prompt with a hard rule: <em>"respond to THIS specific message, not any earlier topic in the thread even if it looks unresolved."</em></li>
-          <li><strong>AI breaking frame with meta-commentary.</strong> When a contact was in "asked for space" (paused) state but had recent affectionate journal history, the AI would notice the contradiction and reply with something like <em>"I need to pause here because the context contains a critical contradiction I can't resolve in-character..."</em> &#8212; asking the PLAYER clarifying questions instead of writing the sim's actual message. Fixed by: (a) reworded the boundary-state prompt block to remove menu-of-options language that invited deliberation, and (b) added an explicit hard rule to the call/text/reply system prompts: never break frame, never explain, never ask the player questions, pick one interpretation silently and write ONE in-character message.</li>
-          <li><strong>Migration save-back could nuke a good ContactPreferences.json.</strong> The write-back condition in <code>contact_prefs._load</code> intended to persist on-first-migration, but its guard (<code>"_legacy_sims" in data or "pairs" in data</code>) was always true because <code>"pairs"</code> got injected right before the check. Combined with a transient parse failure (partial write, encoding hiccup, antivirus file-lock), the recovery path could write an empty <code>{"pairs":{}}</code> back to disk, wiping real data. Fixed: only save-back when an actual <code>"sims"</code> &#8594; <code>"_legacy_sims"</code> migration happens, and refuse to write on parse failure at all (cache empty for the session; disk file left alone for recovery).</li>
-          <li><strong>Dialog subtext promised behavior the mod doesn't do.</strong> The recipient picker and message-input dialogs said things like <em>"Llamafone will craft the message once you tell it what to say"</em> &#8212; misleading, because outgoing texts and calls send the player's typed message as-is; only the sim's reply is AI-crafted. Stripped the subtext from the sim picker, multi-select group picker, message-input, group-message-input, and reply-input dialogs. Titles carry the context; no need for over-explaining copy.</li>
-          <li><strong>Success logging added to <code>contact_prefs._load</code>.</strong> Future weirdness leaves a trail: after each successful load, the log records the pair/legacy counts and filename. Errors were already logged; this closes the "silent success" blind spot.</li>
-          <li><strong>README refreshed</strong> to reflect v3.4.0 features (group texts, per-relationship contact preferences, sim-world time, expanded context awareness) and the new <code>llama.contact</code> / <code>llama.testconnection</code> commands.</li>
-        </ul>
-      </div>
-    </li>
-
   </ol>
 
   <p class="changelog-footer">
@@ -872,12 +954,6 @@ fast_model    = llama3.2:3b</code></pre>
       <div class="roadmap-status status-planned">Planned</div>
       <h3>In-game event triggers</h3>
       <p>Calls and texts that fire when something happens in your save. Get dumped → your best friend texts to check in. Get a promotion → mom calls to congratulate. Thunderstorm rolls in → your dad texts to make sure you're okay. Reactive rather than random.</p>
-    </li>
-
-    <li class="roadmap-card">
-      <div class="roadmap-status status-planned">Planned</div>
-      <h3>Service NPC roles (butler, maid, etc.)</h3>
-      <p>When a hired butler, maid, babysitter, gardener, or repair tech calls or texts, the AI knows it. Butlers use formal, deferential language and refer to the household as the estate; maids talk about supplies and schedules; babysitters check in about the kids; gardeners talk plants, season, weather. The mod reads the household's hired-service records from the game's ServiceNpcService — so a butler ringing the doorbell, calling about laundry, or texting to confirm tomorrow's schedule lands in the right register.</p>
     </li>
 
     <li class="roadmap-card roadmap-card-cta">

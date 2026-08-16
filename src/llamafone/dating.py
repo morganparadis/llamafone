@@ -1306,13 +1306,18 @@ def build_narrative_frame(seeker_si, sender_si):
         "HARD RULES for this message:\n"
         "- Reference how you saw them on Llamadate / their profile "
         "somewhere in the opener -- casually, not stiffly.\n"
-        "- Add ONE small, plausible detail about how you might have "
-        "crossed paths in real life too, tied to your actual "
-        f"traits/career/hobbies. Your facts: {facts_block}. "
-        "Examples of the shape: 'saw your profile pop up and I "
-        "swear I saw you at the coffee shop last week', 'your bio "
-        "made me laugh, also I think we might do the same gym'. "
-        "Match that hook to your own traits.\n"
+        f"- You have NEVER met this person before. Do NOT invent "
+        "shared history or say things like 'I've seen you around', "
+        "'I think I saw you at [place]', 'you look familiar', 'we "
+        "might do the same gym / coffee shop / bar'. You know them "
+        "only from their profile. Speak like someone who found an "
+        "interesting stranger online, NOT like someone reintroducing "
+        "themselves.\n"
+        f"- Ground the opener in something SPECIFIC -- either a "
+        "detail you're reacting to from their profile, or something "
+        f"real about YOU that says who you are. Your facts: {facts_block}. "
+        "Use these to color your voice; don't claim they overlap with "
+        "the recipient's world.\n"
         "- Keep it short (1-2 texts).\n"
         "- Tone tracks the sender's actual traits. A Cheerful sim is "
         "warm, a Snob is picky, a Mean sim is provocative, a "
@@ -1523,7 +1528,7 @@ def has_pending_new_relationship(a_id, b_id):
         return _pair_key(a_id, b_id) in _pending_new
 
 
-def establish_relationship_on_engagement(actor_si, other_si):
+def establish_relationship_on_engagement(actor_si, other_si, mutual_friend_name=None):
     """Called when the player takes an action that turns a stashed
     cold-outreach pair into a real relationship. Idempotent: safe to
     call multiple times; the second call is a no-op because the pair
@@ -1532,6 +1537,12 @@ def establish_relationship_on_engagement(actor_si, other_si):
     Also called by the outbound Send-Intro flow, where there was no
     prior stash but the player is initiating contact -- in that case
     we skip the stash lookup and just add the relationship.
+
+    `mutual_friend_name` (optional) records that this pair was
+    introduced via Llamadate's mutual-friend intro flow. Persisted to
+    relationship_context so future prompts frame their history as
+    friend-of-a-friend instead of app-match. When None, the origin is
+    recorded as a direct Llamadate match.
     """
     actor_id = getattr(actor_si, "sim_id", None)
     other_id = getattr(other_si, "sim_id", None)
@@ -1539,14 +1550,28 @@ def establish_relationship_on_engagement(actor_si, other_si):
         return
     with _pending_new_lock:
         _pending_new.pop(_pair_key(actor_id, other_id), None)
-    _bump_relationship(actor_si, other_id, delta=15)
-    _bump_relationship(other_si, actor_id, delta=15)
+    _bump_relationship(actor_si, other_id, delta=5)
+    _bump_relationship(other_si, actor_id, delta=5)
+    # No romance seed on establish. Matching on a dating app means
+    # "we noticed each other's profiles" -- not "there is romantic
+    # attraction between us." Romance only builds when the two
+    # actually flirt via messages (the mood-based relationship_impact
+    # feature handles that once conversations start). Keeps the
+    # romance bar honest: hidden until earned.
+    try:
+        from . import contact_prefs
+        contact_prefs.set_llamadate_origin(
+            actor_id, other_id, mutual_friend_name=mutual_friend_name,
+        )
+    except Exception as e:
+        _log(f"contact_prefs.set_llamadate_origin raised: "
+             f"{type(e).__name__}: {e}")
     _log(f"established relationship: "
          f"{getattr(actor_si, 'first_name', '?')} <-> "
          f"{getattr(other_si, 'first_name', '?')}")
 
 
-def _bump_relationship(sim_info, other_id, delta=15):
+def _bump_relationship(sim_info, other_id, delta=10):
     """Establish (or reinforce) a friendship relationship between
     sim_info and other_id. Every step is logged so a failure to
     show up in the relationship panel is diagnosable from
@@ -1725,7 +1750,21 @@ def classify_reply_and_maybe_establish(seeker_si, target_si, reply_text):
              f"(raw={text!r}, err={error!r})")
         if interested:
             try:
-                establish_relationship_on_engagement(seeker_si, target_si)
+                # Look up mutual friend at establish-time so relationship_context
+                # can record whether this pair came through the mutual-friend
+                # intro flow vs a direct Llamadate match.
+                try:
+                    mutual = find_mutual_friend(seeker_si, target_si)
+                    mutual_name = None
+                    if mutual is not None:
+                        first = getattr(mutual, "first_name", None) or ""
+                        last = getattr(mutual, "last_name", None) or ""
+                        mutual_name = f"{first} {last}".strip() or None
+                except Exception:
+                    mutual_name = None
+                establish_relationship_on_engagement(
+                    seeker_si, target_si, mutual_friend_name=mutual_name,
+                )
             except Exception as e:
                 _log(f"establish after positive classify raised: {type(e).__name__}: {e}")
         else:
@@ -1779,10 +1818,13 @@ def build_outbound_recipient_override(seeker_si):
         return None
     seeker_name = getattr(seeker_si, "first_name", "the sender")
     return (
-        f"=== Character: {seeker_name} (the person messaging you) ===\n"
-        f"{seeker_name}'s Llamadate bio (this is ALL you know about them "
-        "-- they matched with you on the app and wrote this for their "
-        "profile). Do NOT invent details beyond what's here:\n"
+        f"=== Character: {seeker_name} (matched with you on Llamadate) ===\n"
+        f"You know {seeker_name}'s FIRST NAME (from their Llamadate profile) "
+        f"and the bio they wrote. Nothing else -- no career, no where they "
+        f"live, no traits, no shared history. Do NOT invent details beyond "
+        f"their name and this bio, and do NOT ask their name (you already "
+        f"have it -- it's {seeker_name}).\n"
+        f"{seeker_name}'s Llamadate bio:\n"
         f"\"{bio}\""
     )
 

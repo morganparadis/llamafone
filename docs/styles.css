@@ -577,6 +577,7 @@ section > p { max-width: 780px; margin-left: auto; margin-right: auto; }
 }
 #features.container {
   max-width: 1360px;
+  padding-bottom: 3.5rem;
 }
 
 .feature-card {
@@ -964,14 +965,36 @@ section > p { max-width: 780px; margin-left: auto; margin-right: auto; }
 /* Provider grid -- four cards (Claude / OpenAI / Gemini / Ollama)
    the player chooses between in install step 2. */
 .provider-grid {
+  /* 5 provider cards, all equal-width. 3-col grid at desktop
+     naturally lays out 3 in row 1 and 2 in row 2 (same width, same
+     visual weight). 2-col at tablet gives 2+2+1 with the trailing
+     card centered on its own row. 1-col at mobile. No special-cased
+     bottom row -- every provider looks equal, which is the honest
+     visual since none is objectively "the recommended one". */
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
   margin-top: 0.5rem;
-  /* Cards have varying content lengths (Ollama needs more setup than
-     Claude). Without `start`, the shorter cards stretch to match the
-     tallest, leaving awkward whitespace at the bottom. */
-  align-items: start;
+}
+.provider-card {
+  min-width: 0;   /* let grid tracks control width, not intrinsic content */
+}
+
+/* Tablet: 2 columns. 5 items -> 2+2+1; center the trailing card. */
+@media (max-width: 900px) {
+  .provider-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .provider-grid > .provider-card:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+    justify-self: center;
+    max-width: 400px;
+  }
+}
+/* Mobile: single-column stack. */
+@media (max-width: 560px) {
+  .provider-grid { grid-template-columns: 1fr; }
+  .provider-grid > .provider-card:last-child:nth-child(odd) {
+    max-width: none;
+  }
 }
 .provider-card {
   background: var(--paper);

@@ -780,6 +780,57 @@ def _get_bool_attr_or_call(obj, name):
         return None
 
 
+def get_current_sim_time():
+    """Return the current in-game clock as (hour_24, minute, day_part),
+    or None if unavailable. day_part is a short label: morning /
+    afternoon / evening / night. Used by phone prompts so replies
+    like 'dinner by 6' don't fire when it's already 7 PM.
+
+    Hour ranges for day_part (mirrors casual usage):
+      5-11   morning
+      12-16  afternoon
+      17-20  evening
+      21-4   night
+    """
+    try:
+        import services
+        ts = services.time_service()
+        if ts is None:
+            return None
+        now = getattr(ts, "sim_now", None)
+        if now is None:
+            return None
+        hour = getattr(now, "hour", None)
+        minute = getattr(now, "minute", None)
+        # Some Sims 4 builds expose .hour / .minute as methods.
+        try:
+            if callable(hour):
+                hour = hour()
+        except Exception:
+            hour = None
+        try:
+            if callable(minute):
+                minute = minute()
+        except Exception:
+            minute = None
+        if hour is None:
+            return None
+        hour = int(hour) % 24
+        minute = int(minute) if minute is not None else 0
+        minute = max(0, min(59, minute))
+        if 5 <= hour <= 11:
+            part = "morning"
+        elif 12 <= hour <= 16:
+            part = "afternoon"
+        elif 17 <= hour <= 20:
+            part = "evening"
+        else:
+            part = "night"
+        return (hour, minute, part)
+    except Exception:
+        return None
+
+
 def get_sim_work_status(sim_info):
     """Return a short prompt-ready phrase describing whether the sim is
     at work / at school right now, or None when there's nothing worth
@@ -1329,6 +1380,20 @@ def build_context_string(sim=None):
         skills = get_sim_skills(focus_si)
         if skills:
             lines.append(f"  Skills: {', '.join(f'{k} {v}' for k, v in skills.items())}")
+
+        # Player-authored sim bio -- backstory / private character context
+        # (distinct from Llamadate bio which is dating-app-facing). Falls
+        # through empty when unset; import lazily to avoid load cycles.
+        try:
+            from . import sim_bios as _sim_bios
+            bio_line = _sim_bios.format_for_prompt(
+                getattr(focus_si, "sim_id", None),
+                getattr(focus_si, "first_name", None),
+            )
+            if bio_line:
+                lines.append(f"  {bio_line}")
+        except Exception:
+            pass
 
         household_members, relationships = get_sim_network(focus_si)
 

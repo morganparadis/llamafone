@@ -502,16 +502,19 @@ Occasional Simlish (Sul sul, Dag dag, Nooboo) is fine.
 # Geography rule (STRICT)
 Look at the caller's world vs the player's world (both listed in the context).
 - SAME world: in-person plans are fine ("come over", "let's grab drinks", "I ran into X").
-- DIFFERENT worlds: NEVER suggest casual in-person meetups ("come over", "stop by", \
-  "let's hang out", "let's grab drinks"). NEVER claim to have "run into" or "bumped into" \
-  the player. Long-distance is the default — frame everything as a phone call, text, video \
-  chat, or a PLANNED future visit ("when I come visit next month"). Same rule applies to \
-  mentions of mutual contacts: only "ran into X" / "saw X" / "bumped into X" / \
-  "got talking with X" if X's listed world matches the CALLER's world EXACTLY. \
-  Each mutual entry includes "lives in <world>" -- check that string against \
-  the caller's world before claiming any in-person encounter. If they don't \
-  match, no in-person encounter happened; only phone/text/online contact, or \
-  a recent visit you can explicitly justify ("when I was in Sulani last week").
+- DIFFERENT worlds: don't casually suggest hanging out as if you live next door \
+  ("come over now", "let's grab drinks tonight"). NEVER claim to have "run into" or \
+  "bumped into" the player. Long-distance is the default framing — phone call, text, \
+  video chat, letter (when world context calls for it), or a PLANNED visit. Same rule \
+  applies to mentions of mutual contacts: only "ran into X" / "saw X" / "bumped into X" \
+  / "got talking with X" if X's listed world matches the CALLER's world EXACTLY. Each \
+  mutual entry includes "lives in <world>" -- check that string before claiming any \
+  in-person encounter.
+- EXCEPTION -- when the PLAYER proposes an in-person visit (this weekend, next month, \
+  on my day off, "come see me", "I could drive out"), ENGAGE with it warmly. Say yes, \
+  negotiate timing, express excitement about seeing them. Distance is an obstacle to \
+  work around, not a refusal to meet at all. Don't push back three messages in a row \
+  when the player keeps insisting -- read the room and agree to make it work.
 - HOUSEHOLD / CLOSE RELATIONSHIPS: if the caller lives in the same household as the player \
   (spouse, partner, parent/child, sibling all in the same household), or is the player's \
   romantic partner regardless of address, they NEVER "run into" the player by chance. \
@@ -738,13 +741,18 @@ Topic variety guide (rotate, don't keep picking the same kind):
 # Geography rule (STRICT)
 Look at the sender's world vs the player's world (both listed in the context).
 - SAME world: in-person plans are fine ("come over", "let's grab coffee", "I saw X").
-- DIFFERENT worlds: NEVER suggest casual in-person meetups ("come over", "stop by", \
-  "let's hang out"). NEVER claim to have "run into" the player. Frame everything as long- \
-  distance — texts, video chats, social media, or a PLANNED future visit. Same rule for \
-  mentions of mutuals: only "ran into X" / "saw X" / "bumped into X" if X's \
-  listed world matches the SENDER's world EXACTLY. Each mutual entry includes \
-  "lives in <world>" -- check that against the sender's world before claiming \
-  any in-person encounter with the mutual.
+- DIFFERENT worlds: don't casually suggest hanging out as if you live next door \
+  ("come over", "stop by", "let's grab drinks tonight"). NEVER claim to have "run \
+  into" the player. Long-distance is the default framing — texts, video chats, social \
+  media, letter (when world context calls for it), or a PLANNED visit. Same rule for \
+  mentions of mutuals: only "ran into X" / "saw X" / "bumped into X" if X's listed \
+  world matches the SENDER's world EXACTLY. Each mutual entry includes "lives in \
+  <world>" -- check that before claiming any in-person encounter.
+- EXCEPTION -- when the PLAYER proposes an in-person visit (this weekend, next month, \
+  on my day off, "come see me", "I could drive out"), ENGAGE with it warmly. Say yes, \
+  negotiate timing, express excitement. Distance is an obstacle to work around, not a \
+  refusal to meet at all. Don't push back three messages in a row when the player \
+  keeps insisting.
 - HOUSEHOLD / CLOSE RELATIONSHIPS: cohabiting sims (same household) and romantic partners \
   NEVER "run into" each other or "bump into" each other — they live shared lives. Frame \
   their texts as coordinating the day, asking what's for dinner, reacting to something \
@@ -943,13 +951,18 @@ unless what {main_name} said genuinely doesn't warrant a substantive reply).
 # Geography rule (STRICT)
 Look at {other_name}'s world vs {main_name}'s world (both listed in the context).
 - SAME world: in-person plans are fine ("come over", "let's grab coffee", "I saw X").
-- DIFFERENT worlds: NEVER suggest casual in-person meetups ("come over", "stop by", \
-  "let's hang out"). NEVER claim to have "run into" {main_name}. Frame everything as \
-  long-distance — texts, video chats, social media, or a PLANNED future visit. Same \
+- DIFFERENT worlds: don't casually suggest hanging out as if you live next door \
+  ("come over", "stop by", "let's grab drinks tonight"). NEVER claim to have "run \
+  into" {main_name}. Long-distance is the default framing — texts, video chats, \
+  social media, letter (when world context calls for it), or a PLANNED visit. Same \
   rule for mentions of mutuals: only "ran into X" / "saw X" / "bumped into X" if X's \
   listed world matches {other_name}'s world EXACTLY. Each mutual entry includes \
-  "lives in <world>" -- check that against {other_name}'s world before claiming any \
-  in-person encounter with the mutual.
+  "lives in <world>" -- check that before claiming any in-person encounter.
+- EXCEPTION -- when {main_name} proposes an in-person visit (this weekend, next \
+  month, on my day off, "come see me", "I could drive out"), ENGAGE with it warmly. \
+  Say yes, negotiate timing, express excitement. Distance is an obstacle to work \
+  around, not a refusal to meet at all. Don't push back three messages in a row when \
+  {main_name} keeps insisting.
 - HOUSEHOLD / CLOSE RELATIONSHIPS: cohabiting sims (same household) and romantic partners \
   NEVER "run into" each other or "bump into" each other — they live shared lives. Frame \
   their replies as coordinating the day, asking what's for dinner, reacting to something \
@@ -1120,12 +1133,18 @@ def _refresh_milestones_for(contact, recipient_sim):
         pass
 
 
-def _apply_mood_from_text(text, recipient=None, is_incoming=False):
+def _apply_mood_from_text(text, recipient=None, is_incoming=False, contact=None):
     """Extract the MOOD: tag and apply the matching moodlet, with three gates:
       1. LLM only emits MOOD when the message is genuinely impactful
          (instructed via prompt -- not every text gets one).
       2. is_incoming=False (reply): only apply if mood is in _CHARGED_MOODS.
       3. Per-sim cooldown so back-to-back messages don't stack moodlets.
+
+    Also applies BIDIRECTIONAL relationship impact when `contact` is
+    provided -- the mood tag drives a small friendship / romance nudge
+    on both directions of the pair, capped by config. Silent no-op
+    when config disables it. See relationship_impact.py for the delta
+    table and clamping rules.
     """
     clean_text, mood = moodlets.extract_mood_tag(text)
     if mood and recipient is not None:
@@ -1138,6 +1157,18 @@ def _apply_mood_from_text(text, recipient=None, is_incoming=False):
                 )
                 if ok:
                     _mark_moodlet_applied(recipient)
+        except Exception:
+            pass
+    # Relationship impact runs independent of the moodlet cooldown --
+    # cumulative small nudges over back-to-back messages are desirable
+    # here (each message contributes some), the cap keeps runaway in
+    # check. Bidirectional so an exchange affects both sims equally.
+    if mood and recipient is not None and contact is not None:
+        try:
+            other_si = contact.get("sim_info") if isinstance(contact, dict) else None
+            if other_si is not None:
+                from . import relationship_impact
+                relationship_impact.apply_from_mood(recipient, other_si, mood)
         except Exception:
             pass
     return clean_text
@@ -1720,6 +1751,13 @@ def _describe_recipient(recipient_sim, contact=None):
     try:
         work_status = sim_context.get_sim_work_status(recipient_sim)
         if work_status:
+            # Service-NPC-aware rewrite (see caller-side comment above
+            # in _describe_relationship for the same treatment).
+            try:
+                from . import service_npc as _service_npc
+                work_status = _service_npc.transform_work_status(work_status, recipient_sim)
+            except Exception:
+                pass
             parts.append(f"{recipient_sim.first_name} is {work_status}")
     except Exception:
         pass
@@ -1829,6 +1867,21 @@ def _describe_recipient(recipient_sim, contact=None):
                 f"Recent in {recipient_sim.first_name}'s life (you may know about these):",
             )
             parts.append("\n" + mblock)
+    except Exception:
+        pass
+
+    # Player-authored sim bio -- private character context (backstory,
+    # motivations) the player has attached to this sim. Distinct from
+    # the Llamadate bio (dating-facing pitch) and the contact_prefs
+    # note (scoped to one relationship). Empty string when unset.
+    try:
+        from . import sim_bios as _sim_bios
+        bio_line = _sim_bios.format_for_prompt(
+            getattr(recipient_sim, "sim_id", None),
+            recipient_sim.first_name,
+        )
+        if bio_line:
+            parts.append(bio_line)
     except Exception:
         pass
 
@@ -2506,6 +2559,26 @@ def _season_context():
     return f"\n[SEASON: {season}]"
 
 
+def _time_context():
+    """Return a minimal current-time block so AI replies don't reference
+    times that already passed ("dinner by 6" when it's 7 PM). Uses the
+    player's own clock; the recipient's clock is the same (Sims 4's
+    time is global). Silent no-op if we can't read the clock."""
+    now = sim_context.get_current_sim_time()
+    if not now:
+        return ""
+    hour_24, minute, part = now
+    if hour_24 == 0:
+        clock = f"12:{minute:02d} AM"
+    elif hour_24 < 12:
+        clock = f"{hour_24}:{minute:02d} AM"
+    elif hour_24 == 12:
+        clock = f"12:{minute:02d} PM"
+    else:
+        clock = f"{hour_24 - 12}:{minute:02d} PM"
+    return f"\n[CURRENT IN-GAME TIME: {clock} ({part})]"
+
+
 # Climate TYPE per world. The Sims 4 calendar is global -- Spring in Willow
 # Creek means Spring in Oasis Springs too -- but each world's real-world
 # climate analogue means different weather in the same season. We map each
@@ -3147,6 +3220,16 @@ def _describe_relationship(contact, recipient=None):
         try:
             work_status = sim_context.get_sim_work_status(si)
             if work_status:
+                # Rewrite generic "at work" phrasing when this sim is a
+                # confirmed service NPC hire for the household -- their
+                # "work" IS being here, so the raw phrasing sounds like
+                # they have a separate off-site job. No-op for regular
+                # sims. See service_npc.transform_work_status().
+                try:
+                    from . import service_npc as _service_npc
+                    work_status = _service_npc.transform_work_status(work_status, si)
+                except Exception:
+                    pass
                 parts.append(f"{name} is {work_status}")
         except Exception:
             pass
@@ -3184,6 +3267,27 @@ def _describe_relationship(contact, recipient=None):
     f_score = contact.get("friendship")
     if f_score is not None:
         f_label = _friendship_label(f_score)
+        # When a Llamadate origin is recorded for this pair, the low-
+        # friendship "barely know each other -- might not remember"
+        # tier is wrong -- they matched moments ago on a dating app
+        # and are actively getting acquainted. Override with a
+        # Llamadate-aware label so the AI writes them as new match
+        # interest, not confused strangers.
+        if f_label and "barely know each other" in f_label:
+            try:
+                si_id_for_origin = getattr(si, "sim_id", None)
+                rec_id_for_origin = getattr(recipient, "sim_id", None) if recipient else None
+                if si_id_for_origin and rec_id_for_origin:
+                    events = contact_prefs.get_relationship_events(
+                        si_id_for_origin, rec_id_for_origin,
+                    )
+                    if any(isinstance(e, dict) and e.get("type") == "llamadate_origin" for e in events):
+                        f_label = (
+                            "recently matched on Llamadate -- actively "
+                            "getting to know each other, curious and open"
+                        )
+            except Exception:
+                pass
         if f_label:
             parts.append(f"How {name} feels about the player: {f_label}")
     romance = contact.get("romance")
@@ -3265,6 +3369,55 @@ def _describe_relationship(contact, recipient=None):
             )
             if shared_block:
                 parts.append(shared_block)
+        except Exception:
+            pass
+
+    # Player-authored sim bio for the caller/sender -- private character
+    # context the player has attached to this sim. Same treatment as
+    # the recipient side in _describe_recipient. Empty if unset.
+    if si:
+        try:
+            from . import sim_bios as _sim_bios
+            bio_line = _sim_bios.format_for_prompt(
+                getattr(si, "sim_id", None), name,
+            )
+            if bio_line:
+                parts.append(bio_line)
+        except Exception:
+            pass
+
+    # Service NPC role -- butler, maid, babysitter, gardener, repair
+    # tech, etc. Only fires when the sender is a service NPC. Empty
+    # when the detection layer (services + situation + household attrs
+    # + career + traits + title) all miss. The work-status line above
+    # is rewritten by service_npc.transform_work_status when this is
+    # a confirmed hire, so no on-shift clarification is needed here.
+    if si:
+        try:
+            from . import service_npc as _service_npc
+            svc_line = _service_npc.format_for_prompt(si, name)
+            if svc_line:
+                parts.append(svc_line)
+        except Exception:
+            pass
+
+    # Per-pair relationship events (origin: llamadate, future
+    # asymmetric events like kisser/kissed, proposer/proposed-to).
+    # Stored on contact_prefs entries -- see set_llamadate_origin and
+    # format_relationship_events_for_prompt. Direction matters: reads
+    # from the caller's -> recipient's entry, so asymmetric events
+    # render from the caller's perspective.
+    if si and recipient is not None:
+        try:
+            recipient_id = getattr(recipient, "sim_id", None)
+            events_line = contact_prefs.format_relationship_events_for_prompt(
+                getattr(si, "sim_id", None),
+                recipient_id,
+                name,
+                getattr(recipient, "first_name", None),
+            )
+            if events_line:
+                parts.append(events_line)
         except Exception:
             pass
 
@@ -3509,7 +3662,7 @@ def generate_call(callback=None, output=None):
         f"[llamafone build loaded at {_LT}]\n\n"
         f"Caller info:\n{rel_desc}{history_block}{mutual_block}\n\n"
         f"{recipient_block}{events_block}{past_events_block}\n\n"
-        f"They are calling {recipient_name}{_location_context(recipient, contact)}.{_season_context()}{_weather_context(recipient, contact)}{interaction_tag}"
+        f"They are calling {recipient_name}{_location_context(recipient, contact)}.{_season_context()}{_time_context()}{_weather_context(recipient, contact)}{interaction_tag}"
         f"{_contact_prefs_block(recipient, contact.get('sim_info'), contact['name'])}\n\n"
         f"Write what {contact['name']} says during this phone call."
     )
@@ -3517,7 +3670,7 @@ def generate_call(callback=None, output=None):
     def _on_result(text, error):
         title = f"Call from {contact['name']}"
         if text:
-            text = _apply_mood_from_text(text, recipient=recipient, is_incoming=True)
+            text = _apply_mood_from_text(text, recipient=recipient, is_incoming=True, contact=contact)
             _start_conversation(contact, text, recipient_sim=recipient, kind="call")
             journal.add_entry(
                 "call",
@@ -3650,7 +3803,7 @@ def generate_text_for(recipient, contact, callback=None, output=None,
     prompt = (
         f"Sender info:\n{rel_desc}{history_block}{mutual_block}\n\n"
         f"{recipient_block}{events_block}{past_events_block}\n\n"
-        f"They are texting {recipient_name}{_location_context(recipient, contact)}.{_season_context()}{_weather_context(recipient, contact)}{interaction_tag}"
+        f"They are texting {recipient_name}{_location_context(recipient, contact)}.{_season_context()}{_time_context()}{_weather_context(recipient, contact)}{interaction_tag}"
         f"{_contact_prefs_block(recipient, contact.get('sim_info'), contact['name'])}\n\n"
         f"Write 1-2 short text messages from {contact['name']}.{suffix}"
     )
@@ -3658,7 +3811,7 @@ def generate_text_for(recipient, contact, callback=None, output=None,
     def _on_result(text, error):
         title = f"Text from {contact['name']}"
         if text:
-            text = _apply_mood_from_text(text, recipient=recipient, is_incoming=True)
+            text = _apply_mood_from_text(text, recipient=recipient, is_incoming=True, contact=contact)
             _start_conversation(contact, text, recipient_sim=recipient)
             journal.add_entry(
                 journal_type_override or "text",
@@ -3791,7 +3944,7 @@ def generate_reply(player_message, callback=None, output=None):
     interaction_tag = interactions.format_for_prompt(contact_id, main_sim_id, last_conv_iso=last_conv_iso)
     context_tags = (
         f"{_location_context(geo_main, contact)}"
-        f"{_season_context()}"
+        f"{_season_context()}{_time_context()}"
         f"{_weather_context(geo_main, contact)}"
         f"{interaction_tag}"
     )
@@ -3818,7 +3971,7 @@ def generate_reply(player_message, callback=None, output=None):
                 callback(text, error)
             return
 
-        text_clean = _apply_mood_from_text(text, recipient=recipient, is_incoming=False)
+        text_clean = _apply_mood_from_text(text, recipient=recipient, is_incoming=False, contact=contact)
         # Calls are a live two-way conversation -- the recipient is on the
         # other end of the line, so the reply should land the instant the
         # AI returns. Texts get the artificial "sim is thinking" delay so
@@ -3922,22 +4075,14 @@ def send_text(contact, player_message, callback=None, output=None,
         source_label="you texted",
     )
 
-    # v3.5 dating: if the player is replying to a cold-outreach text
-    # from an unmet sim, this reply promotes the pair from "pending"
-    # to a real Sims 4 relationship (adds friendship score, which
-    # creates the tracker entry so the sender shows up as an
-    # acquaintance in the relationship panel). Idempotent -- subsequent
-    # replies find no pending record and skip. Silent no-op for
-    # regular replies to existing contacts.
-    try:
-        from . import dating as _dating
-        contact_si = contact.get("sim_info") if contact else None
-        main_id_for_dating = getattr(main_si, "sim_id", None)
-        contact_id_for_dating = getattr(contact_si, "sim_id", None) if contact_si else None
-        if _dating.has_pending_new_relationship(main_id_for_dating, contact_id_for_dating):
-            _dating.establish_relationship_on_engagement(main_si, contact_si)
-    except Exception:
-        pass
+    # v3.6 dating: establishment on outbound send was firing before the
+    # AI's reply came back -- a relationship would form the moment the
+    # player hit send, regardless of whether the other sim expressed
+    # interest. Wrong: real dating apps establish the connection AFTER
+    # the recipient responds positively. All Llamadate establishment
+    # now flows through classify_reply_and_maybe_establish, which runs
+    # once the AI's reply exists and has been classified as interested.
+    # Nothing to do here on outbound send.
 
     # Seed the conversation with the player's outgoing message as turn 1
     _start_conversation(contact, "", recipient_sim=main_si)
@@ -3952,7 +4097,7 @@ def send_text(contact, player_message, callback=None, output=None,
         other_name=other_name,
         main_name=main_name,
     )
-    rel_desc = relationship_override if relationship_override else _describe_relationship(contact)
+    rel_desc = relationship_override if relationship_override else _describe_relationship(contact, recipient=main_si)
     contact_id = getattr(contact.get("sim_info"), "sim_id", None)
     main_sim_id = getattr(main_si, "sim_id", None)
 
@@ -4009,7 +4154,7 @@ def send_text(contact, player_message, callback=None, output=None,
         interaction_tag = interactions.format_for_prompt(contact_id, main_sim_id, last_conv_iso=last_conv_iso)
     context_tags = (
         f"{_location_context(main_si, contact)}"
-        f"{_season_context()}"
+        f"{_season_context()}{_time_context()}"
         f"{_weather_context(main_si, contact)}"
         f"{interaction_tag}"
     )
@@ -4038,7 +4183,7 @@ def send_text(contact, player_message, callback=None, output=None,
                 callback(text, error)
             return
 
-        text_clean = _apply_mood_from_text(text, recipient=main_si, is_incoming=False)
+        text_clean = _apply_mood_from_text(text, recipient=main_si, is_incoming=False, contact=contact)
         delay = _calculate_reply_delay(contact)
 
         def _show_reply():
@@ -4118,7 +4263,7 @@ def send_call(contact, player_topic, callback=None, output=None):
         other_name=other_name,
         main_name=main_name,
     )
-    rel_desc = _describe_relationship(contact)
+    rel_desc = _describe_relationship(contact, recipient=main_si)
     contact_id = getattr(contact.get("sim_info"), "sim_id", None)
     main_sim_id = getattr(main_si, "sim_id", None)
     sim_history = journal.format_sim_history_for_prompt(
@@ -4147,7 +4292,7 @@ def send_call(contact, player_topic, callback=None, output=None):
     interaction_tag = interactions.format_for_prompt(contact_id, main_sim_id, last_conv_iso=last_conv_iso)
     context_tags = (
         f"{_location_context(main_si, contact)}"
-        f"{_season_context()}"
+        f"{_season_context()}{_time_context()}"
         f"{_weather_context(main_si, contact)}"
         f"{interaction_tag}"
     )
@@ -4164,7 +4309,7 @@ def send_call(contact, player_topic, callback=None, output=None):
 
     def _on_send_call_result(text, error):
         if text:
-            text = _apply_mood_from_text(text, recipient=main_si, is_incoming=False)
+            text = _apply_mood_from_text(text, recipient=main_si, is_incoming=False, contact=contact)
             if ckey in _conversations:
                 _conversations[ckey]["history"].append({"role": "them", "text": text})
             journal.add_entry(
@@ -4311,7 +4456,7 @@ def _build_group_briefing_prompt(anchor_si, participant_contacts):
     # anchor-specific and gets omitted (participants may be scattered
     # across worlds). Past events shared by the WHOLE group would be
     # ideal but past_events is pair-indexed; skip for v1.
-    parts.append(f"\n=== World context ==={_season_context()}{_weather_context(anchor_si, {})}")
+    parts.append(f"\n=== World context ==={_season_context()}{_time_context()}{_weather_context(anchor_si, {})}")
 
     parts.append(f"\nWrite the briefing for this group of {len(participant_contacts)} participants.")
     return "\n".join(p for p in parts if p)
@@ -4834,9 +4979,15 @@ def _generate_next_group_reply(group_id, active, cursor, this_round_replies,
         if notes:
             _log_error(f"group reply from {my_name} cleaned: {notes}")
 
-        # Apply mood side-effects (matches 1:1 texts)
+        # Apply mood side-effects (matches 1:1 texts). Wrap `my_si` in
+        # a contact-shaped dict so relationship_impact can nudge the
+        # anchor <-> speaker relationship. Same bidirectional cap logic
+        # as 1:1 texts.
         try:
-            cleaned = _apply_mood_from_text(cleaned, recipient=anchor_si, is_incoming=True)
+            cleaned = _apply_mood_from_text(
+                cleaned, recipient=anchor_si, is_incoming=True,
+                contact={"sim_info": my_si, "name": my_name},
+            )
         except Exception as _me:
             _log_error(f"apply_mood on group reply failed: {type(_me).__name__}: {_me}")
 

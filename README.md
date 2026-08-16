@@ -2,7 +2,7 @@
 
 A phone-first AI mod for The Sims 4. Random sims call and text you in character — voices shaped by their traits, mood, relationships, and what's actually happening in your save. Bring your own AI — Claude, OpenAI, Gemini, or a local Ollama model — and pick up calls and texts that read like they were written for the people in front of you.
 
-**v3.5 highlights:** Llamadate (opt-in dating layer with Hinge-style profiles, per-sim bios, and reply-gated relationships), standalone Llamafone tile on the phone home screen, breakup context finally lands in every prompt. Plus everything from v3.4 — group texts, per-relationship contact preferences ("asked for space" auto-detected), weather + holiday awareness, past-event memory. Story updates, random events, and 3-act storylines are in the box too, for when you want them.
+**v3.6 highlights:** save-level world notes (challenge rulesets, custom flavor), per-sim character bios (backstory / private context injected into every prompt), service-NPC roles (butlers / maids / babysitters / nannies / gardeners / repair techs write in their proper register), messages that actually move friendship and romance, in-game time-of-day in every prompt, Llamadate origin persists across sessions, plus OpenRouter as a fifth AI provider. Plus everything from v3.5 — Llamadate dating layer with Hinge-style profiles and reply-gated matches, standalone phone app, breakup context — and v3.4 — group texts, per-relationship contact preferences ("asked for space" auto-detected), weather + holiday awareness, past-event memory. Story updates, random events, and 3-act storylines are in the box too, for when you want them.
 
 **Site:** [morganparadis.github.io/llamafone](https://morganparadis.github.io/llamafone/)
 
@@ -34,9 +34,12 @@ No Python install required for end users — the release ships compiled `.pyc` b
 | `claude` | Yes | `claude-haiku-4-5`, `claude-sonnet-4-6`, `claude-opus-4-8` | [console.anthropic.com](https://console.anthropic.com/) |
 | `openai` | Yes | `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo` | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
 | `gemini` | Yes | `gemini-1.5-pro`, `gemini-1.5-flash` | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| `openrouter` | Yes | `anthropic/claude-haiku-4-5`, `openai/gpt-4o-mini`, `meta-llama/llama-3.1-8b-instruct`, `deepseek/deepseek-chat` — [full catalog](https://openrouter.ai/models) | [openrouter.ai/keys](https://openrouter.ai/keys) |
 | `ollama` (techy) | **No** — runs locally | whatever you've `ollama pull`-ed (`llama3.2:3b` recommended for most hardware) | [ollama.com](https://ollama.com) |
 
 For Ollama, `ollama_endpoint` in the config points at your local server (default `http://localhost:11434`). No key, no cost, no internet required after the model download. It's the most technical option — you install Ollama, keep the tray icon running, and `ollama pull` a model before the mod can use it. Run `llama.testconnection` in-game to verify setup end-to-end (checks reachability, lists installed models, verifies your configured models match, runs a tiny generation).
+
+For OpenRouter, model names use the `vendor/model` form so `default_model = anthropic/claude-haiku-4-5` gets you Claude via OpenRouter's proxy, `default_model = openai/gpt-4o-mini` gets you GPT, etc. One key covers everything — useful if you want to try several models without juggling separate accounts.
 
 ---
 
@@ -67,6 +70,39 @@ Every call and text reads live save state and sends it to the AI as context. Nob
 **Family-role references.** When one family member mentions another, they use the relationship from the recipient's perspective ("your dad", "your sister") instead of the first name.
 
 **In-game timestamps everywhere.** Contact preferences, interactions, and journal entries all use sim-world time in prompts. Shelving the game for real weeks doesn't rot the state — the AI sees "you asked for space 3 in-game days ago", not "3 real weeks ago".
+
+---
+
+## Save notes, sim bios, and structural context (v3.6)
+
+Two new player-authored context surfaces plus one automatic one, all persistent per save.
+
+- **Save notes** — Phone → Llamafone → Settings → Save notes. One free-form text field per save, prepended to every AI prompt as `WORLD CONTEXT`. Use it for challenge rulesets ("100 baby challenge — Cara is trying to keep the count above the previous generation"), custom setting overrides ("historical challenge — all messages are letters delivered by mail"), long-running narrative context, or house rules the AI should treat as universally binding.
+- **Sim bios** — Phone → Llamafone → Settings → Sim bios. Per-sim character notes — backstory, motivations, secrets, quirks — injected into that sim's descriptor block anywhere they appear in a prompt. Distinct from the Llamadate bio (dating-facing) and the per-relationship contact note (scoped to one pair). The sim picker sorts sims-with-bios to the top and marks them `[bio]` so you can see at a glance what's set.
+- **Relationship origin persistence** — when two sims connect via Llamadate (either directly or through the mutual-friend intro flow), that origin fact is now stored on both sides of the pair and referenced in every future prompt between them. Text a match three in-game weeks later and the AI still knows how you met. Storage sits alongside contact preferences in a directional per-pair schema ready for future asymmetric events (who kissed who, who proposed, etc.).
+
+## Service NPC roles (v3.6)
+
+Hired service NPCs — butlers, maids, babysitters, nannies, gardeners, repair techs, pizza delivery, mail carriers, personal trainers, and more — now write in their proper professional register instead of sounding like generic townies.
+
+- **Layered detection** across the game's several service-NPC systems: hire records, active zone situations, direct household attributes, career track, marker traits, sim name pattern. If any layer confirms this sim is *your household's* hire, they get the "the household's butler" framing; if they're a service NPC by career but not confirmed as yours, the AI gets a softer "professional butler by trade" hint.
+- **Role-specific voice guidance** appended to their descriptor: butlers are professional and deferential, maids task-focused (schedules, supplies, specific messes), nannies warm and family-embedded (know the kids by name), babysitters kids-first and occasional, gardeners talk plants and season, repair techs quote parts and timing.
+- **"On shift" phrasing rewritten** for confirmed hires. When Sims 4 reports your butler as "at work right now," the prompt now says "currently on shift as the household's butler" instead — so the AI doesn't read it as two separate contradictory facts and break frame.
+
+## Messages move friendship and romance (v3.6)
+
+Emotionally-charged phone messages now nudge the actual Sims 4 friendship and romance tracks — bidirectional, hard-capped, tunable.
+
+- **Warm exchanges** lift friendship. **Flirty** ones bump romance. **Hostile** or **rejecting** messages drop the relevant track. Neutral / low-stakes messages don't move anything.
+- **Bidirectional:** both sides of the pair get the same delta, so relationships don't drift asymmetrically over time.
+- **Hard cap per message** (default ±3, tunable via `message_relationship_max_delta` in `llamafone.cfg` or under Settings). Well below Sims 4's own casual-social interaction deltas (3-8), so a single text nudges without reshaping.
+- **Default on**, toggleable per save via `message_relationship_impact_enabled` config knob or the Settings menu.
+
+Fires whenever the AI emits a `MOOD:` tag in its response — same signal used to apply moodlets, so mood and relationship impact stay in sync.
+
+## In-game time-of-day in every prompt (v3.6)
+
+Every call and text prompt now carries the current in-game clock — e.g. `[CURRENT IN-GAME TIME: 7:15 PM (evening)]`. Same season tag as before, plus this. AI replies won't say "dinner ready by six" when it's already 7 PM, and future-tense references (tonight, tomorrow, next week) land in the right window.
 
 ---
 
@@ -308,8 +344,12 @@ src/
     milestones.py               detects & dedups life events (job, marriage, birth, ...)
     interactions.py             logs in-person interactions via Relationship.add_relationship_bit
     group_texts.py              persistent group thread storage (per save)
-    contact_prefs.py            per-pair contact preferences (state + note) + auto-detection
+    contact_prefs.py            per-pair contact prefs (state + note) + relationship_events (origin, etc.) + auto-detection
     dating.py                   Llamadate: opt-ins, bios, candidate filtering, cold outreach, reply classifier
+    save_notes.py               save-level world-context notes prepended to every prompt
+    sim_bios.py                 per-sim character notes (backstory / private context) injected into descriptor blocks
+    service_npc.py              butler / maid / nanny / gardener / repair tech role detection + register-anchoring flavor
+    relationship_impact.py      sentiment-driven friendship / romance nudges (bidirectional, capped)
     moodlets.py                 buff/moodlet application from AI messages (per-recipient reactions)
     notifications.py            in-game notification popups (top-right panel)
     commands.py                 all llama.* cheat commands

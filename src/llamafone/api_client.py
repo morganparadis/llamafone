@@ -1,13 +1,14 @@
 """
 AI provider HTTP client.
 
-Routes `call_ai_async()` to one of four providers based on the
+Routes `call_ai_async()` to one of five providers based on the
 `provider` knob in llamafone.cfg:
 
-  claude  -> Anthropic Messages API
-  openai  -> OpenAI Chat Completions API
-  gemini  -> Google Gemini Generative Language API
-  ollama  -> Local Ollama server (no API key needed)
+  claude      -> Anthropic Messages API
+  openai      -> OpenAI Chat Completions API
+  gemini      -> Google Gemini Generative Language API
+  openrouter  -> OpenRouter (OpenAI-compatible aggregator, any hosted model)
+  ollama      -> Local Ollama server (no API key needed)
 
 We talk to every provider via `curl` because the Sims 4's embedded
 Python 3.7 lacks SSL support. Each provider's request/response shape
@@ -264,6 +265,45 @@ def _call_openai(api_key, model, max_tokens, system, messages):
         return "", "Empty response from OpenAI."
 
 
+def _call_openrouter(api_key, model, max_tokens, system, messages):
+    # OpenRouter proxies dozens of models (Anthropic, OpenAI, Meta,
+    # Mistral, etc.) behind an OpenAI-compatible Chat Completions API.
+    # Same request/response shape as _call_openai; only the base URL and
+    # optional attribution headers differ. Model names use the
+    # "vendor/model" form -- e.g. "anthropic/claude-haiku-4-5",
+    # "openai/gpt-4o-mini", "meta-llama/llama-3.1-8b-instruct".
+    #
+    # HTTP-Referer / X-Title are optional and used purely for OpenRouter's
+    # public "top apps" leaderboard; they don't gate access. We send them
+    # so the mod shows up as a coherent user-agent rather than "unknown".
+    full = []
+    if system:
+        full.append({"role": "system", "content": system})
+    full.extend(messages)
+    body = {"model": model, "messages": full, "max_tokens": max_tokens}
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+        "HTTP-Referer": "https://morganparadis.github.io/llamafone/",
+        "X-Title": "Llamafone (Sims 4)",
+    }
+    stdout, err, _rc = _curl("https://openrouter.ai/api/v1/chat/completions", headers, json.dumps(body))
+    if err:
+        return "", err
+    try:
+        data = json.loads(stdout)
+    except json.JSONDecodeError:
+        return "", f"Invalid response from API: {stdout[:200]}"
+    if "error" in data:
+        e = data["error"]
+        msg = e.get("message", str(e)) if isinstance(e, dict) else str(e)
+        return "", f"API error: {msg}"
+    try:
+        return data["choices"][0]["message"]["content"], None
+    except (KeyError, IndexError, TypeError):
+        return "", "Empty response from OpenRouter."
+
+
 def _call_gemini(api_key, model, max_tokens, system, messages):
     # Gemini uses "contents" with parts. System prompt goes in a separate
     # systemInstruction field. Roles: "user" and "model" (assistant->model).
@@ -430,21 +470,52 @@ def call_ai_async(messages, system=None, use_fast_model=False, callback=None):
         model = config.get_fast_model() if use_fast_model else config.get_default_model()
         max_tokens = config.get_max_tokens()
 
+        # Save-level notes prepended to the system prompt so world context
+        # binds every downstream call/text/story path without each builder
+        # having to know about the feature. Import lazily to avoid a
+        # module-load cycle -- save_notes -> save_id -> services, and
+        # api_client is imported very early.
+        #
+        # Uses a distinct `effective_system` local instead of rebinding
+        # the outer `system` param: any assignment to `system` inside
+        # this nested function marks it as function-local for the WHOLE
+        # scope (Python's binding rule doesn't care that the assign is
+        # gated by `if world:`), which would crash with UnboundLocalError
+        # on every subsequent read of `system` when world is empty.
+        # World context appended at the END of the system prompt so
+        # it's the last thing the model reads before the user message
+        # -- LLMs treat later instructions as authoritative when they
+        # conflict with earlier ones. Placing it at the top drowns it
+        # under hundreds of specific rules below; placing it at the
+        # end keeps it high-priority without duplication.
+        try:
+            from . import save_notes as _save_notes
+            world = _save_notes.format_for_prompt()
+        except Exception:
+            world = ""
+        if world:
+            effective_system = f"{system}\n\n{world}" if system else world
+        else:
+            effective_system = system
+        effective_messages = messages
+
         # Log the prompt so we can debug what the AI actually saw
-        _log_prompt(system, messages, model, provider)
+        _log_prompt(effective_system, effective_messages, model, provider)
 
         try:
             if provider == "claude":
-                text, err = _call_claude(config.get_api_key(), model, max_tokens, system, messages)
+                text, err = _call_claude(config.get_api_key(), model, max_tokens, effective_system, effective_messages)
             elif provider == "openai":
-                text, err = _call_openai(config.get_api_key(), model, max_tokens, system, messages)
+                text, err = _call_openai(config.get_api_key(), model, max_tokens, effective_system, effective_messages)
             elif provider == "gemini":
-                text, err = _call_gemini(config.get_api_key(), model, max_tokens, system, messages)
+                text, err = _call_gemini(config.get_api_key(), model, max_tokens, effective_system, effective_messages)
+            elif provider == "openrouter":
+                text, err = _call_openrouter(config.get_api_key(), model, max_tokens, effective_system, effective_messages)
             elif provider == "ollama":
-                text, err = _call_ollama(config.get_ollama_endpoint(), model, max_tokens, system, messages)
+                text, err = _call_ollama(config.get_ollama_endpoint(), model, max_tokens, effective_system, effective_messages)
             else:
                 if callback:
-                    callback(None, f"Unknown provider '{provider}'. Set provider to claude/openai/gemini/ollama in llamafone.cfg.")
+                    callback(None, f"Unknown provider '{provider}'. Set provider to claude/openai/gemini/openrouter/ollama in llamafone.cfg.")
                 return
         except Exception as e:
             if callback:

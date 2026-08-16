@@ -15,7 +15,7 @@ Commands (open cheat console with Ctrl+Shift+C):
 """
 
 MOD_NAME = "Llamafone"
-MOD_VERSION = "3.5.0"
+MOD_VERSION = "3.6.0"
 
 # Captured at module-load time -- the moment Sims 4 imported this build.
 # Used in prompts so a llama.dumpprompt definitively shows which load
@@ -203,19 +203,12 @@ try:
                 # Check for a newer release on GitHub. Short timeout so the
                 # popup doesn't hang waiting on a slow network.
                 latest = _check_for_update()
-                update_line = ""
-                if latest:
-                    update_line = (
-                        f"\n\n** UPDATE AVAILABLE: v{latest} **\n"
-                        f"Download at morganparadis.github.io/llamafone/"
-                    )
 
                 if config.is_configured():
                     body = (
                         f"v{MOD_VERSION} ready!\n"
                         f"Model: {config.get_default_model()}\n"
                         f"Type 'llama.status' in the cheat console for all commands."
-                        f"{update_line}"
                     )
                     notifications.show(MOD_NAME, body)
                 else:
@@ -223,9 +216,23 @@ try:
                         f"v{MOD_VERSION} loaded but NOT configured.\n"
                         f"Edit llamafone.cfg and add your API key,\n"
                         f"then type 'llama.reload' in the cheat console."
-                        f"{update_line}"
                     )
                     notifications.show(MOD_NAME, body)
+
+                # If a newer release is out, show the update prompt as
+                # a separate dialog so the buttons (Update now / Later)
+                # are unambiguous. Points at the CurseForge project
+                # page since that's the recommended download source.
+                if latest:
+                    try:
+                        notifications.show_update_prompt(
+                            MOD_VERSION,
+                            latest,
+                            "https://www.curseforge.com/sims4/mods/llamafone",
+                        )
+                    except Exception as _upd_e:
+                        _log(f"show_update_prompt raised: "
+                             f"{type(_upd_e).__name__}: {_upd_e}")
                 return
             except Exception as inner:
                 # Log only when the error message changes -- avoids spamming the

@@ -26,18 +26,21 @@ _SECTION = "llamafone"
 _DEFAULT_CONFIG_TEMPLATE = """[llamafone]
 ; ── AI provider ────────────────────────────────────────────────────────────
 ; Which AI service does the mod talk to? Pick one:
-;   claude   -- Anthropic (default, what the mod was built on)
-;   openai   -- OpenAI's chat completions API (GPT-4, GPT-4o, etc.)
-;   gemini   -- Google Gemini
-;   ollama   -- A local Ollama server (no API key required)
+;   claude      -- Anthropic (default, what the mod was built on)
+;   openai      -- OpenAI's chat completions API (GPT-4, GPT-4o, etc.)
+;   gemini      -- Google Gemini
+;   openrouter  -- OpenRouter aggregator (one key, dozens of models: Claude,
+;                  GPT, Llama, Mistral, DeepSeek, etc. -- pick per model name)
+;   ollama      -- A local Ollama server (no API key required)
 provider = claude
 
 ; API key for whichever provider you picked above. Only the matching one
 ; is read -- the others can stay blank. Get a key:
-;   claude  -> https://console.anthropic.com/
-;   openai  -> https://platform.openai.com/api-keys
-;   gemini  -> https://aistudio.google.com/apikey
-;   ollama  -> not needed; runs locally
+;   claude      -> https://console.anthropic.com/
+;   openai      -> https://platform.openai.com/api-keys
+;   gemini      -> https://aistudio.google.com/apikey
+;   openrouter  -> https://openrouter.ai/keys
+;   ollama      -> not needed; runs locally
 api_key = YOUR_API_KEY_HERE
 
 ; If using Ollama, point at your local server:
@@ -46,10 +49,13 @@ ollama_endpoint = http://localhost:11434
 ; ── Models ─────────────────────────────────────────────────────────────────
 ; Model for detailed tasks (stories, storylines, drama)
 ; Examples per provider:
-;   claude  -> claude-opus-4-8, claude-sonnet-4-6, claude-haiku-4-5
-;   openai  -> gpt-4o, gpt-4o-mini, gpt-4-turbo
-;   gemini  -> gemini-1.5-pro, gemini-1.5-flash
-;   ollama  -> llama3.1, mistral, qwen2.5 (whatever you've `ollama pull`-ed)
+;   claude      -> claude-opus-4-8, claude-sonnet-4-6, claude-haiku-4-5
+;   openai      -> gpt-4o, gpt-4o-mini, gpt-4-turbo
+;   gemini      -> gemini-1.5-pro, gemini-1.5-flash
+;   openrouter  -> anthropic/claude-haiku-4-5, openai/gpt-4o-mini,
+;                  meta-llama/llama-3.1-8b-instruct, deepseek/deepseek-chat
+;                  (browse full catalog at https://openrouter.ai/models)
+;   ollama      -> llama3.1, mistral, qwen2.5 (whatever you've `ollama pull`-ed)
 default_model = claude-haiku-4-5
 
 ; Model for quick tasks (dialogue, events, calls, texts). Cheaper/faster.
@@ -77,6 +83,22 @@ phone_allow_ghosts = true
 reply_delay_enabled = true
 reply_delay_min_seconds = 15
 reply_delay_max_seconds = 90
+
+
+; ── Message relationship impact (v3.6) ───────────────────────────────────
+; When true, phone messages nudge the ACTUAL friendship / romance
+; tracks between the two sims. Warm exchanges lift friendship, hostile
+; ones drop it, flirty texts lift romance, etc. Both directions of the
+; pair get the same delta. Default on -- makes messages feel like they
+; matter. Turn off to keep AI messages purely narrative.
+message_relationship_impact_enabled = true
+
+; Hard cap on how much friendship or romance can change per message.
+; Applied to both directions independently. Default 5 keeps a single
+; message well below the game's own casual-social action deltas (3-8),
+; so a text nudges relationships without reshaping them. Set to 0 to
+; disable without touching the enabled flag above.
+message_relationship_max_delta = 5
 
 
 ; ── Auto-events ────────────────────────────────────────────────────────────
@@ -469,6 +491,32 @@ def get_dating_cold_outreach_weight():
     lands at roughly 17% of firings alongside the stock call:50 /
     text:50 weights."""
     val = _int_setting_with_config_fallback("dating_cold_outreach_weight", "dating_cold_outreach_weight", 20)
+    return max(0, val)
+
+
+def get_message_relationship_impact_enabled():
+    """Whether call/text mood tags nudge the actual friendship / romance
+    tracks. Default on -- makes messages feel like they matter. Turn
+    off if you want AI messages to be purely narrative and leave
+    relationship stats untouched by the mod."""
+    return _bool_setting_with_config_fallback(
+        "message_relationship_impact_enabled",
+        "message_relationship_impact_enabled",
+        True,
+    )
+
+
+def get_message_relationship_max_delta():
+    """Hard cap on per-message friendship/romance change. Applied to
+    both directions independently. Default 5 keeps a single message
+    well below Sims 4's own casual-social action deltas (3-8), so the
+    feature nudges relationships without one text reshaping them.
+    Set to 0 to disable while leaving the enabled flag alone."""
+    val = _int_setting_with_config_fallback(
+        "message_relationship_max_delta",
+        "message_relationship_max_delta",
+        5,
+    )
     return max(0, val)
 
 

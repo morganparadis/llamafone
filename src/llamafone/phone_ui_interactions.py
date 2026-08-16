@@ -682,6 +682,21 @@ def _setting_definitions():
             "hint":   "When on, participants may silently skip a round after the first (gentle 20/40/60%).",
         },
         {
+            "key":    "message_relationship_impact_enabled",
+            "label":  "Messages affect relationships: {value}",
+            "kind":   "bool",
+            "getter": lambda: bool(config.get_setting("message_relationship_impact_enabled", True)),
+            "hint":   "When on, phone messages nudge the actual friendship / romance scores. Warm exchange = small +friendship, hostile = -friendship, flirty = +romance, etc. Both directions of the pair get the same nudge. Hard-capped per message so no single text reshapes a relationship.",
+        },
+        {
+            "key":    "message_relationship_max_delta",
+            "label":  "Relationship impact cap: {value}",
+            "kind":   "int",
+            "getter": lambda: int(config.get_setting("message_relationship_max_delta", 3)),
+            "bounds": (0, 15),
+            "hint":   "Hard cap on friendship / romance change per message. Default 3 keeps a single message well below the game's own social-action deltas (3-8). 0 disables the effect without touching the toggle above.",
+        },
+        {
             "key":    "manage_contacts",
             "label":  "Manage contacts...",
             "kind":   "action",
@@ -694,6 +709,20 @@ def _setting_definitions():
             "kind":   "action",
             "getter": lambda: "",
             "hint":   "Turn dating suggestions on/off per household sim, and set how often they arrive. Dating is off by default for every sim -- you have to opt each one in.",
+        },
+        {
+            "key":    "save_notes",
+            "label":  "Save notes...",
+            "kind":   "action",
+            "getter": lambda: "",
+            "hint":   "Free-form world context prepended to EVERY AI prompt in this save. Use for challenge rulesets, ongoing story context, or house rules the AI should treat as universally binding.",
+        },
+        {
+            "key":    "sim_bios",
+            "label":  "Sim bios...",
+            "kind":   "action",
+            "getter": lambda: "",
+            "hint":   "Per-sim character notes / backstory. Injected into that sim's descriptor block anywhere they appear in a prompt. Distinct from the Llamadate bio (dating-facing) and the contact_prefs note (scoped to one relationship).",
         },
     ]
 
@@ -951,6 +980,286 @@ def _show_bio_edit_dialog(anchor_sim, sim_id):
     except Exception:
         _log_exc("_show_bio_edit_dialog outer failure")
         _show_dating_settings_picker(anchor_sim)
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Save-level notes editor
+# ---------------------------------------------------------------------------
+#
+# Single free-form text field, saved to <save>/SaveNotes.json via
+# save_notes.set_notes(). Prepended to EVERY AI prompt as WORLD CONTEXT
+# via api_client.call_ai_async, so downstream builders don't have to
+# know about it. Meant for challenge rulesets and per-save flavor.
+
+
+def _show_save_notes_dialog(anchor_sim):
+    """Multi-line text input for the save-level notes. Same protobuf-
+    injection trick as _show_bio_edit_dialog: build a subclass of
+    UiDialogTextInputOkCancel that adds a text_input row of tunable
+    height, so the player has room for a paragraph."""
+    from . import save_notes
+    try:
+        from sims4.localization import LocalizationHelperTuning
+        from ui.ui_dialog_generic import UiDialogTextInputOkCancel
+
+        existing = save_notes.get_notes()
+
+        loc_title = LocalizationHelperTuning.get_raw_text("Save notes")
+        loc_text = LocalizationHelperTuning.get_raw_text(
+            "Free-form world context. Prepended to every AI-generated "
+            "call, text, story, and event in this save. Great for "
+            "challenge rulesets, long-running narrative context, or "
+            "house rules the AI should treat as universally binding. "
+            "Leave blank to clear."
+        )
+        loc_ok = LocalizationHelperTuning.get_raw_text("Save")
+        loc_cancel = LocalizationHelperTuning.get_raw_text("Cancel")
+
+        _FIELD = "save_notes"
+
+        class _SaveNotesDialog(UiDialogTextInputOkCancel):
+            def on_text_input(self, text_input_name='', text_input=''):
+                self.text_input_responses[text_input_name] = text_input
+                return True
+
+            def build_msg(self, text_input_overrides=None, additional_tokens=(), **kwargs):
+                msg = super().build_msg(additional_tokens=additional_tokens, **kwargs)
+                ti = msg.text_input.add()
+                ti.text_input_name = _FIELD
+                ti.height = 180
+                if existing:
+                    try:
+                        ti.initial_value = LocalizationHelperTuning.get_raw_text(existing)
+                    except Exception:
+                        pass
+                return msg
+
+        dialog = _SaveNotesDialog.TunableFactory().default(
+            anchor_sim,
+            text=lambda *_a, **_kw: loc_text,
+            title=lambda *_a, **_kw: loc_title,
+            text_ok=lambda *_a, **_kw: loc_ok,
+            text_cancel=lambda *_a, **_kw: loc_cancel,
+        )
+
+        def _on_response(response_dialog):
+            try:
+                if response_dialog.accepted:
+                    new_notes = (response_dialog.text_input_responses or {}).get(_FIELD, "")
+                    save_notes.set_notes(new_notes)
+            except Exception:
+                _log_exc("save-notes on_response failed")
+            _show_settings_picker(anchor_sim)
+
+        dialog.add_listener(_on_response)
+        dialog.show_dialog()
+        return True
+    except Exception:
+        _log_exc("_show_save_notes_dialog outer failure")
+        _show_settings_picker(anchor_sim)
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Per-sim bios picker + editor
+# ---------------------------------------------------------------------------
+#
+# Two-level flow: pick a sim, then edit their bio.
+# Level 1 picker lists the anchor sim + household + known contacts,
+# sorted so sims with an existing bio surface first (matching the
+# contact-manager pattern).
+
+
+def _show_sim_bios_picker(anchor_sim):
+    """Level 1: pick which sim to edit a bio for. Includes the anchor
+    sim themselves (so the player can write their own protagonist's
+    backstory), plus every eligible contact from the same network
+    manage-contacts uses."""
+    from . import sim_bios
+    try:
+        from sims4.localization import LocalizationHelperTuning
+        from ui.ui_dialog_picker import UiItemPicker, BasePickerRow
+    except Exception:
+        _log_exc("_show_sim_bios_picker: import failed")
+        return False
+
+    anchor_id = getattr(anchor_sim, "sim_id", None) if anchor_sim else None
+    anchor_name = ""
+    if anchor_sim:
+        try:
+            anchor_name = f"{anchor_sim.first_name} {anchor_sim.last_name}".strip()
+        except Exception:
+            anchor_name = ""
+
+    # Build the pick list: anchor first, then everyone in their network.
+    entries = []  # (sim_id, sim_info, display_name)
+    if anchor_id is not None and anchor_sim is not None:
+        entries.append((anchor_id, anchor_sim, anchor_name or "(this sim)"))
+
+    seen = {anchor_id} if anchor_id is not None else set()
+    for sid, contact in _gather_contact_choices(anchor_sim):
+        if sid in seen:
+            continue
+        seen.add(sid)
+        entries.append((sid, contact.get("sim_info"), contact.get("name") or "?"))
+
+    if not entries:
+        notifications.show_error(
+            "No sims to write bios for. Meet some sims first, then come back."
+        )
+        _show_settings_picker(anchor_sim)
+        return False
+
+    # Sort: bios-set first, then alphabetical. Anchor sim stays at the
+    # very top regardless -- their bio is the most-frequently-referenced.
+    def _sort_key(entry):
+        sid, _si, name = entry
+        is_anchor = 0 if sid == anchor_id else 1
+        has_bio = 0 if sim_bios.get_bio(sid) else 1
+        return (is_anchor, has_bio, (name or "").lower())
+    entries = sorted(entries, key=_sort_key)
+
+    try:
+        loc_title = LocalizationHelperTuning.get_raw_text("Sim bios")
+        loc_text = LocalizationHelperTuning.get_raw_text(
+            "Pick a sim to edit their bio. Sims with a bio set are "
+            "marked [bio] and surface first. Bios apply anywhere the "
+            "sim appears in a prompt."
+        )
+        loc_ok = LocalizationHelperTuning.get_raw_text("Open")
+        loc_cancel = LocalizationHelperTuning.get_raw_text("Back")
+
+        dialog = UiItemPicker.TunableFactory().default(
+            anchor_sim,
+            title=lambda *_a, **_kw: loc_title,
+            text=lambda *_a, **_kw: loc_text,
+            text_ok=lambda *_a, **_kw: loc_ok,
+            text_cancel=lambda *_a, **_kw: loc_cancel,
+        )
+        try:
+            dialog.max_selectable = 1
+        except Exception:
+            pass
+        try:
+            dialog.min_selectable = 1
+        except Exception:
+            pass
+
+        idx_to_entry = {}
+        for idx, (sid, si, name) in enumerate(entries):
+            existing_bio = sim_bios.get_bio(sid)
+            marker = "  [bio]" if existing_bio else ""
+            name_text = f"{name}{marker}"
+            desc_text = ""
+            if existing_bio:
+                desc_text = existing_bio[:80] + ("…" if len(existing_bio) > 80 else "")
+            try:
+                row = BasePickerRow(
+                    option_id=idx,
+                    name=LocalizationHelperTuning.get_raw_text(name_text),
+                    row_description=LocalizationHelperTuning.get_raw_text(desc_text),
+                    is_enable=True,
+                )
+                dialog.add_row(row)
+                idx_to_entry[idx] = (sid, si, name)
+            except Exception:
+                _log_exc(f"_show_sim_bios_picker row {idx}")
+
+        def _on_response(response_dialog):
+            try:
+                if not response_dialog.accepted:
+                    _show_settings_picker(anchor_sim)
+                    return
+                picked_ids = list(response_dialog.picked_results or ())
+                if not picked_ids:
+                    _show_settings_picker(anchor_sim)
+                    return
+                picked = idx_to_entry.get(picked_ids[0])
+                if not picked:
+                    _show_settings_picker(anchor_sim)
+                    return
+                sid, si, name = picked
+                _show_sim_bio_edit_dialog(anchor_sim, sid, name)
+            except Exception:
+                _log_exc("_show_sim_bios_picker on_response failed")
+                _show_settings_picker(anchor_sim)
+
+        dialog.add_listener(_on_response)
+        dialog.show_dialog()
+        return True
+    except Exception:
+        _log_exc("_show_sim_bios_picker outer failure")
+        _show_settings_picker(anchor_sim)
+        return False
+
+
+def _show_sim_bio_edit_dialog(anchor_sim, sim_id, sim_name):
+    """Level 2: multi-line text input for a specific sim's bio.
+    Distinct from _show_bio_edit_dialog which edits the Llamadate bio
+    (dating-facing pitch); this one is for the private character
+    context (backstory, motivations, secrets)."""
+    from . import sim_bios
+    try:
+        from sims4.localization import LocalizationHelperTuning
+        from ui.ui_dialog_generic import UiDialogTextInputOkCancel
+
+        existing = sim_bios.get_bio(sim_id)
+        display_name = sim_name or "this sim"
+
+        loc_title = LocalizationHelperTuning.get_raw_text(f"{display_name} bio")
+        loc_text = LocalizationHelperTuning.get_raw_text(
+            f"Character notes for {display_name}. Backstory, motivations, "
+            "secrets, quirks — anything you want the AI to know about "
+            f"who {display_name} really is. Shapes their voice wherever "
+            "they show up in a prompt. Distinct from any Llamadate "
+            "profile bio. Leave blank to clear."
+        )
+        loc_ok = LocalizationHelperTuning.get_raw_text("Save")
+        loc_cancel = LocalizationHelperTuning.get_raw_text("Cancel")
+
+        _FIELD = "sim_bio"
+
+        class _SimBioDialog(UiDialogTextInputOkCancel):
+            def on_text_input(self, text_input_name='', text_input=''):
+                self.text_input_responses[text_input_name] = text_input
+                return True
+
+            def build_msg(self, text_input_overrides=None, additional_tokens=(), **kwargs):
+                msg = super().build_msg(additional_tokens=additional_tokens, **kwargs)
+                ti = msg.text_input.add()
+                ti.text_input_name = _FIELD
+                ti.height = 180
+                if existing:
+                    try:
+                        ti.initial_value = LocalizationHelperTuning.get_raw_text(existing)
+                    except Exception:
+                        pass
+                return msg
+
+        dialog = _SimBioDialog.TunableFactory().default(
+            anchor_sim,
+            text=lambda *_a, **_kw: loc_text,
+            title=lambda *_a, **_kw: loc_title,
+            text_ok=lambda *_a, **_kw: loc_ok,
+            text_cancel=lambda *_a, **_kw: loc_cancel,
+        )
+
+        def _on_response(response_dialog):
+            try:
+                if response_dialog.accepted:
+                    new_bio = (response_dialog.text_input_responses or {}).get(_FIELD, "")
+                    sim_bios.set_bio(sim_id, new_bio)
+            except Exception:
+                _log_exc("sim-bio on_response failed")
+            _show_sim_bios_picker(anchor_sim)
+
+        dialog.add_listener(_on_response)
+        dialog.show_dialog()
+        return True
+    except Exception:
+        _log_exc("_show_sim_bio_edit_dialog outer failure")
+        _show_sim_bios_picker(anchor_sim)
         return False
 
 
@@ -1214,6 +1523,12 @@ def _on_setting_picked(anchor_sim, setting):
             return
         if key == "dating_submenu":
             _show_dating_settings_picker(anchor_sim)
+            return
+        if key == "save_notes":
+            _show_save_notes_dialog(anchor_sim)
+            return
+        if key == "sim_bios":
+            _show_sim_bios_picker(anchor_sim)
             return
         # Unknown action -- log and re-open the picker
         _log(f"_on_setting_picked: unknown action key {key!r}")

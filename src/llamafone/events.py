@@ -323,6 +323,29 @@ def _clean_event_name(raw):
         candidate,
         flags=re.IGNORECASE,
     ).strip()
+    # Fix common English-word joinings that Sims 4's pack authors squish
+    # into a single identifier ("NightontheTown" -> "Night on the Town").
+    # The CamelCase splitter above only inserts spaces at case boundaries,
+    # so lowercase runs like "onthe" / "atthe" / "ofthe" stay glued.
+    # Uses a lookbehind (?<=[a-z]) so we only match these fragments when
+    # they're inside a larger word (not standalone), and prepends a
+    # space in the replacement to split the word cleanly.
+    _JOINED_ENGLISH_FIXES = (
+        (r'(?<=[a-z])onthe(?=\b|[A-Z])',    ' on the'),
+        (r'(?<=[a-z])atthe(?=\b|[A-Z])',    ' at the'),
+        (r'(?<=[a-z])ofthe(?=\b|[A-Z])',    ' of the'),
+        (r'(?<=[a-z])inthe(?=\b|[A-Z])',    ' in the'),
+        (r'(?<=[a-z])fromthe(?=\b|[A-Z])',  ' from the'),
+        (r'(?<=[a-z])tothe(?=\b|[A-Z])',    ' to the'),
+        (r'(?<=[a-z])withthe(?=\b|[A-Z])',  ' with the'),
+        (r'(?<=[a-z])forthe(?=\b|[A-Z])',   ' for the'),
+        (r'(?<=[a-z])andthe(?=\b|[A-Z])',   ' and the'),
+        (r'(?<=[a-z])bythe(?=\b|[A-Z])',    ' by the'),
+    )
+    for pat, sub in _JOINED_ENGLISH_FIXES:
+        candidate = re.sub(pat, sub, candidate, flags=re.IGNORECASE)
+    # Collapse double spaces that could come from consecutive substitutions.
+    candidate = re.sub(r'\s+', ' ', candidate).strip()
     return candidate.title() if candidate else ""
 
 

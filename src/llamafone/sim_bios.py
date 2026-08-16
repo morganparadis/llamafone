@@ -141,10 +141,13 @@ def format_for_prompt(sim_id, sim_name):
     return (
         f"\n=== {sim_name}'s BACKSTORY & CHARACTER TRUTH (player-authored) ===\n"
         f"{bio}\n"
-        f"This is who {sim_name} really is under the surface. Shape their "
-        f"voice, reactions, choices, and emotional register around this. "
-        f"They wouldn't necessarily blurt any of it out, but everything "
-        f"they say and do should feel like it comes from this person.\n"
+        f"This is who {sim_name} really is. Treat it as ground truth for "
+        f"how {sim_name} would act, how others would perceive them, and "
+        f"how they'd be reacted to in this conversation. If {sim_name} is "
+        f"the one speaking, shape their voice, choices, and emotional "
+        f"register around this. If someone else is writing to or about "
+        f"{sim_name}, factor it into that sim's response. Nobody blurts "
+        f"this stuff out unprompted -- it's the underlying reality.\n"
         f"=== END BACKSTORY ===\n"
     )
 

@@ -323,6 +323,12 @@ def _clean_event_name(raw):
         candidate,
         flags=re.IGNORECASE,
     ).strip()
+    # Strip the "Surprise" prefix from Sims 4's Easter-egg holiday
+    # family (Surprise_NightontheTown, Surprise_PirateDay, Surprise_
+    # FunnyNumberDay, etc.). The word "Surprise" is a tuning-family
+    # marker; the sim's actual reference to the day is just "Night
+    # on the Town" or "Pirate Day".
+    candidate = re.sub(r'^Surprise\s+', '', candidate, flags=re.IGNORECASE).strip()
     # Fix common English-word joinings that Sims 4's pack authors squish
     # into a single identifier ("NightontheTown" -> "Night on the Town").
     # The CamelCase splitter above only inserts spaces at case boundaries,

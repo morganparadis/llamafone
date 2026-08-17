@@ -15,6 +15,7 @@ Usage:
                               launch for fresh installs.
 """
 import os
+import re
 import sys
 import subprocess
 import zipfile
@@ -301,15 +302,38 @@ def install(script_file):
     print("Then open the cheat console (Ctrl+Shift+C) and type: llama.status")
 
 
+def _read_mod_version():
+    """Read MOD_VERSION from src/llamafone/__init__.py so the release
+    zip name always matches the shipped version. Falls back to
+    'unversioned' if we can't parse it -- shouldn't happen in practice."""
+    init_path = os.path.join(SRC_DIR, "llamafone", "__init__.py")
+    try:
+        with open(init_path, "r", encoding="utf-8") as f:
+            for line in f:
+                m = re.match(r'\s*MOD_VERSION\s*=\s*["\']([^"\']+)["\']', line)
+                if m:
+                    return m.group(1)
+    except Exception:
+        pass
+    return "unversioned"
+
+
 def make_release_zip(script_file):
-    """Bundle the built .ts4script and .package into Llamafone.zip
-    for CurseForge / GitHub Release upload. Explicitly excludes
-    llamafone.cfg -- shipping a cfg in the release zip overwrites
-    each user's real config (including their API key) on update,
-    which is a nasty regression. The mod's auto-gen (v3.5+) writes
-    a default cfg to Mods/ on first launch for fresh installs, so
-    the cfg does not need to be in the release archive."""
-    zip_path = os.path.join(SCRIPT_DIR, f"{MOD_NAME}.zip")
+    """Bundle the built .ts4script and .package into a versioned
+    Llamafone_v<X.Y.Z>.zip for CurseForge / GitHub Release upload.
+    Explicitly excludes llamafone.cfg -- shipping a cfg in the release
+    zip overwrites each user's real config (including their API key)
+    on update, which is a nasty regression. The mod's auto-gen (v3.5+)
+    writes a default cfg to Mods/ on first launch for fresh installs,
+    so the cfg does not need to be in the release archive.
+
+    The zip filename includes the version so uploaders can visually
+    confirm they're grabbing the right build, and CurseForge users
+    downloading the raw asset from a GitHub Release see the version
+    in the filename."""
+    version = _read_mod_version()
+    zip_name = f"{MOD_NAME}_v{version}.zip"
+    zip_path = os.path.join(SCRIPT_DIR, zip_name)
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         if os.path.isfile(script_file):
             zf.write(script_file, os.path.basename(script_file))
@@ -321,7 +345,8 @@ def make_release_zip(script_file):
             print(f"  WARN: package file missing at {PACKAGE_FILE}; zip will be incomplete")
     size_kb = os.path.getsize(zip_path) / 1024
     print(f"\nRelease zip: {zip_path} ({size_kb:.1f} KB)")
-    print("  Contents: Llamafone.ts4script + Llamafone.package")
+    print(f"  Contents: {MOD_NAME}.ts4script + {MOD_NAME}.package")
+    print(f"  Version:  v{version} (from src/llamafone/__init__.py)")
     print("  llamafone.cfg deliberately EXCLUDED -- would overwrite users' API keys.")
     print("  Mod auto-generates a default cfg on first launch for fresh installs.")
     return zip_path

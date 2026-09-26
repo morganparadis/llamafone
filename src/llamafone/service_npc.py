@@ -230,6 +230,13 @@ def _role_from_career(sim_info):
                     continue
                 role = _classify(text)
                 if role is not None:
+                    _log(
+                        f"role={role!r} via CAREER for sim_id="
+                        f"{getattr(sim_info, 'sim_id', None)} "
+                        f"({getattr(sim_info, 'first_name', '?')} "
+                        f"{getattr(sim_info, 'last_name', '?')}): matched "
+                        f"career text {text!r}"
+                    )
                     return role
     except Exception as e:
         _log(f"_role_from_career raised: {type(e).__name__}: {e}")
@@ -431,14 +438,17 @@ def get_service_role(sim_info):
         role = _role_from_household_attrs(sim_id)
         if role:
             return role, True
+    who = f"{getattr(sim_info, 'first_name', '?')} {getattr(sim_info, 'last_name', '?')}"
     role = _role_from_career(sim_info)
     if role:
         return role, False
     role = _role_from_traits(sim_info)
     if role:
+        _log(f"role={role!r} via TRAIT for {who} (sim_id={sim_id})")
         return role, False
     role = _role_from_sim_title(sim_info)
     if role:
+        _log(f"role={role!r} via TITLE for {who} (sim_id={sim_id})")
         return role, False
     return None, False
 
@@ -500,9 +510,12 @@ def format_for_prompt(sim_info, sim_name):
             f"NOT a friend or family)."
         )
     else:
+        # Career-only signal: we know their JOB, not their relationship
+        # to the player. Don't deny friendship here -- the relationship
+        # lines above already say how they feel about each other.
         line = (
-            f"{sim_name} is a professional {role} by trade (a service "
-            f"NPC role, not a friend or family)."
+            f"{sim_name} works as a {role} (service career; this describes "
+            f"their job, not their relationship to the player)."
         )
     if flavor:
         line += f" Register: {flavor}."

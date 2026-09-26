@@ -286,16 +286,95 @@ def record_seen(event_id, name, start_time, attendee_ids, honored=None, is_holid
                     "honored": list(honored or []),
                     "is_holiday": bool(is_holiday),
                     "logged_at": datetime.datetime.now().isoformat(),
+                    # In-game tick at record time. An entry whose start
+                    # is AFTER this was recorded before it happened --
+                    # the renderer treats that as never-attended.
+                    "recorded_ticks": _now_ticks(),
                 }
             _save(cache)
     except Exception as e:
         _log(f"record_seen failed: {type(e).__name__}: {e}")
 
 
-def get_recent_for(sim_a_id, sim_b_id, max_days=_RECENT_WINDOW_IN_GAME_DAYS):
+def list_all():
+    """All recorded events as (event_id, entry) sorted newest-first.
+    Support/diagnostic use (llama.pastevents)."""
+    try:
+        with _lock:
+            cache = dict(_load())
+    except Exception:
+        return []
+    items = [(k, v) for k, v in cache.items() if isinstance(v, dict)]
+    items.sort(key=lambda kv: kv[1].get("start_ticks") or 0, reverse=True)
+    return items
+
+
+def drop(event_id):
+    """Remove one recorded event by id. Returns True if it existed.
+    Support use (llama.pastevents_drop) for spurious entries recorded
+    by older versions -- e.g. a canceled wedding that surfaced as
+    'attended today'."""
+    try:
+        with _lock:
+            cache = _load()
+            key = str(event_id)
+            if key not in cache:
+                return False
+            del cache[key]
+            _save(cache)
+            return True
+    except Exception as e:
+        _log(f"drop({event_id}) failed: {type(e).__name__}: {e}")
+        return False
+
+
+# Engine / NPC-driven situations and drama nodes that fire around a
+# household but aren't "events" anyone would talk about. Matched as
+# case-insensitive substrings against the raw stored name (class name
+# for situations, resolved name for drama nodes). Checked at record
+# time AND at render time so entries already sitting in saves are
+# scrubbed too. Deliberately NOT here: Burglar (real news), Ultrasound
+# (real visit), dates, parties, weddings, funerals, reunions.
+_NOISE_NAME_PARTS = (
+    "visitingnpc",        # Situation_Greeted/UngreetedPlayerVisitingNPC
+    "playervisiting",
+    "greetedplayer",
+    "ungreeted",
+    "secretsociety",      # College Organization Secret Society Join Visit
+    "secret society",
+    "civicinspector",
+    "civic inspector",
+    "randomgift",
+    "random gift",
+    "communitycloseness",
+    "community closeness",
+    "autonomy",           # Npcrelationship Autonomy Propose (NPC-to-NPC)
+    "npcrelationship",
+    "walkby",
+    "walk by",
+    "restaurant",         # eating out is routine, not an event to recall
+    "groupdancing",       # lounge/club dance session -- same category
+    "group dancing",
+    "caregiver",          # engine 'caregiver Newborn Situation' after a birth
+    "newbornsituation",
+    "newborn situation",
+)
+
+
+def _is_noise_event_name(name):
+    n = str(name or "").lower().replace("_", "").replace(" ", "")
+    n_spaced = str(name or "").lower()
+    return any(p.replace(" ", "") in n or p in n_spaced for p in _NOISE_NAME_PARTS)
+
+
+def get_recent_for(sim_a_id, sim_b_id, max_days=_RECENT_WINDOW_IN_GAME_DAYS,
+                   attendance="shared"):
     """Return events where (a) start_ticks is in the past, (b) start is
-    within max_days in-game days of now, and (c) BOTH sims appear in
-    the attendees list. Newest first."""
+    within max_days in-game days of now, and (c) attendance matches:
+      "shared"         -- BOTH sims appear in the attendees list.
+      "recipient_only" -- sim_b (the recipient) attended and sim_a (the
+                          contact/sender) did NOT. Holidays excluded.
+    Newest first. Callers pass (contact_id, recipient_id)."""
     if sim_a_id is None or sim_b_id is None:
         return []
     cache = _load()
@@ -308,14 +387,26 @@ def get_recent_for(sim_a_id, sim_b_id, max_days=_RECENT_WINDOW_IN_GAME_DAYS):
     matches = []
     for entry in cache.values():
         try:
+            if _is_noise_event_name(entry.get("name")):
+                continue
             start_ticks = entry.get("start_ticks")
             if start_ticks is None or start_ticks >= now_ticks:
+                continue
+            # Recorded before it started == never actually happened
+            # (canceled / re-planned node cleaned up ahead of time).
+            rec = entry.get("recorded_ticks")
+            if rec is not None and start_ticks > rec:
                 continue
             mins_ago = _ticks_to_minutes(now_ticks - start_ticks)
             if mins_ago is None or mins_ago > cutoff_minutes:
                 continue
             attendees = entry.get("attendees") or []
-            if sim_a_id not in attendees or sim_b_id not in attendees:
+            if attendance == "recipient_only":
+                if entry.get("is_holiday"):
+                    continue
+                if sim_b_id not in attendees or sim_a_id in attendees:
+                    continue
+            elif sim_a_id not in attendees or sim_b_id not in attendees:
                 continue
             entry_copy = dict(entry)
             entry_copy["_mins_ago"] = mins_ago
@@ -382,6 +473,11 @@ def _prettify_event_name(raw):
     events path in events._resolve_event_name."""
     if not raw:
         return "Event"
+    # Mod-namespaced situations ("Pandsama:Situation_Ultrasound_Hospital")
+    # carry an "Author:" prefix. Strip it, or the segment heuristic below
+    # sees 3 segments and keeps only the last one ("Hospital").
+    if ":" in raw and " " not in raw:
+        raw = raw.rsplit(":", 1)[-1]
     # Already prose-looking (has spaces) -- pass through unchanged.
     if " " in raw:
         return raw
@@ -401,11 +497,25 @@ def _prettify_event_name(raw):
     #     -- take just the last segment; the earlier ones are pack
     #     namespacing noise ("CustomGoals", "PrePostWeddingParties")
     #     that leaks the tuning path.
-    segment_count = stripped.count("_") + 1
-    core = stripped if segment_count <= 2 else stripped.rsplit("_", 1)[-1]
-    # Split CamelCase (insert space before each interior uppercase),
-    # replace underscores with spaces, collapse multi-space, strip.
-    spaced = _re_prompt.sub(r"(?<!^)(?=[A-Z])", " ", core).replace("_", " ")
+    # Token filter instead of "keep the last segment": tuning paths mix
+    # namespace noise (CustomGoals, PrePostWeddingParties, CAD, custom,
+    # state), the real event words (Romantic_Date, EngagementDinner),
+    # and trailing qualifiers (Adult, Teen, _1). Keeping only the last
+    # segment turned "CAD_Romantic_Date_Adult" into "Adult". Drop the
+    # noise + qualifiers and keep everything else, in order.
+    _DROP = {
+        "customgoals", "prepostweddingparties", "cad", "custom", "state",
+        "playergroup", "npc", "player", "group",
+        "adult", "teen", "child", "elder", "youngadult", "toddler",
+    }
+    tokens = [t for t in stripped.split("_") if t]
+    kept = [t for t in tokens if t.lower() not in _DROP and not t.isdigit()]
+    if not kept:
+        kept = tokens[-1:] if tokens else []
+    core = " ".join(kept)
+    # Acronym-aware CamelCase split: "VisitingNPC" -> "Visiting NPC",
+    # "EngagementDinner" -> "Engagement Dinner".
+    spaced = _re_prompt.sub(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", " ", core)
     spaced = _re_prompt.sub(r"\s+", " ", spaced).strip()
     return spaced or "Event"
 
@@ -427,7 +537,11 @@ def _dedupe_events(events):
         name = _prettify_event_name(e.get("name") or "")
         st = e.get("start_ticks") or 0
         day_win = st // (_TICKS_PER_MINUTE * 60 * 24) if st else 0
-        key = (name, day_win)
+        # Case-insensitive key: a drama-node entry might store "wedding"
+        # while the situation-snapshot path stores "Wedding" for the
+        # SAME event -- differing only in case, so they'd otherwise
+        # slip past the dedup and print twice in the prompt.
+        key = (name.lower(), day_win)
         if key not in groups:
             groups[key] = e
             order.append(key)
@@ -449,81 +563,120 @@ def _dedupe_events(events):
 
 
 def _format_for_prompt_impl(sim_a_id, sim_b_id):
+    """sim_a = contact/sender, sim_b = recipient (matches every caller)."""
+    solo_section = _format_recipient_only_past(sim_a_id, sim_b_id)
     events = get_recent_for(sim_a_id, sim_b_id)
     if not events:
-        return ""
+        return solo_section
     events = _dedupe_events(events)
     now_ticks = _now_ticks()
     lines = ["Recent events you both attended:"]
     for e in events[:4]:  # cap at 4 most-recent so the prompt doesn't bloat
-        name = _prettify_event_name(e.get("name") or "")
-        # Prefer calendar-day-boundary comparison over rolling-24h math.
-        # rolling-24h says "today" whenever less than a full sim day has
-        # elapsed since the event's start_ticks -- but an event that
-        # started yesterday evening and is now being referenced this
-        # morning has less than 24h elapsed and IS from yesterday, not
-        # today. Sims 4's tick math: 1 sim day = REAL_MILLISECONDS_PER_
-        # SIM_SECOND (1000) * SECONDS_PER_DAY (86400) = 86_400_000 ticks
-        # (this is also `date_and_time.sim_ticks_per_day`). Floor-
-        # dividing absolute_ticks by that gives an integer sim-day
-        # number stable across a session; subtracting gives the number
-        # of day boundaries crossed. Not perfect calendar-day math
-        # (tick_0 usually aligns to game-start time rather than
-        # midnight, so the boundary happens at that time each morning)
-        # but it fixes the "yesterday evening reads as today" case,
-        # which is what players actually notice.
-        start_ticks = e.get("start_ticks")
-        days_diff = None
-        if start_ticks is not None and now_ticks is not None:
-            try:
-                _TICKS_PER_DAY = _TICKS_PER_MINUTE * 60 * 24
-                days_diff = (now_ticks // _TICKS_PER_DAY) - (start_ticks // _TICKS_PER_DAY)
-            except Exception:
-                days_diff = None
-        if days_diff is None:
-            # Fallback: rolling-24h math from the stored delta.
-            mins_ago = e.get("_mins_ago", 0)
-            days_diff = mins_ago // (24 * 60)
-        if days_diff <= 0:
-            when = "today"
-        elif days_diff == 1:
-            when = "yesterday"
-        else:
-            when = f"{days_diff} sim days ago"
-        # `honored` is a list of {'name': str, 'role': str} dicts from
-        # events._get_honored_sims. The role determines how to phrase
-        # the honor -- "in memory of" only fits funerals ("deceased"
-        # role); a wedding's "betrothed" or a birthday's "celebrant"
-        # would read as saying they died. Tolerate legacy string
-        # entries by falling back to a neutral "for" prefix.
-        honored_raw = e.get("honored") or []
-        honored_names = []
-        first_role = None
-        for h in honored_raw:
-            if isinstance(h, dict):
-                nm = h.get("name")
-                if nm:
-                    honored_names.append(str(nm))
-                    if first_role is None:
-                        first_role = h.get("role")
-            elif h:
-                honored_names.append(str(h))
-        if honored_names:
-            joined = ", ".join(honored_names)
-            if first_role == "deceased":
-                honor_str = f" (in memory of {joined})"
-            elif first_role == "betrothed":
-                honor_str = f" (for {joined})"
-            elif first_role == "celebrant":
-                honor_str = f" ({joined}'s)"
-            elif first_role == "guest_of_honor":
-                honor_str = f" (honoring {joined})"
-            else:
-                honor_str = f" (for {joined})"
-        else:
-            honor_str = ""
-        lines.append(f"  - {name}{honor_str} -- {when}")
+        lines.append(_event_line(e, now_ticks))
+    block = "\n".join(lines)
+    return f"{block}\n\n{solo_section}" if solo_section else block
+
+
+def _format_recipient_only_past(sim_a_id, sim_b_id):
+    """Recent events the RECIPIENT attended that the sender did NOT.
+    Mirror of the upcoming-events 'not invited' section: always listed,
+    framed as forbidden knowledge, so the AI has the tense anchor
+    (it already HAPPENED) if the recipient brings it up -- otherwise a
+    sender who heard 'the shower is tomorrow' keeps asking about prep
+    days after it's over. Returns "" when none."""
+    try:
+        events = get_recent_for(sim_a_id, sim_b_id, attendance="recipient_only")
+    except Exception:
+        return ""
+    if not events:
+        return ""
+    events = _dedupe_events(events)
+    now_ticks = _now_ticks()
+    lines = [
+        "EVENTS THE RECIPIENT ATTENDED RECENTLY THAT YOU WERE NOT INVITED TO "
+        "AND DO NOT KNOW ABOUT. You were NOT invited. You were NOT there. You "
+        "do NOT know these happened unless the past-interaction history in "
+        "this prompt shows the recipient already told you. Do NOT mention "
+        "them. Do NOT ask how they went. Do NOT use them as a topic. This "
+        "list exists ONLY so that IF the recipient brings one up, you "
+        "understand it ALREADY HAPPENED (see timing) -- it is over, not "
+        "upcoming -- and that you were not there. Never invent details "
+        "beyond what is listed:"
+    ]
+    for e in events[:4]:
+        lines.append(_event_line(e, now_ticks))
     return "\n".join(lines)
+
+
+def _event_line(e, now_ticks):
+    """Render one past-event entry as '  - Name (honor) -- when'."""
+    name = _prettify_event_name(e.get("name") or "")
+    # Prefer calendar-day-boundary comparison over rolling-24h math.
+    # rolling-24h says "today" whenever less than a full sim day has
+    # elapsed since the event's start_ticks -- but an event that
+    # started yesterday evening and is now being referenced this
+    # morning has less than 24h elapsed and IS from yesterday, not
+    # today. Sims 4's tick math: 1 sim day = REAL_MILLISECONDS_PER_
+    # SIM_SECOND (1000) * SECONDS_PER_DAY (86400) = 86_400_000 ticks
+    # (this is also `date_and_time.sim_ticks_per_day`). Floor-
+    # dividing absolute_ticks by that gives an integer sim-day
+    # number stable across a session; subtracting gives the number
+    # of day boundaries crossed. Not perfect calendar-day math
+    # (tick_0 usually aligns to game-start time rather than
+    # midnight, so the boundary happens at that time each morning)
+    # but it fixes the "yesterday evening reads as today" case,
+    # which is what players actually notice.
+    start_ticks = e.get("start_ticks")
+    days_diff = None
+    if start_ticks is not None and now_ticks is not None:
+        try:
+            _TICKS_PER_DAY = _TICKS_PER_MINUTE * 60 * 24
+            days_diff = (now_ticks // _TICKS_PER_DAY) - (start_ticks // _TICKS_PER_DAY)
+        except Exception:
+            days_diff = None
+    if days_diff is None:
+        # Fallback: rolling-24h math from the stored delta.
+        mins_ago = e.get("_mins_ago", 0)
+        days_diff = mins_ago // (24 * 60)
+    if days_diff <= 0:
+        when = "today"
+    elif days_diff == 1:
+        when = "yesterday"
+    else:
+        when = f"{days_diff} sim days ago"
+    # `honored` is a list of {'name': str, 'role': str} dicts from
+    # events._get_honored_sims. The role determines how to phrase
+    # the honor -- "in memory of" only fits funerals ("deceased"
+    # role); a wedding's "betrothed" or a birthday's "celebrant"
+    # would read as saying they died. Tolerate legacy string
+    # entries by falling back to a neutral "for" prefix.
+    honored_raw = e.get("honored") or []
+    honored_names = []
+    first_role = None
+    for h in honored_raw:
+        if isinstance(h, dict):
+            nm = h.get("name")
+            if nm:
+                honored_names.append(str(nm))
+                if first_role is None:
+                    first_role = h.get("role")
+        elif h:
+            honored_names.append(str(h))
+    if honored_names:
+        joined = ", ".join(honored_names)
+        if first_role == "deceased":
+            honor_str = f" (in memory of {joined})"
+        elif first_role == "betrothed":
+            honor_str = f" (for {joined})"
+        elif first_role == "celebrant":
+            honor_str = f" ({joined}'s)"
+        elif first_role == "guest_of_honor":
+            honor_str = f" (honoring {joined})"
+        else:
+            honor_str = f" (for {joined})"
+    else:
+        honor_str = ""
+    return f"  - {name}{honor_str} -- {when}"
 
 
 def format_for_prompt(sim_a_id, sim_b_id):
@@ -572,6 +725,22 @@ def _record_from_drama_node(node, phase="complete"):
         name = _events._resolve_event_name(node)
         if not name:
             return
+        if _is_noise_event_name(name) or _is_noise_event_name(cls_name):
+            return
+        # A node cleaned up BEFORE its scheduled start never happened --
+        # the player canceled it, re-planned it (a wedding planned under
+        # one spouse then re-planned under the other leaves the first
+        # node to be cleaned up), or the scheduler dropped it. Recording
+        # it anyway stored a FUTURE start_ticks that surfaced as
+        # "attended today" once game time caught up. Skip it.
+        try:
+            start_ticks = _ticks_of(start)
+            now_ticks = _now_ticks()
+            if start_ticks is not None and now_ticks is not None and start_ticks > now_ticks:
+                _log(f"skip {phase} of {name!r}: scheduled start is in the future (never held)")
+                return
+        except Exception:
+            pass
         attendees = set()
         try:
             sims = node.get_calendar_sims() or ()
@@ -703,6 +872,8 @@ def _record_from_situation(sit):
             return
 
         name = cls_name
+        if _is_noise_event_name(name):
+            return
 
         # Try to get the situation's actual start time. Fall back to
         # "now" only if none of the known accessors work -- and even

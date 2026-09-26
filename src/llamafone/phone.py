@@ -427,7 +427,9 @@ the player's drinking buddy.
 Parent → child (you are the player's Father/Mother): you are calling your OWN KID. \
 Warm parental tone, even if your traits are Outgoing/Adventurous/Cheerful. Open with \
 "hey kiddo", "hey son/honey", or just the topic. NEVER open with "hey man", "what's up \
-bro", "yo", "dude" — parents don't talk to their own children like peers.
+bro", "yo", "dude" — parents don't talk to their own children like peers. You are the \
+PARENT: you offer help and advice; you do not ask your kid to solve your own household \
+problems or coach you on running your home (unless it is literally their profession).
 
 Child → parent: respectful, familiar. "hey mom", "hey dad", "hi". Asking advice, \
 checking in, sharing news.
@@ -563,6 +565,11 @@ the week count.
   topic, scrap it and start with the actual reason. An empty journal means you just \
   haven't logged the recent contact, NOT that this is your first contact in months.
 - Family relationships are NEVER romantic, regardless of romance score.
+- The FACT blocks (the recipient's household, "Recent in ... life", your own household \
+  block, the calendar) are GROUND TRUTH and outrank your OWN earlier messages in the \
+  history. If a past message of yours contradicts them (you "announced" a birth the \
+  blocks say hasn't happened, congratulated someone on something you attended), that \
+  past message was a mistake -- do NOT build on it or repeat it.
 - No profanity or explicit content.
 - Only name sims listed in the mutual contacts block. For others, use a role like \
   "my coworker", "a friend of mine".
@@ -667,7 +674,10 @@ Warm and parental, even if you have outgoing/adventurous/cheerful traits. Opener
 "hey kiddo", "hey son", "hey honey", or just the topic. NEVER use peer-style openers \
 like "hey man", "hey bro", "dude", "yo" — that is how friends text, not how a parent \
 texts their own child. You may invite your kid on activities, share news from your \
-life, give light advice, ask how they're doing. Don't be cringe-formal — just dad/mom.
+life, give light advice, ask how they're doing. Don't be cringe-formal — just dad/mom. \
+You are the PARENT: you offer help and advice; you do not ask your kid to solve your \
+own household problems or coach you on running your home (unless it is literally \
+their profession).
 
 Child → parent (you are the player's Son/Daughter): respectful, familiar. Openers: \
 "hey mom", "hey dad", or "hi". Adults asking parents for advice or just checking in.
@@ -790,6 +800,11 @@ the week count.
   topic, scrap it and start with the actual reason. An empty journal means you just \
   haven't logged the recent contact, NOT that this is your first contact in months.
 - Family relationships are NEVER romantic, regardless of romance score.
+- The FACT blocks (the recipient's household, "Recent in ... life", your own household \
+  block, the calendar) are GROUND TRUTH and outrank your OWN earlier messages in the \
+  history. If a past message of yours contradicts them (you "announced" a birth the \
+  blocks say hasn't happened, congratulated someone on something you attended), that \
+  past message was a mistake -- do NOT build on it or repeat it.
 - No profanity or explicit content.
 - Only name sims listed in the mutual contacts block. For others, use a role like \
   "my coworker", "a friend of mine".
@@ -895,7 +910,9 @@ the dominant voice — traits only flavor it, they do NOT make a parent reply li
 Parent → child (you are {main_name}'s Father/Mother): you are replying to your OWN KID. \
 Warm and parental, even if you have outgoing/adventurous/cheerful traits. NEVER use \
 peer-style openers like "hey man", "hey bro", "dude", "yo" — that is how friends text, \
-not how a parent texts their own child. Just dad/mom, no peer register.
+not how a parent texts their own child. Just dad/mom, no peer register. You are the \
+PARENT: you offer help and advice; you do not ask your kid to solve your own household \
+problems (unless it is literally their profession).
 
 Child → parent (you are {main_name}'s Son/Daughter): respectful, familiar.
 
@@ -1002,6 +1019,11 @@ the week count.
   {main_name}'s actual message, scrap it and start over. An empty journal means recent \
   contact just wasn't logged, NOT that this is your first contact in months.
 - Family relationships are NEVER romantic, regardless of romance score.
+- The FACT blocks (the recipient's household, "Recent in ... life", your own household \
+  block, the calendar) are GROUND TRUTH and outrank your OWN earlier messages in the \
+  history. If a past message of yours contradicts them (you "announced" a birth the \
+  blocks say hasn't happened, congratulated someone on something you attended), that \
+  past message was a mistake -- do NOT build on it or repeat it.
 - No profanity or explicit content.
 - Only name sims listed in the mutual contacts block. For others, use a role like \
   "my coworker", "a friend of mine".
@@ -1700,7 +1722,83 @@ def _get_romantic_partner_info(sim_info):
     return None, None
 
 
-def _describe_recipient(recipient_sim, contact=None):
+def _heard_after_days(family_label, friendship):
+    """News-spread tier: in-game days until this contact would have
+    heard a private life event (birth, pregnancy) through the grapevine
+    without being told directly. None = never (must be told / visible)."""
+    l = str(family_label or "").lower()
+    if l:
+        if "in-law" in l or "inlaw" in l or "step" in l:
+            return 1.5
+        # Parents (and the reverse: your own child) hear almost at once --
+        # a new grandchild is the first call you make. ~2.5 sim hours.
+        if any(k in l for k in ("mother", "father", "parent", "son", "daughter", "child")):
+            return 0.1
+        if any(k in l for k in ("brother", "sister", "sibling", "spouse", "wife", "husband")):
+            return 0.5
+        if "grand" in l:
+            return 1.0
+        if any(k in l for k in ("aunt", "uncle", "niece", "nephew", "cousin")):
+            return 1.5
+        return 2.0
+    if friendship is not None:
+        if friendship >= 45:
+            return 2.0
+        if friendship >= 20:
+            return 4.0
+    return None
+
+
+def _contact_knowledge(recipient_sim, contact):
+    """News-spread tier for this contact about the recipient's private
+    events: {"heard_after_days": float|None}. Family label + friendship."""
+    contact_si = contact.get("sim_info") if contact else None
+    fam = None
+    try:
+        if contact_si is not None:
+            fam = _get_family_relationship(contact_si, contact, recipient=recipient_sim)
+    except Exception:
+        fam = None
+    return {"heard_after_days": _heard_after_days(fam, (contact or {}).get("friendship"))}
+
+
+def _contact_has_heard_birth(recipient_sim, contact):
+    """Has word of a recent birth in the recipient's household reached
+    this contact? Dated from the household (newest pregnancy_end among
+    members, or a BABY's age) -- the milestone sits on the parent who
+    was pregnant, but the newborn appears in every member's list. True
+    when there's no recent birth, or the contact lives there."""
+    try:
+        import services
+        hh = services.active_household()
+        if hh is None:
+            return True
+        contact_si = contact.get("sim_info") if contact else None
+        cid = getattr(contact_si, "sim_id", None)
+        if cid is not None and any(getattr(m, "sim_id", None) == cid for m in hh.sim_info_gen()):
+            return True
+        from . import milestones as _ms
+        tier = _contact_knowledge(recipient_sim, contact)["heard_after_days"]
+        birth_days = None
+        for m in hh.sim_info_gen():
+            d = _ms.days_since_milestone(getattr(m, "sim_id", None), "pregnancy_end")
+            if d is not None:
+                birth_days = d if birth_days is None else min(birth_days, d)
+            if str(getattr(m, "age", "")).replace("Age.", "") == "BABY":
+                try:
+                    ap = getattr(m, "age_progress", None)
+                    ap = float(ap() if callable(ap) else ap)
+                    birth_days = ap if birth_days is None else min(birth_days, ap)
+                except Exception:
+                    pass
+        if birth_days is None:
+            return True
+        return tier is not None and birth_days >= tier
+    except Exception:
+        return True
+
+
+def _describe_recipient(recipient_sim, contact=None, cold=False):
     """Build a short recipient block — just enough so the caller knows who they're addressing.
     Includes the recipient's household members with both their relationship to the recipient
     AND (if known) their relationship to the contact. Prevents the caller from inventing
@@ -1807,17 +1905,32 @@ def _describe_recipient(recipient_sim, contact=None):
     # Household members the recipient lives with — so the AI knows about kids/spouses/etc
     # who might come up in conversation but aren't in the contact's relationship tracker.
     household_lines = []
+    recipient_household_ids = set()
     contact_si = contact.get("sim_info") if contact else None
+    # News-spread knowledge for this contact about the recipient's private
+    # life events. Family label + friendship set the tier; the milestone
+    # renderer compares it to in-game days since the event.
+    _knowledge = dict(_contact_knowledge(recipient_sim, contact))
+    _knowledge["cold"] = bool(cold)
+    # Has word of a recent BIRTH reached them? Governs whether newborns
+    # appear in the household list on a cold prompt (a baby's name in the
+    # list is the same leak as the milestone line). Shared with the
+    # mutuals filter -- see _contact_has_heard_birth.
+    birth_heard = _contact_has_heard_birth(recipient_sim, contact)
     try:
         import services
         hh = services.active_household()
         if hh:
             for si in hh.sim_info_gen():
                 try:
+                    recipient_household_ids.add(getattr(si, "sim_id", None))
                     if si.sim_id == recipient_sim.sim_id:
                         continue
                     mname = f"{si.first_name} {si.last_name}".strip()
                     mage = str(getattr(si, "age", "")).replace("Age.", "")
+                    if (cold and mage in ("BABY", "INFANT") and not birth_heard
+                            and (contact_si is None or contact_si.sim_id not in recipient_household_ids)):
+                        continue
                     # How this household member relates to the recipient
                     rel_to_recipient = _get_family_relationship(si, {}, recipient=recipient_sim)
                     # How this household member relates to the contact (so the contact
@@ -1842,7 +1955,24 @@ def _describe_recipient(recipient_sim, contact=None):
         pass
 
     if household_lines:
-        parts.append(f"\n{recipient_sim.first_name}'s household:")
+        # Household is listed for context (who lives with the recipient),
+        # but a caller may or may not personally know every member --
+        # especially newborns, new roommates, or a spouse the caller
+        # hasn't met. The mutual-contacts block above is the ground
+        # truth for "sims you can reference by name"; anyone in this
+        # household block who isn't ALSO listed as a mutual is
+        # uncertain-knowledge for you. Don't lead with them or ask
+        # about them by name -- play along if the recipient mentions
+        # them first.
+        parts.append(
+            f"\n{recipient_sim.first_name}'s household "
+            "(you may or may not personally know these people -- "
+            "you know a household member only if they ALSO appear in "
+            "your mutual contacts list above. Anyone else, do not lead "
+            "with them, do not ask about them by name, do not bring up "
+            "news about them. Play along naturally if the recipient "
+            "mentions them.):"
+        )
         parts.extend(household_lines)
 
     # Surface any recent milestones for the recipient so the caller can
@@ -1858,13 +1988,51 @@ def _describe_recipient(recipient_sim, contact=None):
                 contact_sim_id = contact.get("sim_id") if isinstance(contact, dict) else None
             except Exception:
                 pass
-        mblock = _milestones.format_for_prompt(recipient_sim, contact_id=contact_sim_id)
+        if contact_sim_id is None and contact is not None:
+            contact_sim_id = getattr(contact.get("sim_info"), "sim_id", None)
+        # A caller who LIVES WITH the recipient knows her pregnancy /
+        # birth outright -- don't hand them the "assume you do not
+        # know" tag meant for outsiders.
+        contact_lives_with_recipient = (
+            contact_sim_id is not None and contact_sim_id in recipient_household_ids
+        )
+        mblock = _milestones.format_for_prompt(
+            recipient_sim, contact_id=contact_sim_id,
+            known_by_default=contact_lives_with_recipient,
+            knowledge=_knowledge,
+        )
         if mblock:
-            # Re-label so the LLM understands these are events in the
-            # recipient's life, not the caller's.
+            # Cross-reference with events the caller ATTENDED: a marriage
+            # milestone next to an attended wedding is the same fact. Left
+            # unlinked, a brother-in-law who stood at the ceremony opened
+            # with "just heard you tied the knot, congrats".
+            try:
+                # Widened window: the attended-events BLOCK only shows the
+                # last few sim days, but this cross-reference should hold
+                # for as long as the marriage milestone itself is shown.
+                attended = past_events.get_recent_for(
+                    contact_sim_id, getattr(recipient_sim, "sim_id", None),
+                    max_days=past_events._RETENTION_IN_GAME_DAYS,
+                ) or []
+                attended_names = " ".join(str(e.get("name") or "") for e in attended).lower()
+                if "wedding" in attended_names and "got married" in mblock:
+                    mblock = mblock.replace(
+                        "got married", "got married (you were AT the wedding -- you witnessed it)"
+                    )
+            except Exception:
+                pass
+            # Re-label: these are established FACTS about the recipient's
+            # life, not fresh news the caller just heard. Family hears
+            # family news at once; an attended event was witnessed.
             mblock = mblock.replace(
                 "Recent in their life:",
-                f"Recent in {recipient_sim.first_name}'s life (you may know about these):",
+                f"Recent in {recipient_sim.first_name}'s life -- established facts, NOT "
+                f"news you just heard. If 'Recent events you both attended' below "
+                f"shows you at the related event, you WITNESSED it. If you are "
+                f"family, you heard promptly. Never open with 'just heard' / 'heard "
+                f"the news' about something you attended or would obviously already "
+                f"know; treat it as shared knowledge (\"still buzzing from the "
+                f"wedding\", not \"congrats, just heard\"):",
             )
             parts.append("\n" + mblock)
     except Exception:
@@ -2078,6 +2246,22 @@ def _format_mutual_block(mutuals, casual=True):
         "find yourself constructing \"[recipient's-family-role]'s [recipient]\", stop "
         "and just use your own label or the first name."
         "\n"
+        "\n    EXCEPTION -- when the mutual is YOUR SPOUSE and the recipient is your "
+        "descendant (your child, grandchild, great-grandchild), USE the "
+        "recipient-relative label. Not \"encouraged\" -- USE it: \"your mom\", "
+        "\"your dad\", \"your grandma\", \"your grandpa\", \"your great-grandmother\". "
+        "Grandparents talking to grandchildren about the other grandparent, and "
+        "parents talking to their kid about the other parent, use this framing in "
+        "real family speech -- it's how families actually talk. Do NOT use the "
+        "mutual's FIRST NAME in this specific case, even if past-interaction history "
+        "in this prompt shows first-name usage (that history is prior-session output "
+        "that got this exact detail wrong -- override it). \"My wife\" / "
+        "\"my husband\" is acceptable only when the message specifically calls for "
+        "framing them as your partner (e.g. \"my husband and I are heading out\"); "
+        "otherwise default to the recipient-relative label. This exception is ONLY "
+        "for spouse+descendant; the no-weird-loops rule above still holds for every "
+        "other cross-role case."
+        "\n"
         "\nFirst-name references are fine for non-family mutuals."
     )
     body += (
@@ -2100,7 +2284,7 @@ def _format_mutual_block(mutuals, casual=True):
     return body
 
 
-def _get_mutual_contacts(contact, recipient=None):
+def _get_mutual_contacts(contact, recipient=None, hide_newborns=False):
     """
     Find sims that both the recipient and the contact have relationships with.
     Returns a randomised subset of up to 4 — so different mutuals surface across
@@ -2182,6 +2366,12 @@ def _get_mutual_contacts(contact, recipient=None):
             try:
                 si = sm.get(sid)
                 if not si:
+                    continue
+                # The game creates family relationships at birth, so a
+                # newborn shows up here as a mutual ("your Granddaughter,
+                # BABY") -- naming a baby the caller hasn't heard about
+                # yet. Same rule as the household list on cold prompts.
+                if hide_newborns and str(getattr(si, "age", "")).replace("Age.", "") in ("BABY", "INFANT"):
                     continue
                 name = f"{si.first_name} {si.last_name}".strip()
 
@@ -3354,6 +3544,150 @@ def _describe_relationship(contact, recipient=None):
         except Exception:
             pass
 
+    # Sender's OWN household: who they live with, plus any recent
+    # milestones for those household members (spouse's pregnancy,
+    # kid's promotion, etc.). Without this, a sender can't organically
+    # reference their own wife's pregnancy in a message to a cousin --
+    # the info exists in the game state but not in the sender's prompt.
+    # These milestones are marked `known_by_default=True` because the
+    # sender lives with these people and definitely knows -- the "may
+    # not know" hedge tag would be nonsense for own-household events.
+    if si:
+        try:
+            hh = None
+            try:
+                hh = getattr(si, "household", None)
+                if hh is None:
+                    hh_id = getattr(si, "household_id", None)
+                    if hh_id:
+                        import services as _svc
+                        hh_mgr = _svc.household_manager()
+                        if hh_mgr:
+                            hh = hh_mgr.get(hh_id)
+            except Exception:
+                hh = None
+            if hh is not None:
+                hh_lines = []
+                milestone_blocks = []
+                sender_sim_id = getattr(si, "sim_id", None)
+                # If the RECIPIENT lives with the sender, leave them out of
+                # this block: their own milestones are already in the
+                # recipient section, and listing "About Francesca: is now
+                # pregnant" here would make the announce-once rule tell
+                # her husband to break her own pregnancy news to her.
+                _rcp_for_hh = recipient or sim_context.get_main_sim_info()
+                recipient_sim_id_for_hh = getattr(_rcp_for_hh, "sim_id", None)
+                for hh_si in hh.sim_info_gen():
+                    try:
+                        if getattr(hh_si, "sim_id", None) == sender_sim_id:
+                            continue
+                        if getattr(hh_si, "sim_id", None) == recipient_sim_id_for_hh:
+                            continue
+                        m_name = f"{hh_si.first_name} {hh_si.last_name}".strip()
+                        m_age = str(getattr(hh_si, "age", "")).replace("Age.", "")
+                        # Relation of household member to the sender (spouse, child, parent, etc.)
+                        rel = _get_family_relationship(hh_si, {}, recipient=si)
+                        rel_part = f"your {rel}" if rel else f"lives with {name}"
+                        ghost_tag = " [DECEASED]" if _is_ghost(hh_si) else ""
+                        hh_lines.append(f"  - {m_name} ({rel_part}, {m_age}){ghost_tag}")
+                        # Own-household milestones -- known_by_default drops
+                        # the "may not know" tag; pregnancy visibility gate
+                        # still applies (hidden -> not surfaced).
+                        try:
+                            from . import milestones as _milestones
+                            m_block = _milestones.format_for_prompt(
+                                hh_si, contact_id=None, mark_seen=False,
+                                known_by_default=True,
+                            )
+                            if m_block:
+                                # Prefix each member's milestones with their
+                                # name so the AI knows whose life event this is.
+                                m_lines = m_block.split("\n")
+                                # Drop the "Recent in their life:" header line
+                                # from format_for_prompt -- we replace it with
+                                # a per-member header.
+                                if m_lines and m_lines[0].startswith("Recent in"):
+                                    m_lines = m_lines[1:]
+                                if m_lines:
+                                    milestone_blocks.append(
+                                        f"About {m_name}:\n" + "\n".join(m_lines)
+                                    )
+                        except Exception:
+                            pass
+                    except Exception:
+                        continue
+                if hh_lines:
+                    parts.append(
+                        f"\n{name}'s own household (you live with them, "
+                        "you know them well, you can freely mention any "
+                        "of them by name and reference recent events in "
+                        "their lives):"
+                    )
+                    parts.extend(hh_lines)
+                    for mb in milestone_blocks:
+                        parts.append(mb)
+                    # Pregnancy / birth in the sender's own household is
+                    # news the sender gets to break -- once. No disclosure
+                    # tracking; the pair's past-interaction history in this
+                    # prompt is the record. Known gap: a spouse's separate
+                    # history with the recipient won't show THIS sender's
+                    # announcement, so a rare double-announce is possible
+                    # until the recipient reacts in that thread.
+                    joined = "\n".join(milestone_blocks)
+                    if "is now pregnant" in joined or "had a baby" in joined:
+                        # When the RECIPIENT is also pregnant / just had a baby,
+                        # the history fills up with baby talk about THEIR baby
+                        # and the model reads that as "we've discussed it" --
+                        # then leaks the sender's news obliquely ("planning
+                        # playdates") without ever announcing. Name the trap.
+                        recipient_also = ""
+                        try:
+                            from . import milestones as _ms
+                            _rcp = recipient or sim_context.get_main_sim_info()
+                            if _rcp is not None:
+                                _rv = _ms._get_pregnancy_visibility(_rcp)
+                                _rname = getattr(_rcp, "first_name", "the recipient")
+                                if _rv in ("confirmed", "visible"):
+                                    recipient_also = (
+                                        f" NOTE: {_rname} is ALSO pregnant. Everything in "
+                                        f"the history about {_rname}'s pregnancy, baby, "
+                                        f"nursery, or shower is about THEIR baby -- it is "
+                                        f"NOT you having told them about yours."
+                                    )
+                        except Exception:
+                            recipient_also = ""
+                        parts.append(
+                            "ABOUT THE PREGNANCY / BABY IN YOUR HOUSEHOLD -- this "
+                            "is BIG news in your life. How you FEEL about it depends "
+                            "on the Circumstances line above: a planned baby with "
+                            "your spouse is joy; a surprise, money trouble, a "
+                            "Hates-Children trait, a teen, or a pregnancy from "
+                            "outside the marriage is anything from nervous to "
+                            "ashamed to a full crisis. React in character -- "
+                            "thrilled, terrified, ambivalent, in denial -- and let "
+                            "that tone shape HOW you share it. "
+                            "'Told them' means a message in the history where YOU "
+                            "explicitly said your household is expecting / had the "
+                            "baby, or where the recipient congratulated YOU on it. "
+                            "Talk about the recipient's own baby, or about your "
+                            "household member being excited for the recipient, does "
+                            "NOT count." + recipient_also + " Check the "
+                            "past-interaction history with that definition. If it "
+                            "does NOT show you telling them, you have NOT told them "
+                            "yet, and you SHOULD: if you are starting this text or "
+                            "call, make it your topic -- it beats any invented topic. "
+                            "If you are replying, share it at the first natural "
+                            "opening, or tack it on at the end of an otherwise "
+                            "complete reply ('oh and -- we have news...'). Announce it "
+                            "PLAINLY, as news, once. Do NOT hint at it instead "
+                            "(playdates for 'both' kids, 'when ours arrives', shared "
+                            "nursery plans) -- either say it outright or leave it out. "
+                            "If the history DOES show it was shared, reference it "
+                            "naturally and do NOT announce it again."
+                        )
+        except Exception:
+            pass
+
     # (Contact preferences used to be injected here, but were moved
     # to the END of the user prompt via _contact_prefs_block so recency
     # gives the AI maximum incentive to respect them. See callers of
@@ -3399,7 +3733,10 @@ def _describe_relationship(contact, recipient=None):
     # + career + traits + title) all miss. The work-status line above
     # is rewritten by service_npc.transform_work_status when this is
     # a confirmed hire, so no on-shift clarification is needed here.
-    if si:
+    # Never for FAMILY: the career-track detector will happily label the
+    # player's own father "a professional nanny (not a friend or family)"
+    # because the game handed him an NPC nanny career. Family role wins.
+    if si and not family_label:
         try:
             from . import service_npc as _service_npc
             svc_line = _service_npc.format_for_prompt(si, name)
@@ -3630,7 +3967,13 @@ def generate_call(callback=None, output=None):
         elif output:
             notifications.show_error(msg, output=output)
         return
+    return generate_call_for(recipient, contact, callback=callback, output=output)
 
+
+def generate_call_for(recipient, contact, callback=None, output=None):
+    """Generate an incoming call with a specific (recipient, contact)
+    pair. Mirrors generate_text_for -- the random-pick wrapper above
+    delegates here, and llama.callfrom targets a named caller."""
     recipient_name = recipient.first_name
 
     _refresh_milestones_for(contact, recipient)
@@ -3650,11 +3993,14 @@ def generate_call(callback=None, output=None):
     )
     history_block = f"\n\n{sim_history}" if sim_history else ""
 
-    mutuals = _get_mutual_contacts(contact, recipient=recipient)
+    mutuals = _get_mutual_contacts(
+        contact, recipient=recipient,
+        hide_newborns=not _contact_has_heard_birth(recipient, contact),
+    )
     mutual_block = _format_mutual_block(mutuals, casual=True)
 
 
-    recipient_block = _describe_recipient(recipient, contact=contact)
+    recipient_block = _describe_recipient(recipient, contact=contact, cold=True)
 
     events_text = events.format_shared_events_for_prompt(recipient, contact.get("sim_info"))
     events_block = f"\n\n{events_text}" if events_text else ""
@@ -3733,7 +4079,7 @@ def generate_text(callback=None, output=None):
 def generate_text_for(recipient, contact, callback=None, output=None,
                       system_override=None, prompt_suffix=None,
                       journal_type_override=None, recipient_override=None,
-                      first_contact=False):
+                      first_contact=False, skip_journal=False):
     """Generate an incoming text with a specific (recipient, contact)
     pair. Public entry point so extension modules (e.g. dating) can
     surface their own senders using the full context-building
@@ -3788,11 +4134,14 @@ def generate_text_for(recipient, contact, callback=None, output=None,
         )
         history_block = f"\n\n{sim_history}" if sim_history else ""
 
-    mutuals = _get_mutual_contacts(contact, recipient=recipient)
+    mutuals = _get_mutual_contacts(
+        contact, recipient=recipient,
+        hide_newborns=not _contact_has_heard_birth(recipient, contact),
+    )
     mutual_block = _format_mutual_block(mutuals, casual=True)
 
 
-    recipient_block = recipient_override if recipient_override else _describe_recipient(recipient, contact=contact)
+    recipient_block = recipient_override if recipient_override else _describe_recipient(recipient, contact=contact, cold=True)
 
     if is_stranger_contact:
         events_block = ""
@@ -3819,15 +4168,19 @@ def generate_text_for(recipient, contact, callback=None, output=None,
         title = f"Text from {contact['name']}"
         if text:
             text = _apply_mood_from_text(text, recipient=recipient, is_incoming=True, contact=contact)
-            _start_conversation(contact, text, recipient_sim=recipient)
-            journal.add_entry(
-                journal_type_override or "text",
-                f"Text from {contact['name']} (to {recipient_name}):\n{text}",
-                sim_name=contact["name"],
-                recipient_name=recipient_name,
-                sim_id=contact_id,
-                recipient_id=recipient_sim_id,
-            )
+            # skip_journal: test-mode sends (llama.testbirth) must not become
+            # canon -- a journaled "martha just had the baby!" had every later
+            # Luca prompt continuing a birth that never happened.
+            if not skip_journal:
+                _start_conversation(contact, text, recipient_sim=recipient)
+                journal.add_entry(
+                    journal_type_override or "text",
+                    f"Text from {contact['name']} (to {recipient_name}):\n{text}",
+                    sim_name=contact["name"],
+                    recipient_name=recipient_name,
+                    sim_id=contact_id,
+                    recipient_id=recipient_sim_id,
+                )
             _maybe_auto_prefs_from_message(
                 recipient_sim_id, contact_id, contact["name"], text,
                 source_label="they texted",

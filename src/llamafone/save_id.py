@@ -105,7 +105,12 @@ def _get_current_slot_id_int():
     try:
         zone = services.current_zone()
         if zone is not None:
-            for attr in ("save_slot_id", "_save_slot_id", "active_household_id"):
+            # `save_slot_data_id` / `_save_slot_data_id` are the REAL Zone
+            # attributes (verified in zone.pyc 2026-09-26); the older
+            # `save_slot_id` names never existed, so this fallback had
+            # never actually fired.
+            for attr in ("save_slot_data_id", "_save_slot_data_id",
+                         "save_slot_id", "_save_slot_id", "active_household_id"):
                 # active_household_id is a last-ditch discriminator we
                 # avoid unless nothing else works; households sometimes
                 # persist under a slot_id-shaped identifier in older
@@ -153,7 +158,55 @@ def _get_current_slot_id_int():
     except Exception:
         pass
 
+    _log_resolution_failure_once()
     return None
+
+
+_resolution_failure_logged = [False]
+
+
+def _log_resolution_failure_once():
+    """Dump every save-identity value the game exposes, once per session,
+    when all resolver paths fail -- so a session running with no save id
+    (journal skipping writes, milestones not persisting, birth watcher
+    idle) leaves a diagnosis instead of silence. slot_id 0 with a valid
+    slot_name typically means the game is running from the scratch /
+    autosave slot (player clicked Resume after quitting unsaved)."""
+    if _resolution_failure_logged[0]:
+        return
+    _resolution_failure_logged[0] = True
+    info = {}
+    try:
+        import services
+        svc = None
+        for accessor_name in ("get_persistence_service", "persistence_service"):
+            accessor = getattr(services, accessor_name, None)
+            if accessor:
+                try:
+                    svc = accessor()
+                    if svc is not None:
+                        break
+                except Exception:
+                    continue
+        if svc is not None:
+            try:
+                slot = svc.get_save_slot_proto_buff()
+                info["proto.slot_id"] = getattr(slot, "slot_id", None)
+                info["proto.slot_name"] = getattr(slot, "slot_name", None)
+            except Exception as e:
+                info["proto"] = f"{type(e).__name__}: {e}"
+            try:
+                info["proto_guid"] = svc.get_save_slot_proto_guid()
+            except Exception as e:
+                info["proto_guid"] = f"{type(e).__name__}: {e}"
+            info["auto_save_slot_id"] = getattr(svc, "auto_save_slot_id", None)
+        zone = services.current_zone()
+        if zone is not None:
+            for attr in ("save_slot_data_id", "_save_slot_data_id", "id"):
+                info[f"zone.{attr}"] = getattr(zone, attr, "<missing>")
+    except Exception as e:
+        info["error"] = f"{type(e).__name__}: {e}"
+    _log(f"save id UNRESOLVED -- all paths failed. Values seen: {info}")
 
 
 def get_current_save_id():
@@ -179,6 +232,14 @@ def get_current_save_id():
     slot_id = _get_current_slot_id_int()
     if slot_id is not None:
         return f"Slot_{slot_id:08x}"
+    # Autosave: the game's Autosave entry has no real slot id (every
+    # accessor returns the sentinel), but it IS a particular game. Map
+    # it to the slot it came from via identities that don't change
+    # across autosave / real-slot loads: the persistence guid and the
+    # played household's id. Both recorded whenever a real slot loads.
+    mapped = _mapped_save_id_for_current_game()
+    if mapped:
+        return mapped
     # Fallback: last-known-good id from the save-load hook. Guarded
     # by an active-zone check so writes are only allowed when we're
     # genuinely still in the same session as the cached id.
@@ -191,6 +252,127 @@ def get_current_save_id():
     except Exception:
         return None
     return _last_handled_save_id
+
+
+# ---------------------------------------------------------------------------
+# Identity map: stable game identities -> slot folder (for Autosave loads)
+# ---------------------------------------------------------------------------
+
+_IDENTITY_MAP_FILENAME = "identity_map.json"
+_identity_cache = None
+_mapped_logged = [None]
+
+
+def _identity_map_path():
+    return os.path.join(_saves_folder(), "Llamafone", _IDENTITY_MAP_FILENAME)
+
+
+def _load_identity_map():
+    global _identity_cache
+    if _identity_cache is not None:
+        return _identity_cache
+    try:
+        import json
+        with open(_identity_map_path(), "r", encoding="utf-8") as f:
+            data = json.load(f)
+        _identity_cache = data if isinstance(data, dict) else {}
+    except Exception:
+        _identity_cache = {}
+    return _identity_cache
+
+
+def _save_identity_map(data):
+    global _identity_cache
+    _identity_cache = data
+    try:
+        import json
+        path = _identity_map_path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, path)
+    except Exception as e:
+        _log(f"identity map save failed: {type(e).__name__}: {e}")
+
+
+def _current_game_identities():
+    """Keys that identify the running game regardless of which slot
+    (real or Autosave) it was loaded from. Empty when unavailable."""
+    keys = []
+    try:
+        import services
+        try:
+            svc = services.get_persistence_service()
+            guid = svc.get_save_slot_proto_guid() if svc is not None else None
+            if guid:
+                keys.append(f"guid:{guid}")
+        except Exception:
+            pass
+        try:
+            hh = services.active_household()
+            hid = getattr(hh, "id", None) if hh is not None else None
+            if hid:
+                keys.append(f"household:{hid}")
+        except Exception:
+            pass
+    except Exception:
+        pass
+    return keys
+
+
+def _record_identity_mapping(save_id_str):
+    """Called when a REAL slot resolved: remember slot for this game's
+    identities so an Autosave load of the same game finds its folder."""
+    keys = _current_game_identities()
+    if not keys:
+        return
+    data = dict(_load_identity_map())
+    changed = False
+    for k in keys:
+        if data.get(k) != save_id_str:
+            data[k] = save_id_str
+            changed = True
+    # The game's Autosave always contains the most recently played game,
+    # so "last real slot played" is the right lineage for an Autosave
+    # load even before the guid / household keys have been learned.
+    if data.get("last_played") != save_id_str:
+        data["last_played"] = save_id_str
+        changed = True
+    if changed:
+        _save_identity_map(data)
+        _log(f"identity map: {keys} -> {save_id_str!r}")
+
+
+def _mapped_save_id_for_current_game():
+    keys = _current_game_identities()
+    if not keys:
+        return None
+    data = _load_identity_map()
+    for k in keys:
+        sid = data.get(k)
+        if sid:
+            if _mapped_logged[0] != sid:
+                _mapped_logged[0] = sid
+                _log(f"save id via identity map ({k}) -> {sid!r} (slot id unresolved -- Autosave?)")
+            return sid
+    # Cold start on an Autosave load: fall back to the last real slot
+    # played, which is what the Autosave was written from.
+    if _current_slot_is_autosave():
+        sid = data.get("last_played")
+        if sid:
+            if _mapped_logged[0] != sid:
+                _mapped_logged[0] = sid
+                _log(f"save id via identity map (last_played) -> {sid!r} (Autosave load)")
+            return sid
+    return None
+
+
+def _current_slot_is_autosave():
+    try:
+        return (_get_current_slot_name() or "").strip().lower() == "autosave"
+    except Exception:
+        return False
 
 
 def _get_current_slot_name():
@@ -328,6 +510,13 @@ def _on_save_loaded(save_id):
     _last_handled_save_id = save_id
     folder = data_dir()
     _log(f"save loaded: id={save_id!r} folder={folder!r}")
+    # Only a REAL slot resolution teaches the identity map (an Autosave
+    # load that came through the map must not rewrite it).
+    try:
+        if _get_current_slot_id_int() is not None:
+            _record_identity_mapping(save_id)
+    except Exception as e:
+        _log(f"identity mapping failed: {type(e).__name__}: {e}")
     # Cancel any pending reply-delay Timers from the previous save. A
     # stale Timer firing in the new save's context would write into the
     # wrong conversation. Lazy import keeps save_id importable from
@@ -342,6 +531,35 @@ def _on_save_loaded(save_id):
         milestones.start_background_scan()
     except Exception as e:
         _log(f"milestone scan failed: {type(e).__name__}: {e}")
+
+
+_RETRY_DELAYS = (5, 10, 20, 30, 60, 60, 120, 120, 300)
+
+
+def _schedule_save_id_retry(attempt):
+    import threading
+    if attempt > len(_RETRY_DELAYS):
+        _log("save-load hook: gave up resolving save id after retries")
+        return
+    delay = _RETRY_DELAYS[attempt - 1]
+
+    def _try():
+        try:
+            import services
+            if services.current_zone() is None:
+                return  # back at the main menu; the next load re-arms the hook
+            sid = get_current_save_id()
+            if sid:
+                _log(f"save-load hook: save id resolved on retry {attempt}: {sid!r}")
+                _on_save_loaded(sid)
+            else:
+                _schedule_save_id_retry(attempt + 1)
+        except Exception as e:
+            _log(f"save id retry {attempt} raised: {type(e).__name__}: {e}")
+
+    t = threading.Timer(delay, _try)
+    t.daemon = True
+    t.start()
 
 
 def install_save_load_hook():
@@ -373,6 +591,16 @@ def install_save_load_hook():
             sid = get_current_save_id()
             if sid:
                 _on_save_loaded(sid)
+            else:
+                # The persistence service can still hold a sentinel slot
+                # id when the loading screen finishes (observed 2026-09-26:
+                # 0xffffffff at zone load, then 0 after a travel). With no
+                # retry, _last_handled_save_id never gets set, the fallback
+                # never engages, and every per-save feature (journal,
+                # milestones, birth watcher) sits idle for the session
+                # without a single error line. Retry on a short backoff.
+                _log("save-load hook: save id unresolved at load; scheduling retries")
+                _schedule_save_id_retry(attempt=1)
         except Exception as e:
             _log(f"save-load hook handler raised: {type(e).__name__}: {e}")
         return result

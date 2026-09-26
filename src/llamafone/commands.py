@@ -80,8 +80,10 @@ try:
         output("  llama.challenge_easy       — easy challenge")
         output("  llama.challenge_hard       — hard challenge")
         output("  llama.goals                — weekly session goals")
-        output("  llama.call                 — incoming call from a relationship sim")
-        output("  llama.text                 — text message from a relationship sim")
+        output("  llama.call                 — incoming call from a random relationship sim")
+        output("  llama.text                 — incoming text from a random relationship sim")
+        output("  llama.callfrom First Last  — incoming call from a specific sim")
+        output("  llama.textfrom First Last  — incoming text from a specific sim")
         output("  llama.sendtext First Last msg — text a specific sim")
         output("  llama.sendcall First Last msg — call a specific sim")
         output("  llama.contact First Last ... — mute/pause/priority a contact")
@@ -101,6 +103,56 @@ try:
         else:
             output("[Llamafone] Config reloaded. Still no API key found.")
             output("[Llamafone] Make sure llamafone.cfg is in your Mods folder.")
+
+    @sims4.commands.Command("llama.saveinfo", command_type=sims4.commands.CommandType.Live)
+    def cmd_saveinfo(_connection=None):
+        """Diagnostic dump for per-save data resolution. Shows the current
+        slot_id (hex + decimal), the human-readable save name, the
+        resolved data folder, and lists every Llamafone save-data folder
+        on disk -- so users seeing "the mod forgot my bios" can compare
+        the current slot to what's on disk and see whether their data
+        is in a different Slot_ folder from a prior play session."""
+        import os as _os
+        from . import save_id as _sid
+        out = sims4.commands.CheatOutput(_connection)
+        sid_str = _sid.get_current_save_id() or "(none)"
+        slot_int = _sid._get_current_slot_id_int()
+        slot_dec = str(slot_int) if slot_int else "(none)"
+        save_name = _sid._get_current_slot_name() or "(unknown)"
+        folder = _sid.data_dir() or "(none)"
+        out(f"[Llamafone] Current save")
+        out(f"  slot_id (hex): {sid_str}")
+        out(f"  slot_id (dec): {slot_dec}")
+        out(f"  save name:     {save_name!r}")
+        try:
+            _svc = services.get_persistence_service()
+            out(f"  proto guid:    {_svc.get_save_slot_proto_guid()!r}")
+        except Exception as e:
+            out(f"  proto guid:    (unavailable: {type(e).__name__})")
+        out(f"  data folder:   {folder}")
+        out("")
+        out(f"[Llamafone] All Llamafone save-data folders:")
+        base_root = _os.path.join(_sid._saves_folder(), "Llamafone")
+        if not _os.path.isdir(base_root):
+            out("  (none -- no data written yet)")
+            return
+        try:
+            entries = sorted(_os.listdir(base_root))
+        except Exception as e:
+            out(f"  (couldn't read: {type(e).__name__}: {e})")
+            return
+        any_slot = False
+        for entry in entries:
+            full = _os.path.join(base_root, entry)
+            if not _os.path.isdir(full):
+                continue
+            if not entry.startswith("Slot_"):
+                continue
+            any_slot = True
+            tag = "  <-- CURRENT" if entry == sid_str else ""
+            out(f"  {entry}{tag}")
+        if not any_slot:
+            out("  (no Slot_ folders found)")
 
     @sims4.commands.Command("llama.testprovider", command_type=sims4.commands.CommandType.Live)
     def cmd_test_provider(_connection=None):
@@ -708,6 +760,44 @@ try:
         output("[Llamafone] Checking messages...")
         phone.generate_text(output=output)
 
+    def _incoming_from_named(args, output, kind):
+        """Shared body for llama.textfrom / llama.callfrom: resolve the
+        named contact relative to the active sim and fire an INCOMING
+        message from them (the sim writes to the player). Distinct from
+        sendtext/sendcall, which are the player writing to the sim."""
+        if not _require_config(output):
+            return
+        if not args:
+            output(f"[Llamafone] Usage: llama.{kind}from <First> [Last]")
+            return
+        two_word = f"{args[0]} {args[1]}" if len(args) > 1 else None
+        contact = phone.find_contact_by_name(two_word) if two_word else None
+        if not contact:
+            contact = phone.find_contact_by_name(args[0])
+        if not contact:
+            output(f"[Llamafone] Could not find '{two_word or args[0]}' among the active sim's contacts.")
+            return
+        recipient = sim_context.get_main_sim_info()
+        if recipient is None:
+            output("[Llamafone] No active sim to receive the message.")
+            return
+        output(f"[Llamafone] Incoming {kind} from {contact['name']}...")
+        if kind == "text":
+            phone.generate_text_for(recipient, contact, output=output)
+        else:
+            phone.generate_call_for(recipient, contact, output=output)
+
+    @sims4.commands.Command("llama.textfrom", command_type=sims4.commands.CommandType.Live)
+    def cmd_textfrom(*args, _connection=None):
+        """Incoming text FROM a named sim to the active sim. Note that
+        plain llama.text takes no arguments and picks a random sim."""
+        _incoming_from_named(args, sims4.commands.CheatOutput(_connection), "text")
+
+    @sims4.commands.Command("llama.callfrom", command_type=sims4.commands.CommandType.Live)
+    def cmd_callfrom(*args, _connection=None):
+        """Incoming call FROM a named sim to the active sim."""
+        _incoming_from_named(args, sims4.commands.CheatOutput(_connection), "call")
+
     @sims4.commands.Command("llama.sendtext", command_type=sims4.commands.CommandType.Live)
     def cmd_sendtext(*args, _connection=None):
         output = sims4.commands.CheatOutput(_connection)
@@ -1089,6 +1179,221 @@ try:
         desc = phone._describe_relationship(contact)
         output(f"=== Prompt context for {contact['name']} ===")
         output(desc)
+
+    @sims4.commands.Command("llama.pastevents", command_type=sims4.commands.CommandType.Live)
+    def cmd_past_events(_connection=None):
+        """List every recorded past event (id, name, when, honored) so a
+        spurious entry -- e.g. a canceled wedding recorded by an older
+        version -- can be identified and removed with
+        llama.pastevents_drop <id>."""
+        output = sims4.commands.CheatOutput(_connection)
+        from . import past_events as _pe
+        items = _pe.list_all()
+        if not items:
+            output("[Llamafone] No past events recorded for this save.")
+            return
+        now_ticks = _pe._now_ticks()
+        output(f"[Llamafone] {len(items)} recorded past event(s), newest first:")
+        for key, e in items[:40]:
+            when = "?"
+            st = e.get("start_ticks")
+            if st is not None and now_ticks is not None:
+                days = (now_ticks - st) / (_pe._TICKS_PER_MINUTE * 60 * 24)
+                when = f"{days:+.1f} sim days ago" if days >= 0 else f"in {-days:.1f} sim days"
+            honored = ", ".join(
+                f"{h.get('name')}({h.get('role')})" if isinstance(h, dict) else str(h)
+                for h in (e.get("honored") or [])
+            )
+            output(f"  {key}  {e.get('name')!r}  {when}  attendees={len(e.get('attendees') or [])}"
+                   f"{'  honored=' + honored if honored else ''}")
+
+    @sims4.commands.Command("llama.pastevents_drop", command_type=sims4.commands.CommandType.Live)
+    def cmd_past_events_drop(event_id: str = None, _connection=None):
+        output = sims4.commands.CheatOutput(_connection)
+        if not event_id:
+            output("[Llamafone] Usage: llama.pastevents_drop <event_id>  (ids from llama.pastevents)")
+            return
+        from . import past_events as _pe
+        if _pe.drop(event_id):
+            output(f"[Llamafone] Dropped past event {event_id}.")
+        else:
+            output(f"[Llamafone] No past event with id {event_id}.")
+
+    @sims4.commands.Command("llama.journal_undo", command_type=sims4.commands.CommandType.Live)
+    def cmd_journal_undo(first_name: str = None, last_name: str = None, count: int = 1, _connection=None):
+        """Remove the newest N journal entries involving a sim. Use after a
+        test-mode message (llama.testbirth) so the pretend announcement
+        doesn't become canon in every later prompt."""
+        output = sims4.commands.CheatOutput(_connection)
+        if not first_name:
+            output("[Llamafone] Usage: llama.journal_undo <First> <Last> [count]")
+            return
+        full_name = f"{first_name} {last_name}".strip() if last_name else first_name
+        sim_id = None
+        try:
+            contact = phone.find_contact_by_name(full_name)
+            sim_id = contact.get("sim_id") if contact else None
+        except Exception:
+            pass
+        removed = journal.remove_last_for_sim(full_name, n=max(1, int(count)), sim_id=sim_id)
+        if not removed:
+            output(f"[Llamafone] No journal entries found for '{full_name}'.")
+            return
+        output(f"[Llamafone] Removed {len(removed)} entry(ies) for {full_name}:")
+        for e in removed:
+            preview = str(e.get("content", "")).replace("\n", " ")[:90]
+            output(f"  - {e.get('timestamp', '?')[:19]}  {preview}")
+
+    @sims4.commands.Command("llama.birthwatch", command_type=sims4.commands.CommandType.Live)
+    def cmd_birthwatch(_connection=None):
+        """Run one birth-watcher pass now and show what it evaluated."""
+        output = sims4.commands.CheatOutput(_connection)
+        from . import births as _births
+        for line in _births.watch_report():
+            output(f"[Llamafone] {line}")
+
+    @sims4.commands.Command("llama.testbirth", command_type=sims4.commands.CommandType.Live)
+    def cmd_test_birth(first_name: str = None, last_name: str = None, _connection=None):
+        """Simulate '<First> <Last> just gave birth' and run the real
+        announcement selection: finds the strongest family / close-friend
+        tie into the active household and schedules the incoming text
+        (~10s instead of the usual 90-240s). The named sim does NOT have
+        to actually be pregnant -- the prompt will still say 'had a baby'
+        only if a birth milestone exists, so for a dry run of the tie
+        selection just watch the cheat output and the log."""
+        output = sims4.commands.CheatOutput(_connection)
+        if not first_name:
+            output("[Llamafone] Usage: llama.testbirth <First> <Last>")
+            return
+        full_name = f"{first_name} {last_name}".strip() if last_name else first_name
+        si = None
+        try:
+            want = full_name.lower()
+            for cand in services.sim_info_manager().get_all():
+                nm = f"{getattr(cand, 'first_name', '')} {getattr(cand, 'last_name', '')}".strip().lower()
+                if nm == want:
+                    si = cand
+                    break
+        except Exception:
+            pass
+        if si is None:
+            output(f"[Llamafone] Could not find '{full_name}'.")
+            return
+        from . import births as _births
+
+        class _Shim:
+            def __init__(self, s):
+                self._sim_info = s
+            def get_partner(self):
+                try:
+                    pt = getattr(self._sim_info, "pregnancy_tracker", None)
+                    return pt.get_partner() if pt is not None else None
+                except Exception:
+                    return None
+
+        pick = _births._best_announcement(si, _Shim(si).get_partner())
+        if pick is None:
+            output(f"[Llamafone] No family / close-friend tie from {full_name} (or partner) into the active household. Nothing to announce.")
+            return
+        recipient, contact, label = pick
+        output(f"[Llamafone] Would announce: {contact.get('name')} -> {recipient.first_name} ({label}). Firing in ~10s...")
+        import threading as _th
+        t = _th.Timer(10, _births._fire_announcement, args=(recipient, contact, si, label, True))
+        t.daemon = True
+        try:
+            phone._track_timer(t)
+        except Exception:
+            pass
+        t.start()
+
+    @sims4.commands.Command("llama.roledebug", command_type=sims4.commands.CommandType.Live)
+    def cmd_role_debug(first_name: str = None, last_name: str = None, _connection=None):
+        """Show what the service-NPC detector sees for a sim: role,
+        whether it's a confirmed household hire, and every career
+        class / trait / title string it examined. Answers 'why did it
+        call my dad a nanny' directly."""
+        output = sims4.commands.CheatOutput(_connection)
+        if not first_name:
+            output("[Llamafone] Usage: llama.roledebug <First> <Last>")
+            return
+        full_name = f"{first_name} {last_name}".strip() if last_name else first_name
+        si = None
+        try:
+            contact = phone.find_contact_by_name(full_name)
+            si = contact.get("sim_info") if contact else None
+        except Exception:
+            si = None
+        if si is None:
+            try:
+                want = full_name.lower()
+                for cand in services.sim_info_manager().get_all():
+                    nm = f"{getattr(cand, 'first_name', '')} {getattr(cand, 'last_name', '')}".strip().lower()
+                    if nm == want:
+                        si = cand
+                        break
+            except Exception:
+                pass
+        if si is None:
+            output(f"[Llamafone] Could not find '{full_name}'.")
+            return
+        from . import service_npc as _svc
+        role, confirmed = _svc.get_service_role(si)
+        output(f"=== Service-role debug: {si.first_name} {si.last_name} ===")
+        output(f"  resolved role: {role!r}  confirmed_hire={confirmed}")
+        try:
+            ct = getattr(si, "career_tracker", None)
+            careers = getattr(ct, "careers", None) if ct else None
+            it = careers.values() if hasattr(careers, "values") else (careers or [])
+            names = [getattr(type(c), "__name__", "?") for c in it if c is not None]
+            output(f"  career classes: {names}")
+        except Exception as e:
+            output(f"  career classes: (read failed: {type(e).__name__}: {e})")
+        try:
+            traits = sim_context.get_sim_traits(si, limit=30) or []
+            output(f"  traits: {traits}")
+        except Exception:
+            pass
+        try:
+            output(f"  title: {getattr(si, 'title', None)!r}  sim_id={getattr(si, 'sim_id', None)}")
+        except Exception:
+            pass
+
+    @sims4.commands.Command("llama.pregdebug", command_type=sims4.commands.CommandType.Live)
+    def cmd_preg_debug(first_name: str = None, last_name: str = None, _connection=None):
+        """Show exactly what the pregnancy-visibility resolver sees for a
+        sim: is_pregnant, active pregnancy buffs, the pregnancy commodity's
+        value / state / state-buff, and the resolved tier. Searches every
+        sim in the save (not just the active sim's contacts) so off-lot
+        NPCs like a cousin's pregnant wife can be checked."""
+        output = sims4.commands.CheatOutput(_connection)
+        if not first_name:
+            output("[Llamafone] Usage: llama.pregdebug <First> <Last>")
+            return
+        full_name = f"{first_name} {last_name}".strip() if last_name else first_name
+        si = None
+        try:
+            contact = phone.find_contact_by_name(full_name)
+            si = contact.get("sim_info") if contact else None
+        except Exception:
+            si = None
+        if si is None:
+            try:
+                want = full_name.lower()
+                for cand in services.sim_info_manager().get_all():
+                    nm = f"{getattr(cand, 'first_name', '')} {getattr(cand, 'last_name', '')}".strip().lower()
+                    if nm == want or (not last_name and getattr(cand, "first_name", "").lower() == want):
+                        si = cand
+                        break
+            except Exception as e:
+                output(f"[Llamafone] sim lookup failed: {type(e).__name__}: {e}")
+        if si is None:
+            output(f"[Llamafone] Could not find '{full_name}'.")
+            return
+        from . import milestones as _milestones
+        info = _milestones.pregnancy_debug_info(si)
+        output(f"=== Pregnancy debug: {si.first_name} {si.last_name} (id {getattr(si, 'sim_id', '?')}) ===")
+        for k, v in info.items():
+            output(f"  {k}: {v!r}")
 
     @sims4.commands.Command("llama.dumpprompt", command_type=sims4.commands.CommandType.Live)
     def cmd_dump_prompt(first_name: str = None, last_name: str = None, _connection=None):

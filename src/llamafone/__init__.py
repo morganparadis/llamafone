@@ -15,7 +15,7 @@ Commands (open cheat console with Ctrl+Shift+C):
 """
 
 MOD_NAME = "Llamafone"
-MOD_VERSION = "3.6.0"
+MOD_VERSION = "3.6.2"
 
 # Captured at module-load time -- the moment Sims 4 imported this build.
 # Used in prompts so a llama.dumpprompt definitively shows which load
@@ -122,6 +122,16 @@ try:
     if not past_events.install_hook():
         _log("past_events.install_hook: BaseDramaNode not importable yet; will retry from startup thread")
 
+    # Hook PregnancyTracker.complete_pregnancy so a birth in a family
+    # member's / close friend's household triggers an incoming
+    # announcement text a few minutes later.
+    from . import births
+    if not births.install_hook():
+        _log("births.install_hook: PregnancyTracker not importable yet; will retry from startup thread")
+    # Belt-and-braces detector for births that bypass the hook (MCCC,
+    # off-lot NPC deliveries): polls known-pregnant sims every 2 minutes.
+    births.start_watcher()
+
     # Wire up phone-UI injection BEFORE object tunings finish loading.
     # The companion .package supplies the interaction tunings (which are
     # PieMenuCategory + SuperInteraction in the game's internal type system,
@@ -181,6 +191,7 @@ try:
                 save_id.install_save_load_hook()
                 interactions.install_hook()
                 past_events.install_hook()
+                births.install_hook()
                 # Trim stale entries on each fresh load so files don't
                 # grow forever.
                 try:

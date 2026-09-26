@@ -183,6 +183,33 @@ def _save(entries):
 # Public write API
 # ---------------------------------------------------------------------------
 
+def remove_last_for_sim(sim_name, n=1, sim_id=None):
+    """Delete the newest `n` journal entries involving `sim_name` (by id
+    when the entry has one). Returns the removed entries (newest last).
+    Support use: llama.journal_undo, for scrubbing entries that were
+    generated in a test mode and would otherwise be treated as canon
+    by every later prompt."""
+    sid = str(sim_id) if sim_id is not None else None
+    sname_l = (sim_name or "").lower()
+    with _lock:
+        entries = _load()
+        idxs = []
+        for i, e in enumerate(entries):
+            eid = e.get("sim_id")
+            if eid:
+                if sid is not None and eid == sid:
+                    idxs.append(i)
+            elif e.get("sim", "").lower() == sname_l:
+                idxs.append(i)
+        target = idxs[-n:] if n > 0 else []
+        removed = [entries[i] for i in target]
+        for i in sorted(target, reverse=True):
+            del entries[i]
+        if removed:
+            _save(entries)
+        return removed
+
+
 def add_entry(content_type, content, sim_name=None, recipient_name=None,
               sim_id=None, recipient_id=None):
     """
@@ -371,7 +398,7 @@ def get_sim_history(sim_name, n=6, recipient_name=None,
     return matched[-n:]
 
 
-def format_sim_history_for_prompt(sim_name, n=6, recipient_name=None,
+def format_sim_history_for_prompt(sim_name, n=12, recipient_name=None,
                                   trailing_note=None, sim_id=None,
                                   recipient_id=None, before_iso=None):
     """

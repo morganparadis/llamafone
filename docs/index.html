@@ -864,6 +864,26 @@ fast_model    = llama3.2:3b</code></pre>
   <ol class="changelog-list">
 
     <li class="changelog-entry">
+      <div class="changelog-date">September 25, 2026</div>
+      <div class="changelog-body">
+        <h3>Sim-bio persistence, wedding awareness, pregnancy privacy, family voice (v3.6.2)</h3>
+        <p>A stack of bug fixes and one new diagnostic. Drop-in over v3.6.1.</p>
+        <p><strong>The AI knows when a wedding is happening right now.</strong> Calendar-event filtering used to drop any non-holiday event that had already started, so during a live ceremony the AI had NO context that a wedding was underway -- and would fabricate past-tense recaps ("what a day that was") mid-vows. Events that started in the last ~6 in-game hours are now surfaced as "HAPPENING RIGHT NOW", with an explicit prompt guardrail against wrap-up framing during a live event.</p>
+        <p><strong>Grandparents talking about the other grandparent now say "your grandma" / "your grandpa".</strong> The mutual-family reference rule for cross-role family was too soft, so grandmothers texting their grandkids about their husband would use his first name ("Richard keeps saying..."). The rule now explicitly directs the recipient-relative label for the spouse+descendant case -- which is how real family speech works.</p>
+        <p><strong>Hidden pregnancies stay hidden.</strong> Sims 4 flips <code>is_pregnant</code> to True at conception -- before the sim takes the pregnancy test, and before anyone knows. The mod was surfacing that immediately to every contact ("congrats on the baby!" from a distant acquaintance five seconds after the player found out). Now gated by a visibility ladder: <em>hidden</em> (pre-test -- nobody knows), <em>confirmed</em> (test taken -- household knows, others don't yet), <em>visible</em> (Trimester 2/3 -- bump is showing, everyone can reference). Retroactive suppress catches wrong milestones already sitting in users' saves from before the fix.</p>
+        <p><strong>New: <code>llama.saveinfo</code> diagnostic.</strong> Prints the current slot (hex + decimal), the resolved data folder, and every Llamafone folder on disk with its marker -- so support can see at a glance where a user's history actually lives.</p>
+      </div>
+    </li>
+
+    <li class="changelog-entry">
+      <div class="changelog-date">August 18, 2026</div>
+      <div class="changelog-body">
+        <h3>Fix bogus "curl not found" on phone texts and calls (v3.6.1)</h3>
+        <p>A small but load-bearing fix. On Windows, some players saw a persistent "curl not found. Llamafone needs curl on PATH" error when trying to text or call a sim, even though the exact same install could generate events, challenges, and Llamadate bios (which also use curl). The cause was a Windows command-line length limit: phone prompts include full relationship history, save notes, sim bios, and past events, and can run 30&#8211;50KB. The mod was passing that whole JSON body as a command-line argument, which blew past Windows' ~32KB <code>CreateProcess</code> limit and surfaced as a spurious "curl not found." The body is now streamed via stdin, so payload size doesn't matter. Drop-in over v3.6.</p>
+      </div>
+    </li>
+
+    <li class="changelog-entry">
       <div class="changelog-date">August 16, 2026</div>
       <div class="changelog-body">
         <h3>Messages move relationships, custom world context, sim bios, service NPCs, OpenRouter (v3.6)</h3>

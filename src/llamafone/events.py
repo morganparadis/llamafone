@@ -685,13 +685,26 @@ def _format_time_until(start_time, now):
         return None
 
 
-def get_shared_upcoming_events(recipient_sim_info, contact_sim_info, max_events=3):
-    """Return a list of upcoming calendar events that both sims are
-    invited to. Each item is a dict with name + when_string.
+def get_shared_upcoming_events(recipient_sim_info, contact_sim_info, max_events=3,
+                               attendance="shared"):
+    """Return a list of upcoming calendar events. Each item is a dict
+    with name + when_string.
+
+    attendance:
+      "shared"         -- events BOTH sims attend (plus holidays, which
+                          everyone experiences). The default.
+      "recipient_only" -- events the RECIPIENT attends and the contact
+                          does NOT. Holidays excluded (already covered
+                          by the shared block). Surfaced so a caller who
+                          isn't invited to, say, the recipient's baby
+                          shower still knows it exists and that it is
+                          UPCOMING -- otherwise the AI hears about it
+                          from chat history alone, has no tense anchor,
+                          and asks "how was it?" the day before.
 
     Quietly returns [] if the calendar service isn't ready, either sim
-    is missing, or no shared events exist. The caller drops the result
-    into the prompt only when non-empty.
+    is missing, or nothing matches. The caller drops the result into the
+    prompt only when non-empty.
     """
     if recipient_sim_info is None or contact_sim_info is None:
         return []
@@ -747,54 +760,60 @@ def get_shared_upcoming_events(recipient_sim_info, contact_sim_info, max_events=
             except Exception:
                 pass
 
-            # Past events are irrelevant for non-holidays -- once the
-            # event has started, both sims should be at the lot together
-            # and would not be texting each other across it.
+            # Past events are usually irrelevant for non-holidays, but
+            # we keep events that started in the last few in-game hours
+            # so the AI knows the recipient is CURRENTLY at (say) their
+            # own wedding. Without this the prompt has no context and the
+            # AI generates past-tense recaps ("what a day that was!")
+            # while the ceremony is still underway.
             #
-            # HOLIDAYS are different: they run the whole in-game day,
-            # nobody "attends" them, and if today IS the holiday the
-            # AI absolutely needs to know. So we keep holidays whose
-            # start was in the last 24 in-game hours (~144000 ticks).
-            # Non-holidays keep the strict "past = drop" rule.
-            _HOLIDAY_ACTIVE_TICKS = 24 * 60 * 100  # 24 hours * 60 mins * 100 ticks/min
+            # HOLIDAYS run the whole in-game day -- kept if started
+            # within 24h. Non-holidays kept if started within ~6h (long
+            # enough for a wedding / party / funeral to still be
+            # in-progress, short enough to avoid ancient events).
+            _TICKS_PER_HOUR = 60 * 100  # 60 mins/hour * 100 ticks/min
+            _HOLIDAY_ACTIVE_TICKS = 24 * _TICKS_PER_HOUR
+            _EVENT_IN_PROGRESS_TICKS = 6 * _TICKS_PER_HOUR
+            _in_progress = False
             try:
                 if start < now:
+                    # Measure how long ago the start was (raw tick delta)
+                    hours_since = None
+                    try:
+                        diff = now - start
+                        for attr in ("in_ticks", "absolute_ticks", "value", "ticks"):
+                            fn = getattr(diff, attr, None)
+                            if callable(fn):
+                                hours_since = int(fn())
+                                break
+                            if fn is not None:
+                                hours_since = int(fn)
+                                break
+                    except Exception:
+                        hours_since = None
+
                     if is_holiday:
-                        try:
-                            # DateAndTime subtraction returns a TimeSpan;
-                            # we want raw absolute-tick delta. Fall back
-                            # to str-repr parsing if the subtraction API
-                            # differs across game versions.
-                            hours_since = None
-                            try:
-                                diff = now - start
-                                for attr in ("in_ticks", "absolute_ticks", "value", "ticks"):
-                                    fn = getattr(diff, attr, None)
-                                    if callable(fn):
-                                        hours_since = int(fn())
-                                        break
-                                    if fn is not None:
-                                        hours_since = int(fn)
-                                        break
-                            except Exception:
-                                hours_since = None
-                            if hours_since is None or hours_since > _HOLIDAY_ACTIVE_TICKS:
-                                counts["past"] += 1
-                                continue
-                            # Mark this holiday as currently-active so
-                            # the prompt can label it "TODAY".
-                            _active_today = True
-                        except Exception:
+                        if hours_since is None or hours_since > _HOLIDAY_ACTIVE_TICKS:
                             counts["past"] += 1
                             continue
+                        # Currently-active holiday -- prompt labels it "TODAY".
+                        _active_today = True
                     else:
-                        counts["past"] += 1
-                        continue
+                        if hours_since is None or hours_since > _EVENT_IN_PROGRESS_TICKS:
+                            counts["past"] += 1
+                            continue
+                        # Started recently -- treat as in-progress so the
+                        # prompt tells the AI both sims are AT the event
+                        # right now, not reminiscing about it afterwards.
+                        _in_progress = True
+                        _active_today = False
                 else:
                     _active_today = False
             except Exception:
                 _active_today = False
 
+            if attendance == "recipient_only" and is_holiday:
+                continue
             if not is_holiday:
                 try:
                     sims = event.get_calendar_sims() or ()
@@ -802,7 +821,11 @@ def get_shared_upcoming_events(recipient_sim_info, contact_sim_info, max_events=
                 except Exception:
                     counts["errors"] += 1
                     continue
-                if recipient_id not in attendee_set or contact_id not in attendee_set:
+                if attendance == "recipient_only":
+                    if recipient_id not in attendee_set or contact_id in attendee_set:
+                        counts["attendee_mismatch"] += 1
+                        continue
+                elif recipient_id not in attendee_set or contact_id not in attendee_set:
                     counts["attendee_mismatch"] += 1
                     continue
 
@@ -833,6 +856,7 @@ def get_shared_upcoming_events(recipient_sim_info, contact_sim_info, max_events=
                 "season": season,
                 "honored": honored,
                 "active_today": _active_today,
+                "in_progress": _in_progress,
             })
     except Exception as e:
         _log(f"Iter error: {type(e).__name__}: {e}")
@@ -916,24 +940,40 @@ def format_shared_events_for_prompt(recipient_sim_info, contact_sim_info):
     model not to guess.
     """
     events = get_shared_upcoming_events(recipient_sim_info, contact_sim_info)
+    solo_section = _format_recipient_only_events(recipient_sim_info, contact_sim_info)
     if not events:
-        return ""
+        return solo_section
     lines = [
         "Upcoming on the calendar (you may reference these naturally; do "
         "NOT invent events not listed here, and do NOT invent details "
         "about an event -- who it's for, who's hosting, what's planned -- "
         "beyond what is explicitly stated below). Match the tone hint "
-        "when one is given:"
+        "when one is given. HOLIDAYS ARE BACKGROUND, NOT A TOPIC: an "
+        "upcoming holiday is at most a passing aside, and most messages "
+        "should not mention it at all -- do NOT make plans, headcounts, "
+        "menus, or 'are you all set for X' the point of the message unless "
+        "the recipient raises it or it is today / tomorrow:"
     ]
-    # Sort: today's active holidays first (highest priority), then
-    # future events by soonest. Ongoing holidays are the AI's most
-    # relevant calendar signal -- "you know it's Talk Like A Pirate
-    # Day right now" beats "there's a wedding in 3 weeks."
-    events = sorted(events, key=lambda e: (0 if e.get("active_today") else 1, e.get("when") or ""))
+    # Sort: in-progress events first (most immediately relevant), then
+    # today's active holidays, then future events by soonest. If a
+    # wedding is happening RIGHT NOW that beats "there's a party in
+    # 3 weeks" for what the AI should anchor to.
+    def _sort_key(e):
+        if e.get("in_progress"):
+            return (0, e.get("when") or "")
+        if e.get("active_today"):
+            return (1, e.get("when") or "")
+        return (2, e.get("when") or "")
+    events = sorted(events, key=_sort_key)
+    any_in_progress = False
     for ev in events:
         hint = _tone_hint(ev["name"])
         hint_part = f" {hint}" if hint else ""
-        if ev.get("active_today"):
+        if ev.get("in_progress"):
+            kind = "event HAPPENING RIGHT NOW -- both of you are at it"
+            when_str = "in progress, currently underway"
+            any_in_progress = True
+        elif ev.get("active_today"):
             kind = "holiday HAPPENING TODAY"
             when_str = "today, currently ongoing"
         else:
@@ -948,4 +988,65 @@ def format_shared_events_for_prompt(recipient_sim_info, contact_sim_info):
         lines.append(
             f"  - {ev['name']} ({kind}, {when_str}{season_part}){honored_part}{hint_part}"
         )
+    if any_in_progress:
+        # The AI's default failure mode when handed an in-progress event
+        # is a past-tense recap ("what a day that was!") -- as if the
+        # event just wrapped. Explicit guardrail so that doesn't happen.
+        lines.append(
+            "\nIMPORTANT: any event tagged 'HAPPENING RIGHT NOW' is still "
+            "in progress -- both of you are at it. Do NOT write the message "
+            "as a post-event recap ('what a day that was', 'you looked "
+            "great up there', 'so glad it's over'). If you reference the "
+            "event, treat it as ongoing (planning the next moment, a quick "
+            "aside during a lull, a note for after), or don't reference it "
+            "at all. Past-tense wrap-up framing during a live event is the "
+            "single most common mistake here."
+        )
+    block = "\n".join(lines)
+    return f"{block}\n\n{solo_section}" if solo_section else block
+
+
+def _format_recipient_only_events(recipient_sim_info, contact_sim_info):
+    """Upcoming events on the RECIPIENT's calendar that the sender is not
+    attending. Gives the AI a tense anchor ("tomorrow", not "how was
+    it?") and attendance status, wrapped in the same may-not-know
+    framing used for private milestones. Returns "" when none."""
+    try:
+        events = get_shared_upcoming_events(
+            recipient_sim_info, contact_sim_info, attendance="recipient_only",
+        )
+    except Exception:
+        return ""
+    if not events:
+        return ""
+    # Always listed, framed as forbidden knowledge. A soft "you may or
+    # may not know" hedge lost to the system prompt's "open with a
+    # concrete specific" pressure (an uninvited acquaintance texted
+    # asking what to bring to the baby shower). We tried a keyword
+    # gate on pair history next; it was brittle ("the party tomorrow"
+    # never matches "Baby Shower"). Per design decision: keep the list
+    # in every prompt so the AI has the tense anchor when the RECIPIENT
+    # raises it, and make the prohibition unambiguous.
+    who = getattr(recipient_sim_info, "first_name", None) or "the recipient"
+    lines = [
+        f"EVENTS ON {who.upper()}'S CALENDAR THAT YOU ARE NOT INVITED TO AND "
+        f"DO NOT KNOW ABOUT. You were NOT invited. You are NOT attending. You "
+        f"do NOT know these exist unless the past-interaction history in this "
+        f"prompt shows the recipient already told you. Do NOT mention them. Do "
+        f"NOT ask about them. Do NOT ask what to bring, whether you can come, "
+        f"or how it went. Do NOT use them as a topic. This list exists ONLY so "
+        f"that IF the recipient brings one up, you understand it is UPCOMING "
+        f"(see timing) and that you are not going. Never invent details beyond "
+        f"what is listed:"
+    ]
+    events = sorted(events, key=lambda e: (0 if e.get("in_progress") else 1, e.get("when") or ""))
+    for ev in events:
+        if ev.get("in_progress"):
+            when_str = "happening RIGHT NOW"
+        else:
+            when_str = ev["when"]
+        season = ev.get("season")
+        season_part = f", {season}" if season else ""
+        honored_part = _format_honored(ev.get("honored"))
+        lines.append(f"  - {ev['name']} ({when_str}{season_part}){honored_part}")
     return "\n".join(lines)

@@ -66,6 +66,84 @@ def _log(message):
 _lock = threading.RLock()
 
 
+# Sims 4 ticks-per-minute constant -- kept in sync with past_events.py,
+# journal.py, contact_prefs.py, interactions.py. If EA changes tick
+# semantics in an update the self-check in past_events.py will fire
+# loudly, and the constant needs updating in all five files.
+_TICKS_PER_MINUTE = 1500
+_TICKS_PER_HOUR = _TICKS_PER_MINUTE * 60
+_TICKS_PER_DAY = _TICKS_PER_HOUR * 24
+
+
+def _ticks_of(dt):
+    """Pull an int tick count from a Sims 4 DateAndTime, or None."""
+    if dt is None:
+        return None
+    for attr in ("absolute_ticks", "value", "ticks"):
+        fn = getattr(dt, attr, None)
+        if callable(fn):
+            try:
+                return int(fn())
+            except Exception:
+                continue
+        if fn is not None:
+            try:
+                return int(fn)
+            except Exception:
+                continue
+    try:
+        raw = str(dt)
+        if "(" in raw and raw.endswith(")"):
+            return int(raw.split("(")[-1][:-1])
+    except Exception:
+        pass
+    return None
+
+
+def _now_sim_ticks():
+    """Current in-game tick count, or None if no time service (main menu)."""
+    try:
+        import services
+        ts = services.time_service()
+        return _ticks_of(getattr(ts, "sim_now", None)) if ts else None
+    except Exception:
+        return None
+
+
+def _relative_sim_time(then_ticks, now_ticks):
+    """Turn a delta between two in-game tick counts into a natural phrase
+    a sim would actually say. Real-world dates are meaningless in Sims 4
+    ("Sep 25" tells the AI nothing about season or timing), so milestones
+    render as "yesterday" / "a few days ago" / "last week" / etc. Returns
+    None if either tick value is missing -- caller falls back."""
+    if then_ticks is None or now_ticks is None:
+        return None
+    delta = now_ticks - then_ticks
+    if delta < 0:
+        return "recently"
+    hours = delta / _TICKS_PER_HOUR
+    days = delta / _TICKS_PER_DAY
+    if hours < 1:
+        return "just now"
+    if hours < 5:
+        return "a few hours ago"
+    if hours < 20:
+        return "earlier today"
+    if days < 1.75:
+        return "yesterday"
+    if days < 4:
+        return "a few days ago"
+    if days < 8:
+        # A Sims 4 in-game week is one season, so this range covers "the
+        # last week or so" without spilling into "last season".
+        return "earlier this week"
+    if days < 15:
+        return "last week"
+    if days < 30:
+        return "a couple of weeks ago"
+    return "a while back"
+
+
 def _atomic_write_json(path, data):
     """Write JSON via .tmp + fsync + os.replace so a crash mid-write can't
     corrupt the file. Mirrors the journal hardening pattern. Best-effort:
@@ -337,6 +415,324 @@ def _get_aspiration(sim_info):
         return None
 
 
+def _get_pregnancy_partner_id(sim_info):
+    """The other parent's sim_id for an in-progress pregnancy, else the
+    spouse's, else None. Read while pregnant so it survives into the
+    snapshot the birth is diffed against."""
+    try:
+        pt = getattr(sim_info, "pregnancy_tracker", None)
+        if pt is not None and _safe(sim_info, "is_pregnant", False):
+            pid = pt.get_partner_id()
+            if pid:
+                return str(pid)
+    except Exception:
+        pass
+    try:
+        sid = getattr(sim_info, "spouse_sim_id", None)
+        return str(sid) if sid else None
+    except Exception:
+        return None
+
+
+def _sim_name_by_id(sim_id):
+    try:
+        import services
+        si = services.sim_info_manager().get(int(sim_id))
+        return f"{si.first_name} {si.last_name}".strip() if si else None
+    except Exception:
+        return None
+
+
+def _mirror_for_partner(ev, partner_id, name):
+    """Copy of a pregnancy event re-homed onto the other parent. The
+    caller stamps timestamp / sim_ticks; we set sim_id / sim_name and
+    the description from THEIR side. `mirror_of` points at the pregnant
+    sim so the renderer can read visibility / circumstances from her."""
+    pname = _sim_name_by_id(partner_id)
+    if not pname:
+        return None
+    m = dict(ev)
+    m["sim_id"] = str(partner_id)
+    m["sim_name"] = pname
+    m["mirror_of"] = None  # filled by caller with the pregnant sim's id
+    if ev.get("type") == "pregnancy_start":
+        m["description"] = f"{pname} is expecting a baby with {name}"
+    else:
+        m["description"] = f"{pname} and {name} had a baby"
+    return m
+
+
+def _get_pregnancy_visibility(sim_info):
+    """Return one of 'none' | 'hidden' | 'confirmed' | 'visible'.
+
+    Sims 4 flips `sim_info.is_pregnant` to True at CONCEPTION -- before
+    the sim takes the pregnancy test and before anyone (including her)
+    knows. Surfacing that state as a milestone leaks the pregnancy to
+    contacts who couldn't possibly know, and gets called out in AI
+    messages like "congrats on the baby!" while the sim herself is
+    still oblivious.
+
+    Visibility ladder (based on Sims 4's Trimester buff progression):
+      none      - not pregnant
+      hidden    - is_pregnant=True but no trimester buff yet
+                  (post-conception, pre-test; NOBODY knows)
+      confirmed - Trimester 1 buff (test taken; sim + household know,
+                  not visibly showing)
+      visible   - Trimester 2 or 3 buff (visibly pregnant to everyone)
+
+    Only 'confirmed' or 'visible' trigger the pregnancy_start milestone.
+    """
+    try:
+        if not _safe(sim_info, "is_pregnant", False):
+            return "none"
+    except Exception:
+        return "none"
+    # Path 1: active buffs. Precise for instanced sims (active household,
+    # sims on the current lot). BuffComponent strips non-persisted buffs
+    # on LOD drop / zone unload, so off-lot NPCs report NO trimester
+    # buffs and would read as 'hidden' forever -- every pregnant NPC in
+    # a save looked pre-test under this path alone.
+    tier = _tier_from_buff_name_iter(_active_buff_names(sim_info))
+    if tier:
+        return tier
+    # Path 2: the pregnancy commodity's tuned STATE. The commodity lives
+    # on sim_info's statistic tracker, persists, and keeps ticking for
+    # off-lot sims. Each commodity state carries the buff it would apply
+    # (buff_Pregnancy_Trimester1/2/3), so we read the state the game
+    # itself says she is in and map its buff name -- game thresholds,
+    # not guessed ones. Verified against simulation.zip (Commodity.
+    # get_state_index falls back to computing from value when the
+    # cached index is None, so it works for uninstanced sims).
+    try:
+        tier = _tier_from_buff_name_iter(_pregnancy_commodity_state_buff_names(sim_info))
+        if tier:
+            return tier
+    except Exception:
+        pass
+    # Path 3: raw progress fallback (value / max). Only reached if the
+    # commodity has no usable states. Thirds approximate the trimesters.
+    try:
+        progress = _pregnancy_progress_from_commodity(sim_info)
+        if progress is not None:
+            if progress >= 1.0 / 3.0:
+                return "visible"
+            if progress > 0.0:
+                return "confirmed"
+    except Exception:
+        pass
+    return "hidden"
+
+
+def _tier_from_buff_name_iter(names):
+    """Map pregnancy buff class names to a visibility tier, or None."""
+    for raw in names:
+        name = str(raw or "").lower()
+        if "pregnancy" not in name or "trimester" not in name:
+            continue
+        if any(tag in name for tag in ("trimester2", "trimester_2", "trimester3", "trimester_3")):
+            return "visible"
+        if "trimester1" in name or "trimester_1" in name:
+            return "confirmed"
+    return None
+
+
+def _active_buff_names(sim_info):
+    try:
+        get_buffs = getattr(sim_info, "get_active_buff_types", None)
+        if not callable(get_buffs):
+            return []
+        return [getattr(bt, "__name__", "") for bt in get_buffs()]
+    except Exception:
+        return []
+
+
+def _pregnancy_commodity(sim_info):
+    """Return (stat_type, commodity_instance_or_None, tracker_or_None)
+    for this sim's species-specific pregnancy commodity."""
+    from sims.pregnancy.pregnancy_tracker import PregnancyTracker
+    stat_type = PregnancyTracker.PREGNANCY_COMMODITY_MAP.get(sim_info.species)
+    if stat_type is None:
+        return None, None, None
+    tracker = sim_info.get_tracker(stat_type)
+    if tracker is None:
+        return stat_type, None, None
+    try:
+        inst = tracker.get_statistic(stat_type)
+    except Exception:
+        inst = None
+    return stat_type, inst, tracker
+
+
+def _pregnancy_commodity_state_buff_names(sim_info):
+    stat_type, inst, _tracker = _pregnancy_commodity(sim_info)
+    if inst is None:
+        return []
+    idx = inst.get_state_index()
+    if idx is None:
+        return []
+    states = getattr(inst, "commodity_states", None) or getattr(stat_type, "commodity_states", None)
+    if not states or idx < 0 or idx >= len(states):
+        return []
+    buff_ref = getattr(states[idx], "buff", None)
+    buff_type = getattr(buff_ref, "buff_type", None) if buff_ref is not None else None
+    return [getattr(buff_type, "__name__", "")] if buff_type is not None else []
+
+
+def _pregnancy_progress_from_commodity(sim_info):
+    stat_type, inst, tracker = _pregnancy_commodity(sim_info)
+    if inst is None or tracker is None:
+        return None
+    value = float(tracker.get_value(stat_type))
+    max_value = getattr(inst, "max_value", None) or getattr(stat_type, "max_value", None)
+    max_value = float(max_value) if max_value else 100.0
+    return max(0.0, min(1.0, value / max_value)) if max_value > 0 else None
+
+
+_REACTION_TRAITS = (
+    "hateschildren", "familyoriented", "childish", "ambitious", "noncommittal",
+    "romantic", "jealous", "loner", "gloomy", "cheerful", "hotheaded",
+    "erratic", "materialistic", "lazy", "overachiever", "paranoid",
+)
+
+
+def pregnancy_circumstances(sim_info):
+    """Facts that shape how a sim (and the people around them) would
+    FEEL about this pregnancy -- so the AI can react in character
+    instead of defaulting to 'thrilled'. Returns a list of short
+    strings; empty when nothing useful could be read. Every read is
+    best-effort; a failure just drops that fact."""
+    facts = []
+    if sim_info is None:
+        return facts
+    first = getattr(sim_info, "first_name", "She") or "She"
+    import services
+    sm = None
+    try:
+        sm = services.sim_info_manager()
+    except Exception:
+        pass
+
+    def _name(si):
+        try:
+            return f"{si.first_name} {si.last_name}".strip()
+        except Exception:
+            return "someone"
+
+    # Who the other parent is, and how that squares with their spouse.
+    partner = None
+    try:
+        pt = getattr(sim_info, "pregnancy_tracker", None)
+        partner = pt.get_partner() if pt is not None else None
+    except Exception:
+        partner = None
+    spouse = None
+    try:
+        sid = getattr(sim_info, "spouse_sim_id", None)
+        spouse = sm.get(sid) if (sm is not None and sid) else None
+    except Exception:
+        spouse = None
+    try:
+        if partner is not None and spouse is not None:
+            if getattr(partner, "sim_id", None) == getattr(spouse, "sim_id", None):
+                facts.append(f"the other parent is {first}'s spouse, {_name(spouse)}")
+            else:
+                facts.append(
+                    f"the other parent is {_name(partner)} -- NOT {first}'s spouse "
+                    f"{_name(spouse)} (this pregnancy is from outside the marriage)"
+                )
+        elif partner is not None:
+            facts.append(f"{first} is not married; the other parent is {_name(partner)}")
+        elif spouse is not None:
+            facts.append(f"{first} is married to {_name(spouse)}")
+        else:
+            facts.append(f"{first} is not married and no other parent is recorded")
+    except Exception:
+        pass
+
+    # Unusual origin (alien abduction etc.) is its own kind of news.
+    try:
+        origin = getattr(getattr(sim_info, "pregnancy_tracker", None), "_origin", None)
+        oname = str(getattr(origin, "name", "") or "").upper()
+        if oname and oname != "DEFAULT":
+            facts.append(f"pregnancy origin: {oname.replace('_', ' ').lower()}")
+    except Exception:
+        pass
+
+    # Life stage.
+    try:
+        age = str(getattr(sim_info, "age", "")).replace("Age.", "")
+        if age in ("TEEN", "ELDER"):
+            facts.append(f"{first} is a {age.lower()}")
+    except Exception:
+        pass
+
+    # Traits that color the reaction.
+    try:
+        traits = sim_context.get_sim_traits(sim_info, limit=12) or []
+        hits = [t for t in traits if str(t).lower().replace(" ", "").replace("-", "") in _REACTION_TRAITS]
+        if hits:
+            facts.append(f"{first}'s relevant traits: {', '.join(hits)}")
+    except Exception:
+        pass
+
+    # Existing kids and money.
+    try:
+        hh = getattr(sim_info, "household", None)
+        if hh is not None:
+            kids = 0
+            for si in hh.sim_info_gen():
+                a = str(getattr(si, "age", "")).replace("Age.", "")
+                if a in ("BABY", "INFANT", "TODDLER", "CHILD", "TEEN"):
+                    kids += 1
+            facts.append("first child" if kids == 0 else f"already has {kids} kid(s) at home")
+            try:
+                money = int(getattr(getattr(hh, "funds", None), "money", None))
+                if money < 2000:
+                    facts.append(f"household is short on money (~{money} simoleons)")
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return facts
+
+
+def pregnancy_debug_info(sim_info):
+    """Everything the visibility resolver looked at, for llama.pregdebug."""
+    info = {"is_pregnant": bool(_safe(sim_info, "is_pregnant", False))}
+    info["buffs"] = [n for n in _active_buff_names(sim_info) if "pregnan" in str(n).lower()]
+    try:
+        stat_type, inst, tracker = _pregnancy_commodity(sim_info)
+        info["commodity"] = getattr(stat_type, "__name__", None)
+        if inst is not None and tracker is not None:
+            info["value"] = tracker.get_value(stat_type)
+            info["max_value"] = getattr(inst, "max_value", None)
+            idx = inst.get_state_index()
+            info["state_index"] = idx
+            info["state_buffs"] = _pregnancy_commodity_state_buff_names(sim_info)
+            states = getattr(inst, "commodity_states", None) or ()
+            info["state_thresholds"] = [
+                (getattr(s, "value", None),
+                 getattr(getattr(getattr(s, "buff", None), "buff_type", None), "__name__", None))
+                for s in states
+            ]
+        else:
+            info["commodity_instance"] = None
+    except Exception as e:
+        info["commodity_error"] = f"{type(e).__name__}: {e}"
+    try:
+        info["pregnancy_progress_attr"] = getattr(sim_info, "pregnancy_progress", None)
+    except Exception:
+        pass
+    try:
+        pt = getattr(sim_info, "pregnancy_tracker", None)
+        partner = pt.get_partner() if pt is not None else None
+        info["partner"] = f"{partner.first_name} {partner.last_name}" if partner is not None else None
+    except Exception:
+        pass
+    info["visibility"] = _get_pregnancy_visibility(sim_info)
+    return info
+
+
 def _capture(sim_info, active_household_id):
     """Snapshot the relevant attributes of a sim."""
     try:
@@ -350,6 +746,13 @@ def _capture(sim_info, active_household_id):
             "career_level": career_level,
             "is_dead": bool(_safe(sim_info, "is_dead", False) or _safe(sim_info, "is_ghost", False)),
             "is_pregnant": bool(_safe(sim_info, "is_pregnant", False)),
+            # Visibility of the pregnancy -- see _get_pregnancy_visibility.
+            # The diff uses THIS, not raw is_pregnant, to decide whether
+            # to fire pregnancy_start / pregnancy_end milestones.
+            "pregnancy_visibility": _get_pregnancy_visibility(sim_info),
+            # Other parent, so a birth / pregnancy can be mirrored onto
+            # THEIR milestones too ("Aksel and Francesca had a baby").
+            "pregnancy_partner_id": _get_pregnancy_partner_id(sim_info),
             "spouse_id": spouse_id,
             "spouse_known": spouse_known,
             # `in_household` (active-household relative) is kept for back-
@@ -420,17 +823,73 @@ def _diff(prev, curr, name):
             "description": f"{name} passed away",
         })
 
-    # Pregnancy
-    if not prev.get("is_pregnant") and curr.get("is_pregnant"):
-        events.append({
+    # Pregnancy -- gated on VISIBILITY, not raw is_pregnant. Sims 4
+    # flips is_pregnant at conception (before test, before anyone
+    # knows). We only fire pregnancy_start when the sim's pregnancy
+    # has been confirmed (test taken) or is visibly showing. That way
+    # non-household contacts won't be told about a pregnancy the sim
+    # herself doesn't know about yet.
+    #
+    # Legacy snapshots without pregnancy_visibility fall back to
+    # is_pregnant-derived buckets ('hidden' if pregnant, 'none' if
+    # not), which yields the same behavior these snapshots produced
+    # before the upgrade -- no spurious re-fires on upgrade.
+    _VIS_ORDER = {"none": 0, "hidden": 0, "confirmed": 1, "visible": 2}
+    def _vis_of(snap):
+        v = snap.get("pregnancy_visibility")
+        if v in _VIS_ORDER:
+            return v
+        return "hidden" if snap.get("is_pregnant") else "none"
+    prev_vis = _vis_of(prev)
+    curr_vis = _vis_of(curr)
+    # A birth was already recorded by the watcher while the tracker still
+    # said pregnant (record_birth_now). Until the flag actually clears,
+    # carry the marker and emit NO pregnancy events for this sim: no
+    # re-fired pregnancy_start while she still reads as pregnant, and no
+    # second pregnancy_end when the flag finally flips.
+    birth_already_recorded = bool(prev.get("birth_recorded"))
+    if birth_already_recorded and curr.get("is_pregnant"):
+        curr["birth_recorded"] = True
+    # Legacy-upgrade guard: a snapshot from before pregnancy_visibility
+    # existed shows is_pregnant=True but the field is missing. The old
+    # code already recorded pregnancy_start at conception for that sim
+    # -- if we now also fire when visibility crosses to confirmed on
+    # the next scan, we get TWO pregnancy_start milestones for one
+    # pregnancy. Skip the new fire when the prev snapshot is legacy.
+    prev_is_legacy_pregnant = (
+        prev.get("is_pregnant") and "pregnancy_visibility" not in prev
+    )
+    partner_id = curr.get("pregnancy_partner_id") or prev.get("pregnancy_partner_id")
+    if (_VIS_ORDER[prev_vis] == 0 and _VIS_ORDER[curr_vis] >= 1
+            and not prev_is_legacy_pregnant and not birth_already_recorded):
+        ev = {
             "type": "pregnancy_start",
             "description": f"{name} is now pregnant",
-        })
-    elif prev.get("is_pregnant") and not curr.get("is_pregnant") and not curr.get("is_dead"):
-        events.append({
+            "visibility": curr_vis,
+        }
+        events.append(ev)
+        if partner_id:
+            m = _mirror_for_partner(ev, partner_id, name)
+            if m:
+                events.append(m)
+    # Pregnancy_end: fires on any is_pregnant True -> False when the sim
+    # isn't dead. Independent of the visibility ladder -- if a baby
+    # actually appeared, record it, even if the pregnancy never went
+    # through 'confirmed' during our observation window (e.g. sim was
+    # already pregnant when the mod was installed, or the scan missed
+    # the confirmed phase). Otherwise legacy-upgrade users would lose
+    # their birth milestones entirely.
+    if (prev.get("is_pregnant") and not curr.get("is_pregnant") and not curr.get("is_dead")
+            and not birth_already_recorded):
+        ev = {
             "type": "pregnancy_end",
             "description": f"{name} had a baby",
-        })
+        }
+        events.append(ev)
+        if partner_id:
+            m = _mirror_for_partner(ev, partner_id, name)
+            if m:
+                events.append(m)
 
     # Spouse -- only diff if BOTH snapshots had reliable spouse reads.
     # Legacy snapshots (from before spouse_known existed) default to False
@@ -535,8 +994,10 @@ def scan_and_record():
             snapshots = _load_snapshots()
             milestones = _load_milestones()
             now_iso = datetime.datetime.now().isoformat()
+            now_sim_ticks = _now_sim_ticks()
 
             new_count = 0
+            born = []
             for sid, sim_info in sims.items():
                 sid_key = str(sid)
                 curr = _capture(sim_info, active_hh_id)
@@ -546,13 +1007,38 @@ def scan_and_record():
                 events = _diff(prev, curr, curr.get("name") or "Someone")
                 for ev in events:
                     ev["timestamp"] = now_iso
-                    ev["sim_id"] = sid_key
-                    ev["sim_name"] = curr.get("name")
+                    # In-game tick when this milestone was captured. Used
+                    # to render sim-time-relative phrases like "yesterday"
+                    # or "last week" instead of meaningless real-world
+                    # dates like "Sep 25". Legacy entries without this
+                    # field fall through to the real-world date.
+                    ev["sim_ticks"] = now_sim_ticks
+                    if "mirror_of" in ev:
+                        # Partner mirror: keep its own sim_id / name, point
+                        # back at the pregnant sim.
+                        ev["mirror_of"] = sid_key
+                    else:
+                        ev["sim_id"] = sid_key
+                        ev["sim_name"] = curr.get("name")
+                        if ev.get("type") == "pregnancy_end":
+                            # Any scan that records a birth (load scan,
+                            # targeted scan, watcher) hands it to the
+                            # announcer; dedup lives there.
+                            born.append((sim_info, curr.get("pregnancy_partner_id")
+                                         or (prev or {}).get("pregnancy_partner_id")))
                     milestones.append(ev)
                     new_count += 1
                 snapshots[sid_key] = curr
 
             _save_snapshots(snapshots)
+            _announce_births(born)
+            # One-time backfill: pregnancy events recorded before partner
+            # mirroring existed get a mirror onto the spouse now, so the
+            # other parent's "recent life" shows the baby too.
+            try:
+                new_count += _backfill_partner_mirrors(milestones, now_sim_ticks)
+            except Exception as e:
+                _log(f"_backfill_partner_mirrors raised: {type(e).__name__}: {e}")
             if new_count > 0:
                 _save_milestones(milestones)
                 _log(f"Recorded {new_count} new milestone(s) across {len(sims)} sim(s).")
@@ -560,6 +1046,107 @@ def scan_and_record():
                 _log(f"Scanned {len(sims)} sim(s), no new milestones since last scan.")
     except Exception as e:
         _log(f"scan_and_record raised: {type(e).__name__}: {e}")
+
+
+def record_birth_now(sim_info, partner_id=None):
+    """Record a birth for a sim whose pregnancy tracker still says
+    pregnant (baby exists, flag not cleared). Writes pregnancy_end plus
+    the partner mirror, and flags the snapshot so the eventual flag flip
+    does not fire a second pregnancy_end -- and so a scan that still sees
+    her as pregnant does not re-fire pregnancy_start."""
+    sid = _safe(sim_info, "sim_id", None)
+    if sid is None:
+        return
+    sid_key = str(sid)
+    name = f"{_safe(sim_info, 'first_name', '')} {_safe(sim_info, 'last_name', '')}".strip()
+    with _lock:
+        snapshots = _load_snapshots()
+        milestones = _load_milestones()
+        now_iso = datetime.datetime.now().isoformat()
+        now_sim_ticks = _now_sim_ticks()
+        ev = {
+            "type": "pregnancy_end",
+            "description": f"{name} had a baby",
+            "timestamp": now_iso,
+            "sim_ticks": now_sim_ticks,
+            "sim_id": sid_key,
+            "sim_name": name,
+            "mirrored": True,
+        }
+        milestones.append(ev)
+        if partner_id:
+            m = _mirror_for_partner(ev, partner_id, name)
+            if m:
+                m.pop("mirrored", None)
+                m["mirror_of"] = sid_key
+                milestones.append(m)
+        snap = dict(snapshots.get(sid_key) or {})
+        snap["birth_recorded"] = True
+        snapshots[sid_key] = snap
+        _save_snapshots(snapshots)
+        _save_milestones(milestones)
+        _log(f"record_birth_now: {name!r} (tracker still pregnant); pregnancy_end written")
+
+
+def _announce_births(born):
+    """Hand newly recorded births to births.announce_birth. Lazy import:
+    births imports milestones."""
+    if not born:
+        return
+    try:
+        import services
+        from . import births
+        sm = services.sim_info_manager()
+        for parent_si, partner_id in born:
+            partner_si = None
+            if partner_id:
+                try:
+                    partner_si = sm.get(int(partner_id))
+                except Exception:
+                    partner_si = None
+            births.announce_birth(parent_si, partner_si)
+    except Exception as e:
+        _log(f"_announce_births raised: {type(e).__name__}: {e}")
+
+
+def _backfill_partner_mirrors(milestones, now_sim_ticks):
+    """For recent pregnancy_start / pregnancy_end events that have no
+    partner mirror yet, add one onto the spouse (best available proxy
+    for the other parent after the fact). Marks the original so this
+    runs once per event. Returns the number of mirrors added."""
+    import services
+    cutoff = (datetime.datetime.now() - datetime.timedelta(days=_PROMPT_RECENCY_DAYS)).isoformat()
+    sm = services.sim_info_manager()
+    added = 0
+    for ev in list(milestones):
+        if ev.get("type") not in ("pregnancy_start", "pregnancy_end"):
+            continue
+        if "mirror_of" in ev or ev.get("mirrored"):
+            continue
+        if (ev.get("timestamp") or "") < cutoff:
+            continue
+        try:
+            si = sm.get(int(ev.get("sim_id")))
+        except Exception:
+            si = None
+        if si is None:
+            continue
+        partner_id = _get_pregnancy_partner_id(si)
+        if not partner_id or partner_id == str(ev.get("sim_id")):
+            ev["mirrored"] = True
+            continue
+        name = ev.get("sim_name") or f"{si.first_name} {si.last_name}".strip()
+        m = _mirror_for_partner(ev, partner_id, name)
+        if not m:
+            ev["mirrored"] = True
+            continue
+        m["mirror_of"] = str(ev.get("sim_id"))
+        m.pop("mirrored", None)
+        milestones.append(m)
+        ev["mirrored"] = True
+        added += 1
+        _log(f"backfilled partner mirror: {m['description']!r}")
+    return added
 
 
 def start_background_scan():
@@ -585,8 +1172,10 @@ def scan_sims(sim_infos):
             snapshots = _load_snapshots()
             milestones = _load_milestones()
             now_iso = datetime.datetime.now().isoformat()
+            now_sim_ticks = _now_sim_ticks()
 
             new_count = 0
+            born = []
             for sim_info in sim_infos:
                 if sim_info is None:
                     continue
@@ -601,13 +1190,31 @@ def scan_sims(sim_infos):
                 events = _diff(prev, curr, curr.get("name") or "Someone")
                 for ev in events:
                     ev["timestamp"] = now_iso
-                    ev["sim_id"] = sid_key
-                    ev["sim_name"] = curr.get("name")
+                    # In-game tick when this milestone was captured. Used
+                    # to render sim-time-relative phrases like "yesterday"
+                    # or "last week" instead of meaningless real-world
+                    # dates like "Sep 25". Legacy entries without this
+                    # field fall through to the real-world date.
+                    ev["sim_ticks"] = now_sim_ticks
+                    if "mirror_of" in ev:
+                        # Partner mirror: keep its own sim_id / name, point
+                        # back at the pregnant sim.
+                        ev["mirror_of"] = sid_key
+                    else:
+                        ev["sim_id"] = sid_key
+                        ev["sim_name"] = curr.get("name")
+                        if ev.get("type") == "pregnancy_end":
+                            # Any scan that records a birth (load scan,
+                            # targeted scan, watcher) hands it to the
+                            # announcer; dedup lives there.
+                            born.append((sim_info, curr.get("pregnancy_partner_id")
+                                         or (prev or {}).get("pregnancy_partner_id")))
                     milestones.append(ev)
                     new_count += 1
                 snapshots[sid_key] = curr
 
             _save_snapshots(snapshots)
+            _announce_births(born)
             if new_count > 0:
                 _save_milestones(milestones)
                 _log(f"Targeted scan: {new_count} new milestone(s) across {len(sim_infos)} sim(s).")
@@ -630,6 +1237,16 @@ def get_recent_for_sim(sim_id, days=_PROMPT_RECENCY_DAYS, limit=_PROMPT_MILESTON
     cutoff = datetime.datetime.now() - datetime.timedelta(days=days)
     entries = _load_milestones()
     skip_ts = _referenced_timestamps(exclude_for_contact, sim_id)
+    # Milestone types that should ALWAYS surface fresh every prompt,
+    # ignoring the per-contact "already seen" list. These carry the
+    # "you may not know" soft tag and need to reappear every
+    # conversation while the underlying life event is still current
+    # (pregnancy in progress, baby just born) -- close family should
+    # keep referencing them, distant contacts should keep hedging.
+    # Prior versions marked these seen after one prompt and then
+    # dropped them forever, which is why pregnancy silently vanished
+    # from a contact's prompt after their first post-test conversation.
+    _NEVER_SKIP_TYPES = {"pregnancy_start", "pregnancy_end"}
     filtered = []
     for e in entries:
         if e.get("sim_id") != sid_key:
@@ -641,19 +1258,71 @@ def get_recent_for_sim(sim_id, days=_PROMPT_RECENCY_DAYS, limit=_PROMPT_MILESTON
                 continue
         except Exception:
             continue
-        if ts_str in skip_ts:
-            continue
+        # Already surfaced to this contact: KEEP it, flagged, rather than
+        # dropping it. Dropping meant the fact vanished from the prompt
+        # after one conversation while the contact's own earlier text
+        # ("congrats on the wedding!") stayed in the history -- so the
+        # model re-congratulated from its own echo with nothing to
+        # correct it. Flagged, the line becomes "you already know this,
+        # don't bring it up as news," which is what the seen-tracker was
+        # for in the first place.
+        if ts_str in skip_ts and e.get("type") not in _NEVER_SKIP_TYPES:
+            e = dict(e)
+            e["_seen"] = True
         filtered.append(e)
     return list(reversed(filtered))[:limit]
 
 
-def format_for_prompt(sim_info, contact_id=None, mark_seen=True):
+def days_since_milestone(sim_id, mtype):
+    """In-game days since the newest milestone of `mtype` for this sim,
+    or None if there is none / it has no in-game timestamp (legacy)."""
+    try:
+        now_ticks = _now_sim_ticks()
+        if now_ticks is None:
+            return None
+        for e in get_recent_for_sim(sim_id):
+            if e.get("type") == mtype:
+                st = e.get("sim_ticks")
+                if st is None:
+                    return None
+                return max(0.0, (now_ticks - st) / _TICKS_PER_DAY)
+    except Exception:
+        pass
+    return None
+
+
+def _has_heard(e, now_ticks, knowledge):
+    """News-spread model: a contact 'hears' a private life event once
+    enough in-game time has passed for their closeness tier. `knowledge`
+    is {"heard_after_days": float|None(never), "cold": bool}. Legacy
+    entries with no in-game timestamp count as old news for anyone with
+    a tier at all."""
+    if not knowledge:
+        return False
+    days = knowledge.get("heard_after_days")
+    if days is None:
+        return False
+    st = e.get("sim_ticks")
+    if st is None or now_ticks is None:
+        return True
+    return (now_ticks - st) / _TICKS_PER_DAY >= days
+
+
+def format_for_prompt(sim_info, contact_id=None, mark_seen=True, known_by_default=False,
+                      knowledge=None):
     """Build the 'Recent in their life' block for a sim, or empty string if none.
 
     When `contact_id` is provided, milestones that contact has already
     been told about are skipped. If `mark_seen` is True, the milestones
     that DO get surfaced are recorded against this contact so they won't
     appear again in future prompts.
+
+    When `known_by_default` is True, the "you may not know this" tag on
+    pregnancy_start / pregnancy_end milestones is suppressed. Used when
+    surfacing a sim's household milestones to a caller who IS that
+    household -- Luca living with Martha absolutely knows Martha is
+    pregnant; the hedge tag would be nonsense. Hidden pregnancies still
+    don't surface even to household (the sim herself doesn't know yet).
     """
     try:
         sid = _safe(sim_info, "sim_id", None)
@@ -670,20 +1339,200 @@ def format_for_prompt(sim_info, contact_id=None, mark_seen=True):
         # prompts. New real moves are stored as "moved_household".
         _SUPPRESS_TYPES = {"moved_in", "moved_out"}
         events = [e for e in events if e.get("type") not in _SUPPRESS_TYPES]
+        # Suppress pregnancy_start milestones when the sim's own current
+        # state says the pregnancy isn't even visible to HERSELF (pre-test).
+        # Catches legacy entries created before the visibility ladder
+        # existed AND defensively re-suppresses if the tracker somehow
+        # reverts. Post-baby (curr_vis='none' with a pregnancy_end event
+        # elsewhere in the list) we leave pregnancy_start alone so the
+        # AI can still reference the recent pregnancy in context.
+        try:
+            curr_vis = _get_pregnancy_visibility(sim_info)
+        except Exception:
+            curr_vis = "none"
+        # Mirrored events (the other parent's copy) read visibility and
+        # circumstances from the PREGNANT sim, not from this one.
+        _mirror_cache = {}
+
+        def _event_source(e):
+            mid = e.get("mirror_of")
+            if not mid:
+                return sim_info, curr_vis
+            if mid not in _mirror_cache:
+                try:
+                    import services
+                    src = services.sim_info_manager().get(int(mid))
+                    _mirror_cache[mid] = (src, _get_pregnancy_visibility(src) if src else "none")
+                except Exception:
+                    _mirror_cache[mid] = (None, "none")
+            return _mirror_cache[mid]
+
+        def _keep_start(e):
+            if e.get("type") != "pregnancy_start":
+                return True
+            return _event_source(e)[1] != "hidden"
+        events = [e for e in events if _keep_start(e)]
+        # Dedup consecutive pregnancy_start entries -- happens for saves
+        # that had a pregnancy in progress when the mod was upgraded to
+        # the visibility-aware code (old code fired at conception, new
+        # code fired again at confirmed transition). Keep the NEWEST
+        # pregnancy_start per pregnancy; a pregnancy_end resets the
+        # window so a subsequent pregnancy's start survives. `events`
+        # is newest-first from get_recent_for_sim.
+        seen_start_since_end = False
+        deduped = []
+        for e in events:
+            t = e.get("type")
+            if t == "pregnancy_end":
+                seen_start_since_end = False
+                deduped.append(e)
+            elif t == "pregnancy_start":
+                if seen_start_since_end:
+                    continue  # older duplicate for the same pregnancy
+                seen_start_since_end = True
+                deduped.append(e)
+            else:
+                deduped.append(e)
+        events = deduped
         if not events:
             return ""
+        now_ticks = _now_sim_ticks()
+        # Once a BIRTH is known to this contact (heard, or they live with
+        # her), the earlier "is expecting" line is stale -- drop it so the
+        # prompt doesn't say "expecting" and "had the baby" side by side.
+        # If the birth is NOT yet heard, keep "expecting": that is exactly
+        # what this contact still believes.
+        _birth_known = any(
+            e.get("type") == "pregnancy_end" and (known_by_default or _has_heard(e, now_ticks, knowledge))
+            for e in events
+        )
+        if _birth_known:
+            events = [e for e in events if e.get("type") != "pregnancy_start"]
         lines = ["Recent in their life:"]
         surfaced = []
+        # Pregnancy + birth milestones get a soft "you may not know unless
+        # close family" tag rather than a hard drop, so the AI hedges
+        # instead of leading with private news -- but close family can
+        # still reference it, and any sim can play along if the recipient
+        # brings it up. Cheaper and more forgiving than a code-level
+        # relationship gate: the AI already knows its own family role
+        # from context, so we let it decide.
+        _PRIVATE_TYPES = {"pregnancy_start", "pregnancy_end"}
         for e in events:
             desc = e.get("description", "").strip()
             if not desc:
                 continue
-            try:
-                date = datetime.datetime.fromisoformat(e["timestamp"]).strftime("%b %d")
-            except Exception:
-                date = "recently"
-            lines.append(f"  - [{date}] {desc}")
-            surfaced.append(e)
+            # In-game time first; fall back to a generic "recently" when
+            # the ticks are missing (legacy entries pre-dating the field).
+            # Real-world dates like "Sep 25" are meaningless in-game --
+            # Sims 4 has seasons, not months.
+            when = _relative_sim_time(e.get("sim_ticks"), now_ticks) or "recently"
+            if e.get("_seen"):
+                desc = (
+                    f"{desc} [ALREADY KNOWN to you -- you have discussed this "
+                    f"before; it is old news. Do NOT congratulate or react as if "
+                    f"hearing it for the first time.]"
+                )
+            # For an in-progress pregnancy, annotate the line with
+            # whether she's visibly showing right now -- the AI needs
+            # this to judge the "seen in person recently + bump obvious"
+            # signal. Fetched live rather than from the milestone's
+            # stored visibility so it stays accurate as she progresses
+            # through trimesters.
+            annotation = ""
+            ev_sim, ev_vis = _event_source(e)
+            if e.get("type") == "pregnancy_start" and ev_vis in ("confirmed", "visible"):
+                annotation = (
+                    " (currently visibly showing)" if ev_vis == "visible"
+                    else " (not yet visibly showing)"
+                )
+            # Private events: has word reached this contact yet? Visible
+            # pregnancies are public (the bump). Otherwise the contact's
+            # closeness tier sets how many in-game days until they've
+            # heard through family / friends. Not heard + COLD prompt
+            # (the sender is inventing a topic) -> the line is withheld
+            # entirely, because instructions alone did not stop cold
+            # messages from leading with it. Not heard + reply -> shown
+            # with the strict tag so the player can bring it up.
+            is_private = e.get("type") in _PRIVATE_TYPES and not known_by_default
+            heard = False
+            if is_private:
+                if e.get("type") == "pregnancy_start" and ev_vis == "visible":
+                    heard = True
+                else:
+                    heard = _has_heard(e, now_ticks, knowledge)
+                if not heard and knowledge and knowledge.get("cold"):
+                    continue
+            lines.append(f"  - [{when}] {desc}{annotation}")
+            if is_private and heard:
+                # Fresh + huge = the reason you're calling. The older
+                # wording ("if it comes up, react") read as "don't raise
+                # it", and a mother phoned her daughter hours after the
+                # birth to ask for pasta advice.
+                try:
+                    _days_ago = (now_ticks - e["sim_ticks"]) / _TICKS_PER_DAY if e.get("sim_ticks") and now_ticks else 99
+                except Exception:
+                    _days_ago = 99
+                if _days_ago <= 2.0:
+                    lines.append(
+                        "      [You KNOW about this -- either they told you directly "
+                        "(check the past-interaction history) or word reached you "
+                        "through family / friends. It is the biggest thing in their "
+                        "life right now. LEAD WITH IT: this is your reason for reaching "
+                        "out -- check in on them and the baby, ask how they're "
+                        "holding up, offer help. Do NOT announce it as news (they "
+                        "obviously know) and do NOT act surprised -- but do not "
+                        "talk about anything else first.]"
+                    )
+                else:
+                    lines.append(
+                        "      [You KNOW about this -- either they told you directly "
+                        "(check the past-interaction history) or word reached you "
+                        "through family / friends. Do not act surprised, do not "
+                        "announce it to them as if they didn't know; if it comes up, "
+                        "react per the Circumstances and the recency.]"
+                    )
+            # Circumstances that decide whether this is joy, a shock, or
+            # a crisis -- rendered for anyone who gets to see the line.
+            if e.get("type") == "pregnancy_start" and ev_vis in ("confirmed", "visible"):
+                try:
+                    facts = pregnancy_circumstances(ev_sim) if ev_sim is not None else []
+                except Exception:
+                    facts = []
+                if facts:
+                    lines.append("      Circumstances: " + "; ".join(facts) + ".")
+            if is_private and not heard:
+                lines.append(
+                    "      [ASSUME YOU DO NOT KNOW THIS. You may know "
+                    "ONLY if EITHER: (a) the past-interactions history in "
+                    "this prompt already shows the two of you discussing "
+                    "it, OR (b) that history shows you've been together in "
+                    "person recently AND -- for pregnancy -- the line "
+                    "above says she is visibly showing (bump would be "
+                    "obvious to anyone who saw her). If either applies, "
+                    "reference it naturally and follow up. Otherwise, "
+                    "regardless of your family relationship: do NOT lead "
+                    "with congrats, do NOT ask about it, do NOT bring it "
+                    "up. Play along naturally if the recipient mentions "
+                    "it first. Player controls who knows via which "
+                    "conversations happen in-mod. IF you do know: react to the "
+                    "Circumstances line, not with reflexive congratulations -- "
+                    "a baby outside a marriage, a teen, or money trouble calls "
+                    "for concern, tact, or awkwardness in character.]"
+                )
+            # Pregnancy / birth get the soft "you may not know" tag and are
+            # meant to STAY in the prompt across every conversation while
+            # the sim is pregnant / just gave birth -- close family should
+            # keep referencing it warmly across multiple calls, and
+            # distant contacts should keep hedging. Marking them 'seen'
+            # after one prompt (like promotions / marriages) would drop
+            # them for that contact forever, which is why the pregnancy
+            # milestone silently vanished from Luca's prompt after his
+            # first conversation with Francesca post-test. Skip them
+            # from the seen-tracker; other milestones still get marked
+            # to avoid "hey how's the new job??" every call.
+            if e.get("type") not in _PRIVATE_TYPES:
+                surfaced.append(e)
         if len(lines) == 1:
             return ""
         if mark_seen and contact_id is not None and surfaced:

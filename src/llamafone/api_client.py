@@ -125,7 +125,15 @@ def _curl(url, headers, body_json, timeout=60, method="POST"):
 
     Callers that want to diagnose specific curl failures (like exit
     code 7 = 'connection refused' -> Ollama not running) can inspect
-    the returncode to produce provider-specific error messages."""
+    the returncode to produce provider-specific error messages.
+
+    The request body is streamed via stdin (`--data-binary @-`) rather
+    than passed as `-d '<json>'`. Windows' CreateProcess caps the total
+    command line at ~32KB, so a phone prompt with full relationship
+    history + save notes + sim bios can blow past the limit and fail
+    -- sometimes as FileNotFoundError, presenting as a bogus "curl not
+    found" even though curl is fine and small prompts (events, bios)
+    succeed on the exact same PATH. Stdin has no size limit."""
     startupinfo = None
     if sys.platform == "win32":
         startupinfo = subprocess.STARTUPINFO()
@@ -137,12 +145,13 @@ def _curl(url, headers, body_json, timeout=60, method="POST"):
     for k, v in headers.items():
         args += ["-H", f"{k}: {v}"]
     if body_json is not None:
-        args += ["-d", body_json]
+        args += ["--data-binary", "@-"]
     args += [url]
     try:
         result = subprocess.run(
             args, capture_output=True, text=True, timeout=timeout,
             startupinfo=startupinfo,
+            input=body_json if body_json is not None else None,
         )
     except subprocess.TimeoutExpired:
         return "", f"Request timed out after {timeout}s.", None

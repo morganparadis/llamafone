@@ -1602,8 +1602,14 @@ def _pick_random_relationship_sim(recipient=None):
 
     initial_count = len(contacts)
 
-    # Hard filters: pets, and ghosts when disabled in config.
+    # Hard filters: pets, sims too young to use a phone, and ghosts when
+    # disabled in config. The age check was missing -- a newborn (Marlon,
+    # seconds old) was picked for an auto-event call and "phoned" his
+    # father. Babies, infants, and toddlers can't call or text; children
+    # and up can.
     contacts = [c for c in contacts if _is_human_sim(c.get("sim_info"))]
+    contacts = [c for c in contacts
+                if (_age_rank(c.get("sim_info")) or 0) >= _AGE_RANK["CHILD"]]
     allow_ghosts = config.get_phone_allow_ghosts()
     if not allow_ghosts:
         contacts = [c for c in contacts if not _is_ghost(c.get("sim_info"))]
@@ -2000,6 +2006,7 @@ def _describe_recipient(recipient_sim, contact=None, cold=False):
             recipient_sim, contact_id=contact_sim_id,
             known_by_default=contact_lives_with_recipient,
             knowledge=_knowledge,
+            addressee_id=getattr(recipient_sim, "sim_id", None),
         )
         if mblock:
             # Cross-reference with events the caller ATTENDED: a marriage
@@ -3538,7 +3545,12 @@ def _describe_relationship(contact, recipient=None):
     if si:
         try:
             from . import milestones as _milestones
-            mblock = _milestones.format_for_prompt(si)
+            # The sender's OWN life: they know all of it, so no news-spread
+            # gate ("assume you do not know" about her own baby).
+            mblock = _milestones.format_for_prompt(
+                si, contact_id=None, mark_seen=False, known_by_default=True,
+                addressee_id=getattr(recipient, "sim_id", None) if recipient else None,
+            )
             if mblock:
                 parts.append(mblock)
         except Exception:

@@ -116,20 +116,25 @@ try:
         from . import save_id as _sid
         out = sims4.commands.CheatOutput(_connection)
         sid_str = _sid.get_current_save_id() or "(none)"
+        path_used = getattr(_sid, "_last_resolution_path", "?")
         slot_int = _sid._get_current_slot_id_int()
-        slot_dec = str(slot_int) if slot_int else "(none)"
+        slot_live = str(slot_int) if slot_int else "0 / sentinel (in-game load or Autosave)"
         save_name = _sid._get_current_slot_name() or "(unknown)"
-        folder = _sid.data_dir() or "(none)"
+        folder = _sid.data_dir() or "(none -- mod is DORMANT for this save)"
         out(f"[Llamafone] Current save")
-        out(f"  slot_id (hex): {sid_str}")
-        out(f"  slot_id (dec): {slot_dec}")
+        out(f"  resolved id:   {sid_str}")
+        out(f"  resolved via:  {path_used}")
+        out(f"  live slot_id:  {slot_live}")
         out(f"  save name:     {save_name!r}")
-        try:
-            _svc = services.get_persistence_service()
-            out(f"  proto guid:    {_svc.get_save_slot_proto_guid()!r}")
-        except Exception as e:
-            out(f"  proto guid:    (unavailable: {type(e).__name__})")
+        out(f"  household:     {_sid._current_household_key()} (diagnostic only)")
         out(f"  data folder:   {folder}")
+        out(f"  save hook:     {'installed' if getattr(_sid, '_save_hook_installed', False) else 'NOT installed'}")
+        reason = _sid.dormant_reason()
+        if reason == "autosave":
+            out("[Llamafone] " + _sid.AUTOSAVE_NOTICE)
+        elif reason == "unidentified":
+            out("[Llamafone] " + _sid.UNIDENTIFIED_NOTICE)
+        out(f"  save's slot record (preferred_manual_slot_id): {_sid._get_preferred_slot_id_int()}")
         out("")
         out(f"[Llamafone] All Llamafone save-data folders:")
         base_root = _os.path.join(_sid._saves_folder(), "Llamafone")
@@ -780,6 +785,9 @@ try:
         recipient = sim_context.get_main_sim_info()
         if recipient is None:
             output("[Llamafone] No active sim to receive the message.")
+            return
+        if (phone._age_rank(contact.get("sim_info")) or 0) < phone._AGE_RANK["CHILD"]:
+            output(f"[Llamafone] {contact['name']} is too young to use a phone.")
             return
         output(f"[Llamafone] Incoming {kind} from {contact['name']}...")
         if kind == "text":

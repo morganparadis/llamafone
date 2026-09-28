@@ -595,12 +595,18 @@ _REACTION_TRAITS = (
 )
 
 
-def pregnancy_circumstances(sim_info):
+def pregnancy_circumstances(sim_info, partner_id=None, addressee_id=None):
     """Facts that shape how a sim (and the people around them) would
     FEEL about this pregnancy -- so the AI can react in character
     instead of defaulting to 'thrilled'. Returns a list of short
     strings; empty when nothing useful could be read. Every read is
-    best-effort; a failure just drops that fact."""
+    best-effort; a failure just drops that fact.
+
+    `partner_id`: the other parent when the live tracker can't say (it
+    is cleared at birth). `addressee_id`: the sim the message is going
+    to -- when that IS the other parent, say so outright instead of
+    leaving the AI to connect "the other parent is Ben" with "you are
+    texting Ben"."""
     facts = []
     if sim_info is None:
         return facts
@@ -625,25 +631,40 @@ def pregnancy_circumstances(sim_info):
         partner = pt.get_partner() if pt is not None else None
     except Exception:
         partner = None
+    if partner is None and partner_id and sm is not None:
+        try:
+            partner = sm.get(int(partner_id))
+        except Exception:
+            partner = None
     spouse = None
     try:
         sid = getattr(sim_info, "spouse_sim_id", None)
         spouse = sm.get(sid) if (sm is not None and sid) else None
     except Exception:
         spouse = None
+    def _pname(si):
+        # Say it outright when the other parent is who the message is to.
+        n = _name(si)
+        try:
+            if addressee_id is not None and str(getattr(si, "sim_id", "")) == str(addressee_id):
+                return f"{n} (the person this message is to)"
+        except Exception:
+            pass
+        return n
+
     try:
         if partner is not None and spouse is not None:
             if getattr(partner, "sim_id", None) == getattr(spouse, "sim_id", None):
-                facts.append(f"the other parent is {first}'s spouse, {_name(spouse)}")
+                facts.append(f"the other parent is {first}'s spouse, {_pname(spouse)}")
             else:
                 facts.append(
-                    f"the other parent is {_name(partner)} -- NOT {first}'s spouse "
-                    f"{_name(spouse)} (this pregnancy is from outside the marriage)"
+                    f"the other parent is {_pname(partner)} -- NOT {first}'s spouse "
+                    f"{_pname(spouse)} (this pregnancy is from outside the marriage)"
                 )
         elif partner is not None:
-            facts.append(f"{first} is not married; the other parent is {_name(partner)}")
+            facts.append(f"{first} is not married; the other parent is {_pname(partner)}")
         elif spouse is not None:
-            facts.append(f"{first} is married to {_name(spouse)}")
+            facts.append(f"{first} is married to {_pname(spouse)}")
         else:
             facts.append(f"{first} is not married and no other parent is recorded")
     except Exception:
@@ -679,8 +700,19 @@ def pregnancy_circumstances(sim_info):
     try:
         hh = getattr(sim_info, "household", None)
         if hh is not None:
+            # The newborn itself is not an "existing kid" -- counting it
+            # told the AI a first-time mother already had a child.
+            newborn_ids = set()
+            try:
+                from . import births as _births
+                newborn_ids = {getattr(b, "sim_id", None) for b in
+                               _births._newborns(sim_info, max_age_days=3, require_parent=True)}
+            except Exception:
+                newborn_ids = set()
             kids = 0
             for si in hh.sim_info_gen():
+                if getattr(si, "sim_id", None) in newborn_ids:
+                    continue
                 a = str(getattr(si, "age", "")).replace("Age.", "")
                 if a in ("BABY", "INFANT", "TODDLER", "CHILD", "TEEN"):
                     kids += 1
@@ -991,6 +1023,13 @@ def scan_and_record():
         # second background scan or a phone-context scan_sims can't race
         # us and overwrite our snapshot updates.
         with _lock:
+            # Pin the save at scan start. Every load/save below resolves
+            # the folder live, so if the player switched saves mid-scan
+            # (in-game Load), a scan begun in save A would write A's sims
+            # into save B's folder. Checked again before writing.
+            pinned = _save_id.get_current_save_id()
+            if pinned is None:
+                return
             snapshots = _load_snapshots()
             milestones = _load_milestones()
             now_iso = datetime.datetime.now().isoformat()
@@ -1030,6 +1069,10 @@ def scan_and_record():
                     new_count += 1
                 snapshots[sid_key] = curr
 
+            if _save_id.get_current_save_id() != pinned:
+                _log(f"scan_and_record: save changed mid-scan ({pinned!r} -> "
+                     f"{_save_id.get_current_save_id()!r}); discarding results, nothing written")
+                return
             _save_snapshots(snapshots)
             _announce_births(born)
             # One-time backfill: pregnancy events recorded before partner
@@ -1140,6 +1183,11 @@ def _backfill_partner_mirrors(milestones, now_sim_ticks):
         if not m:
             ev["mirrored"] = True
             continue
+        if any(x.get("mirror_of") == str(ev.get("sim_id")) and x.get("type") == ev.get("type")
+               and x.get("sim_id") == m["sim_id"] and x.get("sim_ticks") == ev.get("sim_ticks")
+               for x in milestones):
+            ev["mirrored"] = True  # a mirror already exists (e.g. from the scan)
+            continue
         m["mirror_of"] = str(ev.get("sim_id"))
         m.pop("mirrored", None)
         milestones.append(m)
@@ -1167,8 +1215,11 @@ def scan_sims(sim_infos):
         active_hh_id = _safe(hh, "id", None) if hh else None
 
         # Same locking pattern as scan_and_record: hold across the whole
-        # load -> diff -> save cycle.
+        # load -> diff -> save cycle. Same save pin, too.
         with _lock:
+            pinned = _save_id.get_current_save_id()
+            if pinned is None:
+                return
             snapshots = _load_snapshots()
             milestones = _load_milestones()
             now_iso = datetime.datetime.now().isoformat()
@@ -1213,6 +1264,10 @@ def scan_sims(sim_infos):
                     new_count += 1
                 snapshots[sid_key] = curr
 
+            if _save_id.get_current_save_id() != pinned:
+                _log(f"scan_sims: save changed mid-scan ({pinned!r} -> "
+                     f"{_save_id.get_current_save_id()!r}); discarding results, nothing written")
+                return
             _save_snapshots(snapshots)
             _announce_births(born)
             if new_count > 0:
@@ -1309,7 +1364,7 @@ def _has_heard(e, now_ticks, knowledge):
 
 
 def format_for_prompt(sim_info, contact_id=None, mark_seen=True, known_by_default=False,
-                      knowledge=None):
+                      knowledge=None, addressee_id=None):
     """Build the 'Recent in their life' block for a sim, or empty string if none.
 
     When `contact_id` is provided, milestones that contact has already
@@ -1323,6 +1378,14 @@ def format_for_prompt(sim_info, contact_id=None, mark_seen=True, known_by_defaul
     household -- Luca living with Martha absolutely knows Martha is
     pregnant; the hedge tag would be nonsense. Hidden pregnancies still
     don't surface even to household (the sim herself doesn't know yet).
+
+    An event is always known to its own participants: when `contact_id`
+    is the sim the event is about, or the pregnant sim a mirror points
+    at, the news-spread gate does not apply (Ingrid was told to "assume
+    you do not know" that Ben -- the father -- had a baby with her).
+
+    `addressee_id`: who the message is going to, so the Circumstances
+    line can say outright when they are the other parent.
     """
     try:
         sid = _safe(sim_info, "sim_id", None)
@@ -1397,15 +1460,44 @@ def format_for_prompt(sim_info, contact_id=None, mark_seen=True, known_by_defaul
         if not events:
             return ""
         now_ticks = _now_sim_ticks()
+        _viewer = str(contact_id) if contact_id is not None else None
+
+        def _participant(e):
+            return _viewer is not None and _viewer in (str(e.get("sim_id")), str(e.get("mirror_of")))
+
+        def _known_outright(e):
+            return known_by_default or _participant(e)
+
         # Once a BIRTH is known to this contact (heard, or they live with
         # her), the earlier "is expecting" line is stale -- drop it so the
         # prompt doesn't say "expecting" and "had the baby" side by side.
         # If the birth is NOT yet heard, keep "expecting": that is exactly
         # what this contact still believes.
         _birth_known = any(
-            e.get("type") == "pregnancy_end" and (known_by_default or _has_heard(e, now_ticks, knowledge))
+            e.get("type") == "pregnancy_end" and (_known_outright(e) or _has_heard(e, now_ticks, knowledge))
             for e in events
         )
+        _all_for_partner = None
+
+        def _other_parent_id(e):
+            """The other parent for a pregnancy event: a mirror's own sim is
+            the other parent of the pregnant sim it points at; for the
+            pregnant sim's own event, find its mirror."""
+            nonlocal _all_for_partner
+            if e.get("mirror_of"):
+                return e.get("sim_id")
+            if e.get("partner_id"):
+                return e.get("partner_id")
+            if _all_for_partner is None:
+                try:
+                    _all_for_partner = _load_milestones()
+                except Exception:
+                    _all_for_partner = []
+            for m in _all_for_partner:
+                if (m.get("mirror_of") == str(e.get("sim_id")) and m.get("type") == e.get("type")
+                        and m.get("sim_ticks") == e.get("sim_ticks")):
+                    return m.get("sim_id")
+            return None
         if _birth_known:
             events = [e for e in events if e.get("type") != "pregnancy_start"]
         lines = ["Recent in their life:"]
@@ -1454,7 +1546,7 @@ def format_for_prompt(sim_info, contact_id=None, mark_seen=True, known_by_defaul
             # entirely, because instructions alone did not stop cold
             # messages from leading with it. Not heard + reply -> shown
             # with the strict tag so the player can bring it up.
-            is_private = e.get("type") in _PRIVATE_TYPES and not known_by_default
+            is_private = e.get("type") in _PRIVATE_TYPES and not _known_outright(e)
             heard = False
             if is_private:
                 if e.get("type") == "pregnancy_start" and ev_vis == "visible":
@@ -1494,9 +1586,20 @@ def format_for_prompt(sim_info, contact_id=None, mark_seen=True, known_by_defaul
                     )
             # Circumstances that decide whether this is joy, a shock, or
             # a crisis -- rendered for anyone who gets to see the line.
-            if e.get("type") == "pregnancy_start" and ev_vis in ("confirmed", "visible"):
+            # For a birth the tracker is cleared, so the other parent comes
+            # from the mirror; only recent births (the tone still matters).
+            _recent_birth = False
+            if e.get("type") == "pregnancy_end":
                 try:
-                    facts = pregnancy_circumstances(ev_sim) if ev_sim is not None else []
+                    _recent_birth = (e.get("sim_ticks") is not None and now_ticks is not None
+                                     and (now_ticks - e["sim_ticks"]) / _TICKS_PER_DAY <= 3.0)
+                except Exception:
+                    _recent_birth = False
+            if (e.get("type") == "pregnancy_start" and ev_vis in ("confirmed", "visible")) or _recent_birth:
+                try:
+                    facts = (pregnancy_circumstances(ev_sim, partner_id=_other_parent_id(e),
+                                                     addressee_id=addressee_id)
+                             if ev_sim is not None else [])
                 except Exception:
                     facts = []
                 if facts:

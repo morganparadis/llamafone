@@ -292,6 +292,16 @@ def announce_birth(parent_si, partner_si, dedup_key=None):
             return
         _announced.add(key)
         _announced.add(pkey)
+        # Config knob (llamafone.cfg: birth_announcements). Checked here
+        # rather than at hook install so `llama.reload` toggles it live.
+        # The birth itself is still recorded as a milestone either way.
+        try:
+            from . import config
+            if not config.get_birth_announcements_enabled():
+                _log(f"birth of {_name(parent_si)}'s baby recorded; announcements disabled in config -- no text")
+                return
+        except Exception:
+            pass
         pick = _best_announcement(parent_si, partner_si)
         if pick is None:
             _log(f"birth: {_name(parent_si)} -- no family / close-friend tie to the active household; no announcement")

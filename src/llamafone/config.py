@@ -151,6 +151,14 @@ auto_event_weights = call:50, text:50
 ; auto-events will be dating. Also toggleable in-game as
 ; Off / Rarely / Sometimes / Often under Llamafone Settings > Dating.
 dating_cold_outreach_weight = 20
+
+
+; ── Birth announcements (v3.7) ───────────────────────────────────────────
+; When a sim who is family or a close friend of someone in your household
+; has a baby, the new parent (or their partner) texts your sim about it
+; shortly after the birth. Set to false to turn these off -- births are
+; still recorded and will come up naturally in later conversations.
+birth_announcements = true
 """
 
 
@@ -492,6 +500,15 @@ def get_dating_cold_outreach_weight():
     text:50 weights."""
     val = _int_setting_with_config_fallback("dating_cold_outreach_weight", "dating_cold_outreach_weight", 20)
     return max(0, val)
+
+
+def get_birth_announcements_enabled():
+    """Whether a family member / close friend texts your sim after their
+    household has a baby (births.py). Default on. Off still records the
+    birth milestone; it just won't trigger a message on its own."""
+    return _bool_setting_with_config_fallback(
+        "birth_announcements", "birth_announcements", True,
+    )
 
 
 def get_message_relationship_impact_enabled():

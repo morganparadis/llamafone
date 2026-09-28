@@ -49,7 +49,13 @@ _LAST_LOGGED_SLOT_ID_MISS = [None]  # single-slot cache to rate-limit noise
 
 def _slot_id_is_sentinel(slot_id):
     """A slot_id we can't use as a real save folder identifier."""
-    return slot_id is None or slot_id <= 0 or slot_id >= 0xffffffff
+    if slot_id is None or slot_id <= 0 or slot_id >= 0xffffffff:
+        return True
+    try:
+        auto = _auto_save_slot_id()  # the Autosave slot is never a real save
+        return auto is not None and slot_id == auto
+    except Exception:
+        return False
 
 
 def _get_current_slot_id_int():
@@ -162,6 +168,42 @@ def _get_current_slot_id_int():
     return None
 
 
+_preferred_logged = [None]
+
+
+def _get_preferred_slot_id_int():
+    """The real slot this game belongs to, as recorded by the game inside
+    the save (SaveSlotData.preferred_manual_slot_id), or None if unset or
+    a sentinel."""
+    try:
+        import services
+        svc = services.get_persistence_service()
+        if svc is None:
+            return None
+        slot = svc.get_save_slot_proto_buff()
+        if slot is None:
+            return None
+        try:
+            if not slot.HasField("preferred_manual_slot_id"):
+                raw = None
+            else:
+                raw = slot.preferred_manual_slot_id
+        except Exception:
+            raw = getattr(slot, "preferred_manual_slot_id", None)
+        pid = int(raw) if raw is not None else None
+    except Exception as e:
+        if _preferred_logged[0] != "err":
+            _preferred_logged[0] = "err"
+            _log(f"preferred_manual_slot_id unreadable: {type(e).__name__}: {e}")
+        return None
+    if pid is None or _slot_id_is_sentinel(pid):
+        if _preferred_logged[0] != ("none", pid):
+            _preferred_logged[0] = ("none", pid)
+            _log(f"save has no usable slot record (preferred_manual_slot_id={pid!r})")
+        return None
+    return pid
+
+
 _resolution_failure_logged = [False]
 
 
@@ -193,6 +235,8 @@ def _log_resolution_failure_once():
                 slot = svc.get_save_slot_proto_buff()
                 info["proto.slot_id"] = getattr(slot, "slot_id", None)
                 info["proto.slot_name"] = getattr(slot, "slot_name", None)
+                info["proto.preferred_manual_slot_id"] = getattr(slot, "preferred_manual_slot_id", "<missing>")
+                info["proto.preferred_manual_slot_name"] = getattr(slot, "preferred_manual_slot_name", "<missing>")
             except Exception as e:
                 info["proto"] = f"{type(e).__name__}: {e}"
             try:
@@ -204,9 +248,15 @@ def _log_resolution_failure_once():
         if zone is not None:
             for attr in ("save_slot_data_id", "_save_slot_data_id", "id"):
                 info[f"zone.{attr}"] = getattr(zone, attr, "<missing>")
+        try:
+            hh = services.active_household()
+            info["active_household_id"] = getattr(hh, "id", None) if hh is not None else None
+        except Exception:
+            pass
     except Exception as e:
         info["error"] = f"{type(e).__name__}: {e}"
-    _log(f"save id UNRESOLVED -- all paths failed. Values seen: {info}")
+    _log(f"live slot id unavailable (normal for Autosave / in-game loads; the save's "
+         f"own slot record is checked next). Values seen: {info}")
 
 
 def get_current_save_id():
@@ -229,21 +279,66 @@ def get_current_save_id():
     The fallback only applies WHILE a zone is loaded, so a player at
     the main menu doesn't accidentally get their prior save's cached
     id used for phantom writes."""
+    global _last_real_save_id, _last_real_slot_name, _last_resolution_path
     slot_id = _get_current_slot_id_int()
     if slot_id is not None:
-        return f"Slot_{slot_id:08x}"
-    # Autosave: the game's Autosave entry has no real slot id (every
-    # accessor returns the sentinel), but it IS a particular game. Map
-    # it to the slot it came from via identities that don't change
-    # across autosave / real-slot loads: the persistence guid and the
-    # played household's id. Both recorded whenever a real slot loads.
-    mapped = _mapped_save_id_for_current_game()
-    if mapped:
-        return mapped
-    # Fallback: last-known-good id from the save-load hook. Guarded
-    # by an active-zone check so writes are only allowed when we're
-    # genuinely still in the same session as the cached id.
-    if _last_handled_save_id is None:
+        sid = f"Slot_{slot_id:08x}"
+        # Anchor the fallback to THIS real resolution: remember the id
+        # and the save's name so a later sentinel window can only reuse
+        # it while we're demonstrably still on the same save.
+        _last_real_save_id = sid
+        _last_real_slot_name = (_get_current_slot_name() or "").strip()
+        _last_resolution_path = "live slot id"
+        return sid
+    # No real slot id: the game was loaded from the Autosave or from the
+    # in-game Load menu (both report the scratch slot 0 / 0xffffffff).
+    # The game itself records the real slot inside every save it writes:
+    # SaveSlotData.preferred_manual_slot_id (field 20). Read from the save
+    # files on 2026-09-28: the Autosave (slot_id 0) carried 4373 = 0x1115,
+    # the Francesca save it came from; Slot_00000003 carries 3; Autosave
+    # backups written from FAT carry 3. A Save As writes the new slot's
+    # number, so copies are distinct. We use it, and NEVER guess from
+    # household id or save name (copies share both; a wrong save's folder
+    # is worse than no data). Saves last written by an older game patch
+    # lack the field -> dormant until the player saves once.
+    try:
+        import services
+        if services.current_zone() is None:
+            _last_resolution_path = "none (main menu)"
+            return None
+    except Exception:
+        return None
+    # Transient-sentinel fallback -- a sentinel window on the SAME save we
+    # last resolved for real this session (CAS, travel, household-manage
+    # roundtrips). Guarded by name: a different save loaded in-game has a
+    # different name and must NOT inherit this anchor.
+    cur_name = (_get_current_slot_name() or "").strip()
+    pref = _get_preferred_slot_id_int()
+    if pref is not None:
+        sid = f"Slot_{pref:08x}"
+        _last_real_save_id = sid
+        _last_real_slot_name = cur_name
+        _last_resolution_path = (f"save's own slot record (preferred_manual_slot_id={pref}"
+                                 f"{', Autosave' if _current_slot_is_autosave() else ''})")
+        return sid
+    if _last_real_save_id is not None and _last_real_slot_name and cur_name == _last_real_slot_name:
+        _last_resolution_path = "same-save sentinel fallback"
+        return _last_real_save_id
+    reason = ("Autosave has no slot record" if _current_slot_is_autosave()
+              else "in-game load, save has no slot record")
+    if _sentinel_refused_logged[0] != cur_name:
+        _sentinel_refused_logged[0] = cur_name
+        _log(f"save {cur_name!r}: {reason} -- Llamafone DORMANT (no texts, calls, or "
+             f"memory) until the game is saved to a real slot or loaded from the "
+             f"main-menu Load screen")
+    _last_resolution_path = f"DORMANT ({reason}; save {cur_name!r})"
+    return None
+
+
+def dormant_reason():
+    """'autosave' / 'unidentified' when a game is loaded but the mod can't
+    know its slot; None when resolved or at the main menu."""
+    if get_current_save_id() is not None:
         return None
     try:
         import services
@@ -251,121 +346,19 @@ def get_current_save_id():
             return None
     except Exception:
         return None
-    return _last_handled_save_id
+    return "autosave" if _current_slot_is_autosave() else "unidentified"
 
 
-# ---------------------------------------------------------------------------
-# Identity map: stable game identities -> slot folder (for Autosave loads)
-# ---------------------------------------------------------------------------
-
-_IDENTITY_MAP_FILENAME = "identity_map.json"
-_identity_cache = None
-_mapped_logged = [None]
-
-
-def _identity_map_path():
-    return os.path.join(_saves_folder(), "Llamafone", _IDENTITY_MAP_FILENAME)
-
-
-def _load_identity_map():
-    global _identity_cache
-    if _identity_cache is not None:
-        return _identity_cache
-    try:
-        import json
-        with open(_identity_map_path(), "r", encoding="utf-8") as f:
-            data = json.load(f)
-        _identity_cache = data if isinstance(data, dict) else {}
-    except Exception:
-        _identity_cache = {}
-    return _identity_cache
-
-
-def _save_identity_map(data):
-    global _identity_cache
-    _identity_cache = data
-    try:
-        import json
-        path = _identity_map_path()
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmp = path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-        os.replace(tmp, path)
-    except Exception as e:
-        _log(f"identity map save failed: {type(e).__name__}: {e}")
-
-
-def _current_game_identities():
-    """Keys that identify the running game regardless of which slot
-    (real or Autosave) it was loaded from. Empty when unavailable."""
-    keys = []
+def _current_household_key():
+    """Diagnostic only (logs / llama.saveinfo). NEVER used to pick a folder:
+    Save-As copies share a household id with their original."""
     try:
         import services
-        try:
-            svc = services.get_persistence_service()
-            guid = svc.get_save_slot_proto_guid() if svc is not None else None
-            if guid:
-                keys.append(f"guid:{guid}")
-        except Exception:
-            pass
-        try:
-            hh = services.active_household()
-            hid = getattr(hh, "id", None) if hh is not None else None
-            if hid:
-                keys.append(f"household:{hid}")
-        except Exception:
-            pass
+        hh = services.active_household()
+        hid = getattr(hh, "id", None) if hh is not None else None
+        return f"household:{hid}" if hid else None
     except Exception:
-        pass
-    return keys
-
-
-def _record_identity_mapping(save_id_str):
-    """Called when a REAL slot resolved: remember slot for this game's
-    identities so an Autosave load of the same game finds its folder."""
-    keys = _current_game_identities()
-    if not keys:
-        return
-    data = dict(_load_identity_map())
-    changed = False
-    for k in keys:
-        if data.get(k) != save_id_str:
-            data[k] = save_id_str
-            changed = True
-    # The game's Autosave always contains the most recently played game,
-    # so "last real slot played" is the right lineage for an Autosave
-    # load even before the guid / household keys have been learned.
-    if data.get("last_played") != save_id_str:
-        data["last_played"] = save_id_str
-        changed = True
-    if changed:
-        _save_identity_map(data)
-        _log(f"identity map: {keys} -> {save_id_str!r}")
-
-
-def _mapped_save_id_for_current_game():
-    keys = _current_game_identities()
-    if not keys:
         return None
-    data = _load_identity_map()
-    for k in keys:
-        sid = data.get(k)
-        if sid:
-            if _mapped_logged[0] != sid:
-                _mapped_logged[0] = sid
-                _log(f"save id via identity map ({k}) -> {sid!r} (slot id unresolved -- Autosave?)")
-            return sid
-    # Cold start on an Autosave load: fall back to the last real slot
-    # played, which is what the Autosave was written from.
-    if _current_slot_is_autosave():
-        sid = data.get("last_played")
-        if sid:
-            if _mapped_logged[0] != sid:
-                _mapped_logged[0] = sid
-                _log(f"save id via identity map (last_played) -> {sid!r} (Autosave load)")
-            return sid
-    return None
 
 
 def _current_slot_is_autosave():
@@ -429,7 +422,14 @@ def data_dir():
     base_root = os.path.join(_saves_folder(), "Llamafone")
     base = os.path.join(base_root, save_id)
     if not os.path.exists(base):
-        slot_id_int = _get_current_slot_id_int()
+        # The RESOLVED slot, not the live one: an Autosave / in-game load
+        # has no live slot id but resolves via the save's own slot record,
+        # and must still pick up this save's legacy folder instead of
+        # creating an empty new one next to it.
+        try:
+            slot_id_int = int(save_id.split("_", 1)[1], 16)
+        except Exception:
+            slot_id_int = None
         legacy = _find_legacy_folder(base_root, slot_id_int) if slot_id_int else None
         if legacy is not None:
             try:
@@ -499,6 +499,13 @@ def data_path(filename):
 
 _hook_installed = False
 _last_handled_save_id = None
+# Anchor for the transient-sentinel fallback: the id and save name from
+# the last time a REAL slot id resolved. The fallback only reuses the id
+# while the current save name still matches -- see get_current_save_id.
+_last_real_save_id = None
+_last_real_slot_name = None
+_sentinel_refused_logged = [None]
+_last_resolution_path = "not yet resolved"
 
 
 def _on_save_loaded(save_id):
@@ -510,13 +517,6 @@ def _on_save_loaded(save_id):
     _last_handled_save_id = save_id
     folder = data_dir()
     _log(f"save loaded: id={save_id!r} folder={folder!r}")
-    # Only a REAL slot resolution teaches the identity map (an Autosave
-    # load that came through the map must not rewrite it).
-    try:
-        if _get_current_slot_id_int() is not None:
-            _record_identity_mapping(save_id)
-    except Exception as e:
-        _log(f"identity mapping failed: {type(e).__name__}: {e}")
     # Cancel any pending reply-delay Timers from the previous save. A
     # stale Timer firing in the new save's context would write into the
     # wrong conversation. Lazy import keeps save_id importable from
@@ -531,6 +531,32 @@ def _on_save_loaded(save_id):
         milestones.start_background_scan()
     except Exception as e:
         _log(f"milestone scan failed: {type(e).__name__}: {e}")
+
+
+AUTOSAVE_NOTICE = (
+    "Llamafone can't tell which save this Autosave came from: the game didn't "
+    "record it (this happens with saves last written by an older game patch). "
+    "Texts, calls, and memory are OFF until you save this game to a save slot."
+)
+UNIDENTIFIED_NOTICE = (
+    "Llamafone can't tell which save this is: the game didn't record its save "
+    "slot (this happens with saves last written by an older game patch). "
+    "Texts, calls, and memory are OFF until you save the game once."
+)
+
+
+def _show_dormant_notice():
+    try:
+        reason = dormant_reason()
+        if reason is None:
+            return
+        from . import notifications
+        if reason == "autosave":
+            notifications.show("Llamafone: unknown Autosave", AUTOSAVE_NOTICE)
+        else:
+            notifications.show("Llamafone: save to enable", UNIDENTIFIED_NOTICE)
+    except Exception as e:
+        _log(f"dormant notice failed: {type(e).__name__}: {e}")
 
 
 _RETRY_DELAYS = (5, 10, 20, 30, 60, 60, 120, 120, 300)
@@ -586,20 +612,31 @@ def install_save_load_hook():
     original = Zone.on_loading_screen_animation_finished
 
     def _patched(self, *args, **kwargs):
+        global _last_handled_save_id
         result = original(self, *args, **kwargs)
         try:
             sid = get_current_save_id()
+            _log(f"zone load finished: save name={(_get_current_slot_name() or '')!r} "
+                 f"household={_current_household_key()} -> save id {sid!r} "
+                 f"via {_last_resolution_path}")
             if sid:
                 _on_save_loaded(sid)
             else:
-                # The persistence service can still hold a sentinel slot
-                # id when the loading screen finishes (observed 2026-09-26:
-                # 0xffffffff at zone load, then 0 after a travel). With no
-                # retry, _last_handled_save_id never gets set, the fallback
-                # never engages, and every per-save feature (journal,
-                # milestones, birth watcher) sits idle for the session
-                # without a single error line. Retry on a short backoff.
-                _log("save-load hook: save id unresolved at load; scheduling retries")
+                # Unresolved at load. Most often: a DIFFERENT save was loaded
+                # from the in-game menu (reports slot_id 0) and isn't in the
+                # identity map yet. Pending phone timers belong to the
+                # previous save -- a Luca reply firing into another save's
+                # session -- so cancel them, and clear the dedup id so that
+                # switching BACK to the previous save re-runs its load work.
+                _last_handled_save_id = None
+                try:
+                    from . import phone
+                    phone._cancel_all_timers()
+                except Exception as e:
+                    _log(f"phone Timer cancel failed: {type(e).__name__}: {e}")
+                _log("save-load hook: save id unresolved at load; pending phone timers "
+                     "cancelled; scheduling retries")
+                _show_dormant_notice()
                 _schedule_save_id_retry(attempt=1)
         except Exception as e:
             _log(f"save-load hook handler raised: {type(e).__name__}: {e}")
@@ -608,4 +645,121 @@ def install_save_load_hook():
     Zone.on_loading_screen_animation_finished = _patched
     Zone._llamafone_save_hook_installed = True
     _hook_installed = True
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Save hook: learn the REAL slot id at the moment a save is committed
+# ---------------------------------------------------------------------------
+#
+# An in-game-loaded save reports slot_id 0 until it's saved, so the only
+# dependable moment to learn its true slot is the save itself -- the same
+# technique MCCC uses (mc_shared_alarms.inject_save_game_gen). Verified
+# 2026-09-28 against services/persistence_service.pyc:
+#   PersistenceService.save_game_gen(self, timeline, save_game_data,
+#       send_save_message, check_cooldown, ignore_callback)
+#   -- a GENERATOR. Callers override_save_slot / save_to_new_slot /
+#   save_game_with_autosave (server_commands/persistence_commands.pyc)
+#   build save_game_data with the target slot_id; save_to_scratch_slot_gen
+#   passes slot_id 0 ('scratch'). The game's own real-slot test is
+#   `slot_id > 0 and slot_id != AUTO_SAVE_SLOT_ID`; mirrored below.
+
+_save_hook_installed = False
+_auto_save_slot_const = [None, False]  # [value, looked_up]
+
+
+def _auto_save_slot_id():
+    if not _auto_save_slot_const[1]:
+        _auto_save_slot_const[1] = True
+        try:
+            from services import persistence_service as _ps
+            _auto_save_slot_const[0] = getattr(_ps, "AUTO_SAVE_SLOT_ID", None)
+        except Exception:
+            _auto_save_slot_const[0] = None
+    return _auto_save_slot_const[0]
+
+
+def _on_real_save(save_game_data):
+    """Record identity -> real slot when a save is committed to a real slot."""
+    global _last_real_save_id, _last_real_slot_name, _last_handled_save_id
+    raw = getattr(save_game_data, "slot_id", None)
+    try:
+        slot_id = int(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        slot_id = None
+    auto = _auto_save_slot_id()
+    if slot_id is None or _slot_id_is_sentinel(slot_id) or (auto is not None and slot_id == auto):
+        _log(f"save hook: save to slot_id={raw!r} (scratch/autosave, AUTO_SAVE_SLOT_ID={auto!r}) "
+             f"-- not a real slot commit, ignoring")
+        return
+    sid = f"Slot_{slot_id:08x}"
+    saved_name = getattr(save_game_data, "slot_name", None)
+    if not saved_name:
+        saved_name = _get_current_slot_name()
+    saved_name = str(saved_name or "").strip()
+    was = _last_real_save_id
+    _log(f"save hook: REAL save committed to {sid} (slot_id={slot_id}, name={saved_name!r}, "
+         f"household={_current_household_key()}); previous anchor was {was!r}")
+    _last_real_save_id = sid
+    _last_real_slot_name = saved_name
+    was_dormant = _last_handled_save_id is None
+    if _last_handled_save_id != sid:
+        # First identification of this save this session (e.g. an
+        # in-game-loaded save that was dormant). Don't call _on_save_loaded
+        # -- it cancels pending phone timers, and a save is not a save
+        # switch. Just mark it handled and establish its milestone baseline.
+        _last_handled_save_id = sid
+        _log(f"save hook: {sid} is now the active save id -- per-save features live")
+        if was_dormant:
+            try:
+                from . import notifications
+                notifications.show("Llamafone is on",
+                                   f"Saved to a slot, so Llamafone knows this save now. "
+                                   f"Texts, calls, and memory are on.")
+            except Exception:
+                pass
+        try:
+            data_dir()
+        except Exception:
+            pass
+        try:
+            from . import milestones
+            milestones.start_background_scan()
+        except Exception as e:
+            _log(f"save hook: milestone scan failed: {type(e).__name__}: {e}")
+
+
+def install_save_hook():
+    """Patch PersistenceService.save_game_gen. Idempotent. Returns True if
+    the hook is in place, False if the class isn't importable yet."""
+    global _save_hook_installed
+    if _save_hook_installed:
+        return True
+    try:
+        from services import persistence_service as _ps
+        PersistenceService = _ps.PersistenceService
+    except Exception as e:
+        _log(f"install_save_hook: PersistenceService not importable: {type(e).__name__}: {e}")
+        return False
+    if getattr(PersistenceService, "_llamafone_save_game_hook", False):
+        _save_hook_installed = True
+        return True
+    original = PersistenceService.save_game_gen
+
+    # MUST stay a generator: callers drive save_game_gen with `yield from`
+    # / element wrappers, and MCCC wraps it too. `yield from` passes
+    # send/throw through and returns the original's result.
+    def _patched(self, timeline, save_game_data, *args, **kwargs):
+        try:
+            _on_real_save(save_game_data)
+        except Exception as e:
+            _log(f"save hook: capture raised: {type(e).__name__}: {e}")
+        result = yield from original(self, timeline, save_game_data, *args, **kwargs)
+        return result
+
+    PersistenceService.save_game_gen = _patched
+    PersistenceService._llamafone_save_game_hook = True
+    _save_hook_installed = True
+    _log(f"install_save_hook: PersistenceService.save_game_gen patched "
+         f"(AUTO_SAVE_SLOT_ID={_auto_save_slot_id()!r})")
     return True

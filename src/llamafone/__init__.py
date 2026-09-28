@@ -15,7 +15,7 @@ Commands (open cheat console with Ctrl+Shift+C):
 """
 
 MOD_NAME = "Llamafone"
-MOD_VERSION = "3.6.2"
+MOD_VERSION = "3.7.0"
 
 # Captured at module-load time -- the moment Sims 4 imported this build.
 # Used in prompts so a llama.dumpprompt definitively shows which load
@@ -106,6 +106,10 @@ try:
     # then load different save). No polling.
     if not save_id.install_save_load_hook():
         _log("save_id.install_save_load_hook: zone class not ready at mod-load; will retry from startup thread")
+    # Learn the real slot id when a save is committed (an in-game-loaded
+    # save reports slot_id 0 until then). Same technique MCCC uses.
+    if not save_id.install_save_hook():
+        _log("save_id.install_save_hook: PersistenceService not importable yet; will retry from startup thread")
 
     # Hook Relationship.add_relationship_bit so we can log in-game
     # interactions between sims (Just Chatted, Just Kissed, Just Argued,
@@ -189,6 +193,7 @@ try:
                 # mod-load (rare -- the zone module is usually imported by
                 # the engine before mods run), install it now.
                 save_id.install_save_load_hook()
+                save_id.install_save_hook()
                 interactions.install_hook()
                 past_events.install_hook()
                 births.install_hook()

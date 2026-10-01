@@ -2,6 +2,10 @@
 
 A phone-first AI mod for The Sims 4. Random sims call and text you in character — voices shaped by their traits, mood, relationships, and what's actually happening in your save. Bring your own AI — Claude, OpenAI, Gemini, or a local Ollama model — and pick up calls and texts that read like they were written for the people in front of you.
 
+**v3.8 highlights:** **Llamagram**, social media for your sims. Post to friends or the whole world, and real sims from your save comment, like, and follow. Your friends post about their own lives, big accounts draw fans, posts carry into calls and texts ("I saw your post..."), and with Get Famous, posts that truly go viral raise your fame. Plus a round of birth-announcement fixes.
+
+**v3.7 highlights:** birth announcements (a family member or close friend has a baby and texts you within seconds), pregnancy and birth news that spreads realistically (parents hear in hours, casual friends in days, nobody before the mom-to-be knows), and Autosave / in-game Load menu support for per-save data.
+
 **v3.6 highlights:** save-level world notes (challenge rulesets, custom flavor), per-sim character bios (backstory / private context injected into every prompt), service-NPC roles (butlers / maids / babysitters / nannies / gardeners / repair techs write in their proper register), messages that actually move friendship and romance, in-game time-of-day in every prompt, Llamadate origin persists across sessions, plus OpenRouter as a fifth AI provider. Plus everything from v3.5 — Llamadate dating layer with Hinge-style profiles and reply-gated matches, standalone phone app, breakup context — and v3.4 — group texts, per-relationship contact preferences ("asked for space" auto-detected), weather + holiday awareness, past-event memory. Story updates, random events, and 3-act storylines are in the box too, for when you want them.
 
 **Site:** [morganparadis.github.io/llamafone](https://morganparadis.github.io/llamafone/)
@@ -72,6 +76,35 @@ Every call and text reads live save state and sends it to the AI as context. Nob
 **In-game timestamps everywhere.** Contact preferences, interactions, and journal entries all use sim-world time in prompts. Shelving the game for real weeks doesn't rot the state — the AI sees "you asked for space 3 in-game days ago", not "3 real weeks ago".
 
 ---
+
+## Llamagram (v3.8)
+
+Social media for your sims. Everyone who comments, replies, or posts is a real sim from your save.
+
+- **Phone → Llamafone → Llamagram Post** — write a post as any household sim, then choose **Friends** (people your sim knows) or **Public** (anyone in the world). Comments trickle in over the next little while from family, friends, exes, and — on public posts — strangers. Sometimes nobody comments. Comments arrive a few at a time, batched into one notification per batch.
+- **Phone → Llamafone → Llamagram Notifications** — each household sim's own inbox: comments on their posts, replies to their comments, and friends' posts. Shows their follower count and their latest post's views, likes, and comments. Open a comment and reply; that sim answers back.
+- **Friends post on their own** through the auto-event timer (type `post`, injected automatically — no cfg edit needed). A friend's post pops up with **Comment** / **Scroll past**.
+- **The AI judges reach** from what the post actually says: `good`, `flat`, `viral`, or `backlash`. Viral is rare, and a celebrity's casual "what are you all up to" is good at most. Very rarely the AI calls a post `huge` or a `scandal` — a **breakout** that reaches hundreds of thousands to millions of views on any account.
+- **Followers** grow or drop with how posts land, drift over in-game time, and never sit on a round number. Get Famous celebrities start at a floor for their star rank (2K / 25K / 250K / 1.5M / 10M). Views, likes, and comment totals are audience numbers that grow over in-game hours; the comments you read are real sims (plus display-only fan comments from made-up usernames on big accounts).
+- **Fame (Get Famous)** is hard to earn: only a viral post (at most once per in-game day), a breakout, or passing a big follower milestone raises it.
+- **Posts carry into calls and texts.** The "Recent social media" block tells a contact which of your recent posts they saw and what the two of you commented.
+- **Relationships:** comment moods nudge friendship / romance only between sims who already know each other. Strangers' comments never change relationships and never add anyone to the relationship panel. No romance changes across the teen / adult line.
+- **Controls:** Llamafone Settings has toggles for Llamagram itself, friends'-post pop-ups, and comment / like pop-ups (off = quiet, still in the inbox). Muted contacts never post to you or comment on your posts.
+- **Durable:** pending comments are saved to `Feed.json` (per save, hand-editable) and delivered quietly after a quit, with one "while you were away" notification.
+
+## Birth announcements & news that spreads (v3.7)
+
+- **Birth announcements.** When a sim who's family or a close friend of your household has a baby, the new parent (or their partner) texts your sim within seconds — baby's name included, tone shaped by the circumstances (married or not, money, existing kids, traits). Works for game births and MCCC "complete pregnancy". Off switch: `birth_announcements = false`.
+  - The baby's other parent always gets the announcement, even on bad terms. Anyone on the lot when the baby arrived is treated as already knowing.
+  - Born in the household you're playing? Switch to the father's or grandparents' household and the announcement arrives on the next watcher pass — unless the two households already talked through Llamafone since the birth.
+  - One announcement per household per birth, across restarts and rolled-back sessions. Clearing a pregnancy with no baby isn't a birth.
+- **News-spread model.** Contacts "hear" about a pregnancy or birth after a delay set by closeness: parents and the baby's father within hours, siblings in half a day, grandparents in a day, aunts / uncles / in-laws in a day and a half, close friends in two days, casual friends in four, acquaintances only if told. A visibly showing pregnancy is public.
+- **Pregnancy visibility ladder:** hidden (pre-test — nobody knows, not even her), confirmed (test taken), visible (showing).
+- **Calendar awareness:** events the caller isn't invited to are listed as exactly that, so nobody asks what to bring to a party they weren't invited to.
+
+### Save identity (v3.7)
+
+Per-save data lives in `saves/Llamafone/Slot_NNNNNNNN/`. Loading the Autosave or switching saves from the in-game Load menu now finds the right folder using the slot the game records inside every save. A save last written by an older game patch has no record yet; Llamafone stays off for it (and says so) until you save once. `llama.saveinfo` shows what was resolved and how.
 
 ## Save notes, sim bios, and structural context (v3.6)
 
@@ -162,7 +195,16 @@ Open the cheat console with `Ctrl+Shift+C`, type a command, press Enter.
 | `llama.sendtext Bella Goth hey!` | Text a specific sim — they'll reply in character |
 | `llama.sendcall Bella Goth I have news` | Call a specific sim about a topic |
 | `llama.reply <message>` | Continue any conversation — routes to the specific `(household sim, contact)` pair you last surfaced a dialog for |
+| `llama.textfrom First Last` / `llama.callfrom First Last` | Incoming text / call from a specific sim |
 | `llama.contact First Last muted\|paused\|priority\|clear\|note <text>` | Set per-contact preferences (scoped to the active household sim) |
+
+### Llamagram
+| Command | What it does |
+|---|---|
+| `llama.post [public] text` | Post as the active sim (friends-only unless the first word is `public`) |
+| `llama.npcpost [First Last]` | A friend posts now (random friend if no name) |
+| `llama.inbox` | Open Llamagram Notifications |
+| `llama.feed` | Follower counts and recent posts with stats |
 
 Calls and texts show as in-game phone dialogs with the sim's portrait. **Click Reply on the popup** to type a response directly in a text-input dialog. Realistic reply delays make texts feel asynchronous; calls fire instantly. Weather, holidays, past shared events, in-person recency, and your contact preferences all shape the voice.
 
@@ -174,7 +216,9 @@ Llamafone has its own home-screen tile on the phone — no more digging through 
 | **Call Someone** | Sim picker → recipient → topic input → Llamafone crafts and delivers the call |
 | **Send Text** | Same flow, but for texts. **Picker allows multi-select — 2 to 4 sims starts a group text.** |
 | **Llamadate** | Opt-in dating layer (see below). Set your bio, browse profiles, send intros. |
-| **Llamafone Settings** | In-game settings panel with toggles for auto-events, reply delays, ghost contacts, group text size, per-sim Llamadate opt-ins, plus a **Manage contacts** entry for per-relationship prefs |
+| **Llamagram Post** | Write a post as this sim, to Friends or Public (see Llamagram above) |
+| **Llamagram Notifications** | This sim's inbox: comments, replies, friends' posts, followers, latest post stats |
+| **Llamafone Settings** | In-game settings panel with toggles for auto-events, reply delays, ghost contacts, group text size, Llamagram and its pop-ups, per-sim Llamadate opt-ins, plus a **Manage contacts** entry for per-relationship prefs |
 
 ### Storytelling
 | Command | What it does |
@@ -205,6 +249,10 @@ Llamafone has its own home-screen tile on the phone — no more digging through 
 | `llama.testconnection` | Provider-aware diagnostic — for Ollama users, walks through reachability, installed models, and end-to-end generation |
 | `llama.testprovider` / `llama.testweather` / `llama.scanworlds` | Provider ping / weather-service dump / household world audit |
 | `llama.debug` / `llama.debugsim` / `llama.dumpphone` / `llama.dumpprompt` | Internal state dumps for diagnostics |
+| `llama.saveinfo` | Which per-save folder is in use and how it was resolved |
+| `llama.birthwatch` | Run a birth-watcher pass now and show what it saw |
+| `llama.pregdebug First Last` / `llama.testbirth First Last` | Pregnancy visibility details / dry-run a birth announcement (never journaled) |
+| `llama.journal_undo First Last [count]` | Remove the last journal entries for a sim |
 
 ---
 
@@ -229,7 +277,7 @@ auto_event_types = call, text         ; phone-first default -- random calls and 
 auto_event_weights = call:50, text:50 ; 50/50 mix
 ```
 
-Available auto-event types: `call`, `text`, `event`, `goals`, `story`, `drama`. The default is **phone-only** (`call, text`) to match the mod's focus — add the others to your `auto_event_types` if you want the full mix.
+Available auto-event types: `call`, `text`, `event`, `goals`, `story`, `drama`. Llamadate outreach (`dating`) and friends' Llamagram posts (`post`) are added automatically when enabled — set `social_npc_post_weight = 0` to keep friends from posting. The default is **phone-only** (`call, text`) to match the mod's focus — add the others to your `auto_event_types` if you want the full mix.
 
 With the defaults (20 min interval, 40% chance), you get something roughly every 50 real minutes on average.
 
@@ -252,7 +300,7 @@ Two paths to change settings:
 
 | Setting | Default | Editable in UI | Description |
 |---|---|---|---|
-| `provider` | `claude` | ❌ | `claude`, `openai`, `gemini`, or `ollama` |
+| `provider` | `claude` | ❌ | `claude`, `openai`, `gemini`, `openrouter`, or `ollama` |
 | `api_key` | *(required for cloud providers)* | ❌ | Blank for Ollama |
 | `default_model` | `claude-haiku-4-5` | ❌ | Used for briefings and storyline generation |
 | `fast_model` | `claude-haiku-4-5` | ❌ | Used for calls, texts, and reply generation |
@@ -269,8 +317,13 @@ Two paths to change settings:
 | `group_text_enabled` | `true` | ✅ | Master toggle for group texts (multi-select in Send Text) |
 | `group_text_max_participants` | `4` | ✅ | Max group size (2-8) |
 | `group_text_dropoff_enabled` | `true` | ✅ | Gentle "someone got busy" drop-off after round 1 |
+| `birth_announcements` | `true` | ❌ | Texts from new parents when someone close has a baby |
+| `social_enabled` | `true` | ✅ | Llamagram on / off |
+| `social_post_popups` | `true` | ✅ | Friends' new posts pop up (off = inbox only) |
+| `social_comment_popups` | `true` | ✅ | Comment / like / follower pop-ups on your posts (off = inbox only) |
+| `social_npc_post_weight` | `25` | ❌ | How often friends post, relative to call:50 / text:50. 0 = never |
 
-Per-save data (journal, milestones, group threads, contact preferences, past events, interactions) lives in `Documents/Electronic Arts/The Sims 4/saves/Llamafone/Slot_NNNNNNNN/`. Multiple saves get their own folders — no cross-contamination.
+Per-save data (journal, milestones, group threads, contact preferences, past events, interactions, Llamagram feed) lives in `Documents/Electronic Arts/The Sims 4/saves/Llamafone/Slot_NNNNNNNN/`. Multiple saves get their own folders — no cross-contamination.
 
 ---
 
@@ -288,6 +341,8 @@ You pay your AI provider directly for what the mod uses — no subscription to t
 | Ollama | any local model | **free** (uses your GPU) |
 
 A typical session with ~30 Haiku or gpt-4o-mini commands lands around **$0.15**. Heavy sessions with long-form storyline generation run **$0.50 – $1.50** on premium models. Gemini's free tier covers most casual play. Ollama is fully free if you have the hardware.
+
+**Llamagram adds a little:** each of your posts is one larger call (it writes all the comments at once), each reply to a comment is one more, and with auto-events on, friends' posts are about one in five auto-events at the default weight.
 
 **To minimize cost** on Claude/OpenAI, keep `default_model` and `fast_model` on the cheap tier (Haiku / gpt-4o-mini). Quality dips slightly for long-form stories but stays strong for calls, texts, dialogue, and short narratives — and cost drops ~20×.
 
@@ -315,6 +370,7 @@ End users don't need any of this — just download the release artifacts and dro
 ```
 python build.py            # builds + auto-installs to Sims 4 Mods folder
 python build.py --build    # builds only, no install
+python build.py --release  # builds + Llamafone_vX.Y.Z.zip for CurseForge (no cfg inside)
 ```
 
 `build.py` does two things: compiles every `.py` in `src/` to Python-3.7 `.pyc` and zips them as `Llamafone.ts4script`, then runs `tools/package_builder.py` to bundle the XML tunings in `package_src/` into `Llamafone.package`. Both artifacts land at the repo root and (without `--build`) get copied into the Sims 4 Mods folder.
@@ -337,11 +393,13 @@ src/
     event_generator.py          random events, challenges, weekly goals
     phone.py                    AI-generated calls, texts, group texts
     phone_ui_injection.py       grafts SuperInteractions onto Sim _phone_affordances
-    phone_ui_interactions.py    Phone > Llamafone > Call / Text / Llamadate / Settings handlers + multi-select picker
+    phone_ui_interactions.py    Phone > Llamafone > Call / Text / Llamadate / Llamagram / Settings handlers + multi-select picker
     auto_events.py              background thread for random auto-events
     events.py                   reads upcoming + ongoing calendar events with focal sims
     past_events.py              logs shared calendar events after they end (per save)
-    milestones.py               detects & dedups life events (job, marriage, birth, ...)
+    milestones.py               detects & dedups life events (job, marriage, birth, ...), pregnancy visibility, news-spread gating
+    births.py                   birth announcements: complete_pregnancy hook, snapshot watcher, household-switch sweep
+    social.py                   Llamagram: posts, comment passes, followers / fame, inbox, Feed.json
     interactions.py             logs in-person interactions via Relationship.add_relationship_bit
     group_texts.py              persistent group thread storage (per save)
     contact_prefs.py            per-pair contact prefs (state + note) + relationship_events (origin, etc.) + auto-detection
@@ -361,6 +419,8 @@ package_src/                    XML tunings packed into Llamafone.package
   Llamafone_Text.xml            SuperInteraction for Llamafone > Send Text
   Llamafone_Dating.xml          SuperInteraction for Llamafone > Llamadate
   Llamafone_Settings.xml        SuperInteraction for Llamafone > Settings
+  Llamafone_Post.xml            SuperInteraction for Llamafone > Llamagram Post
+  Llamafone_Notifications.xml   SuperInteraction for Llamafone > Llamagram Notifications
 
 tools/
   package_builder.py            DBPF v2.1 packer (no S4S dependency)

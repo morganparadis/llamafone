@@ -676,6 +676,7 @@ section > p { max-width: 780px; margin-left: auto; margin-right: auto; }
 .icon-auto      { background: linear-gradient(135deg, #ffb88c, #ff7e5f); }
 .icon-dating    { background: linear-gradient(135deg, #ff9d9d, #e94b4b); }
 .icon-interact  { background: linear-gradient(135deg, #b3e0f2, #4a9bc4); }
+.icon-social    { background: linear-gradient(135deg, #c8a8ff, #ff7e5f); }
 
 /* -------- Screenshots -------- */
 

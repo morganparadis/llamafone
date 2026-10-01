@@ -531,6 +531,12 @@ def _on_save_loaded(save_id):
         milestones.start_background_scan()
     except Exception as e:
         _log(f"milestone scan failed: {type(e).__name__}: {e}")
+    # Finish social comment batches / passes a quit interrupted.
+    try:
+        from . import social
+        social.resume_pending()
+    except Exception as e:
+        _log(f"social resume failed: {type(e).__name__}: {e}")
 
 
 AUTOSAVE_NOTICE = (

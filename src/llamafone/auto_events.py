@@ -161,6 +161,21 @@ def _pick_and_fire():
             weights_map = dict(weights_map) if weights_map else {}
             weights_map["dating"] = dating_weight
 
+    # Social posts (v3.8): friends post on their own. Injected the same
+    # way as dating, so existing cfgs get it without editing
+    # auto_event_types / auto_event_weights.
+    try:
+        from . import social as _social
+        post_weight = config.get_social_npc_post_weight() if _social.enabled() else 0
+    except Exception:
+        post_weight = 0
+    if post_weight > 0 and "post" not in types:
+        # An empty weights map means "all types equal"; seed it so adding
+        # post:N doesn't turn every other type into weight 0.
+        weights_map = dict(weights_map) if weights_map else {t: 50 for t in types}
+        types = list(types) + ["post"]
+        weights_map["post"] = post_weight
+
     if weights_map:
         # Use configured weights (types not in weights_map get weight 0 and are skipped)
         weighted_types = [t for t in types if weights_map.get(t, 0) > 0]
@@ -208,6 +223,9 @@ def _pick_and_fire():
         phone.generate_text(callback=phone_done)
     elif chosen == "dating":
         _dating.generate_cold_outreach(callback=phone_done)
+    elif chosen == "post":
+        from . import social as _social
+        _social.generate_npc_post(callback=phone_done)
     else:
         _log(f"Unknown event type: {chosen}")
 

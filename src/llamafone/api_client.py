@@ -457,7 +457,8 @@ def _call_ollama(endpoint, model, max_tokens, system, messages):
 # Public entry point
 # ---------------------------------------------------------------------------
 
-def call_ai_async(messages, system=None, use_fast_model=False, callback=None):
+def call_ai_async(messages, system=None, use_fast_model=False, callback=None, max_tokens=None):
+    max_tokens_override = max_tokens  # per-call limit (e.g. long JSON comment passes)
     """
     Make an async call to the configured AI provider on a background thread.
 
@@ -477,7 +478,7 @@ def call_ai_async(messages, system=None, use_fast_model=False, callback=None):
 
         provider = config.get_provider()
         model = config.get_fast_model() if use_fast_model else config.get_default_model()
-        max_tokens = config.get_max_tokens()
+        max_tokens = max_tokens_override or config.get_max_tokens()
 
         # Save-level notes prepended to the system prompt so world context
         # binds every downstream call/text/story path without each builder

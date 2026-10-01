@@ -84,6 +84,9 @@ try:
         output("  llama.text                 — incoming text from a random relationship sim")
         output("  llama.callfrom First Last  — incoming call from a specific sim")
         output("  llama.textfrom First Last  — incoming text from a specific sim")
+        output("  llama.post [public] text   — post as the active sim; comments arrive later")
+        output("  llama.npcpost [First Last] — a friend posts now")
+        output("  llama.feed / llama.inbox   — recent posts / social notifications")
         output("  llama.sendtext First Last msg — text a specific sim")
         output("  llama.sendcall First Last msg — call a specific sim")
         output("  llama.contact First Last ... — mute/pause/priority a contact")
@@ -805,6 +808,68 @@ try:
     def cmd_callfrom(*args, _connection=None):
         """Incoming call FROM a named sim to the active sim."""
         _incoming_from_named(args, sims4.commands.CheatOutput(_connection), "call")
+
+    @sims4.commands.Command("llama.post", command_type=sims4.commands.CommandType.Live)
+    def cmd_post(*args, _connection=None):
+        """Post as the active sim: llama.post [public] <text>. Friends-only
+        unless the first word is 'public'."""
+        output = sims4.commands.CheatOutput(_connection)
+        if not _require_config(output):
+            return
+        words = list(args)
+        audience = "friends"
+        if words and words[0].lower() in ("public", "friends"):
+            audience = words.pop(0).lower()
+        text = " ".join(words).strip()
+        if not text:
+            output("[Llamafone] Usage: llama.post [public] <text>")
+            return
+        si = sim_context.get_main_sim_info()
+        if si is None:
+            output("[Llamafone] No active sim.")
+            return
+        from . import social
+        post = social.player_post(si, text, audience, output=output)
+        if post:
+            output(f"[Llamafone] Posted ({audience}). Comments arrive in 1-3 minutes, if anyone comments.")
+
+    @sims4.commands.Command("llama.npcpost", command_type=sims4.commands.CommandType.Live)
+    def cmd_npcpost(*args, _connection=None):
+        """A friend posts now: llama.npcpost [First Last]. No name = a
+        random friend, like the auto-event."""
+        output = sims4.commands.CheatOutput(_connection)
+        if not _require_config(output):
+            return
+        from . import social
+        author, viewer = None, None
+        if args:
+            two_word = f"{args[0]} {args[1]}" if len(args) > 1 else None
+            contact = (phone.find_contact_by_name(two_word) if two_word else None) or phone.find_contact_by_name(args[0])
+            if not contact:
+                output(f"[Llamafone] Could not find '{two_word or args[0]}' among the active sim's contacts.")
+                return
+            author, viewer = contact.get("sim_info"), sim_context.get_main_sim_info()
+        output("[Llamafone] Generating a post...")
+        social.generate_npc_post(
+            callback=lambda text, err: output(f"[Llamafone] {'Post failed: ' + str(err) if err else 'Posted.'}"),
+            author_si=author, viewer_si=viewer, output=output,
+        )
+
+    @sims4.commands.Command("llama.feed", command_type=sims4.commands.CommandType.Live)
+    def cmd_feed(_connection=None):
+        """Recent posts in this save's Feed.json, with comment counts."""
+        output = sims4.commands.CheatOutput(_connection)
+        from . import social
+        for line in social.debug_summary():
+            output(f"[Llamafone] {line}")
+
+    @sims4.commands.Command("llama.inbox", command_type=sims4.commands.CommandType.Live)
+    def cmd_inbox(_connection=None):
+        """Open the social notifications list (same as Llamafone > Notifications)."""
+        si = sim_context.get_main_sim_info()
+        if si is not None:
+            from . import social
+            social.open_inbox(si)
 
     @sims4.commands.Command("llama.sendtext", command_type=sims4.commands.CommandType.Live)
     def cmd_sendtext(*args, _connection=None):

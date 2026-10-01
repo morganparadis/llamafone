@@ -463,6 +463,21 @@ def get_sim_network(main_si, min_friendship=25):
     return household_members, relationships
 
 
+def has_met_in_person(si, target_sim_id):
+    """Has `si` actually spent time with the target? A relationship alone
+    isn't proof -- the game auto-creates family relationships with a
+    newborn for relatives who've never seen the baby -- but a non-zero
+    friendship score only comes from interacting."""
+    try:
+        import services
+        entry = _read_relationship_for_target(si.relationship_tracker, int(target_sim_id),
+                                              services.sim_info_manager())
+        f = (entry or {}).get("friendship")
+        return f is not None and abs(float(f)) >= 1
+    except Exception:
+        return False
+
+
 # Backward-compatible alias
 def get_main_sim_network(main_si, min_friendship=25):
     return get_sim_network(main_si, min_friendship=min_friendship)

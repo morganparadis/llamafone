@@ -159,6 +159,25 @@ dating_cold_outreach_weight = 20
 ; shortly after the birth. Set to false to turn these off -- births are
 ; still recorded and will come up naturally in later conversations.
 birth_announcements = true
+
+
+; ── Llamagram (v3.8) ─────────────────────────────────────────────────────
+; Llamafone > Llamagram Post lets your sim post to Friends or Public; sims from
+; your save may comment (or not), batched into notifications, and big
+; accounts get fan comments too. Friends also post on their own through
+; the auto-event timer. Set to false to turn the whole feature off.
+social_enabled = true
+
+; How often friends post on their own, relative to the auto-event call /
+; text weights (call:50, text:50 by default). 0 = friends never post.
+social_npc_post_weight = 25
+
+; Pop-ups. Off = it still happens, quietly: find it in Llamafone >
+; Llamagram Notifications. Muted contacts never post to you or comment on your posts.
+;   social_post_popups:    friends' new posts pop up with Comment / Scroll past
+;   social_comment_popups: comments, likes, and follower updates on YOUR posts
+social_post_popups = true
+social_comment_popups = true
 """
 
 
@@ -537,3 +556,25 @@ def get_message_relationship_max_delta():
     return max(0, val)
 
 
+def get_social_enabled():
+    """Social posts (social.py): player posts, comments, and NPC posts.
+    Default on."""
+    return _bool_setting_with_config_fallback("social_enabled", "social_enabled", True)
+
+
+def get_social_npc_post_weight():
+    """Auto-event weight for friends posting on their own, relative to
+    call/text. 0 disables NPC posts."""
+    val = _int_setting_with_config_fallback("social_npc_post_weight", "social_npc_post_weight", 25)
+    return max(0, val)
+
+
+def get_social_post_popups():
+    """Friends' new posts pop up as a dialog. Off = inbox only."""
+    return _bool_setting_with_config_fallback("social_post_popups", "social_post_popups", True)
+
+
+def get_social_comment_popups():
+    """Comment / likes / follower pop-ups for the player's own posts. Off =
+    inbox only."""
+    return _bool_setting_with_config_fallback("social_comment_popups", "social_comment_popups", True)

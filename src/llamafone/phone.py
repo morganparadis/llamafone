@@ -1736,14 +1736,16 @@ def _heard_after_days(family_label, friendship):
     if l:
         if "in-law" in l or "inlaw" in l or "step" in l:
             return 1.5
+        # Grandparents first: "Grandmother" contains "mother" and used to
+        # land in the parent tier (grandma knew within an hour).
+        if "grand" in l:
+            return 1.0
         # Parents (and the reverse: your own child) hear almost at once --
         # a new grandchild is the first call you make. ~2.5 sim hours.
         if any(k in l for k in ("mother", "father", "parent", "son", "daughter", "child")):
             return 0.1
         if any(k in l for k in ("brother", "sister", "sibling", "spouse", "wife", "husband")):
             return 0.5
-        if "grand" in l:
-            return 1.0
         if any(k in l for k in ("aunt", "uncle", "niece", "nephew", "cousin")):
             return 1.5
         return 2.0
@@ -1765,7 +1767,23 @@ def _contact_knowledge(recipient_sim, contact):
             fam = _get_family_relationship(contact_si, contact, recipient=recipient_sim)
     except Exception:
         fam = None
-    return {"heard_after_days": _heard_after_days(fam, (contact or {}).get("friendship"))}
+    days = _heard_after_days(fam, (contact or {}).get("friendship"))
+    # The other parent of a baby in the recipient's household, living
+    # elsewhere: not told automatically (nobody has), but word reaches a
+    # father as fast as it reaches her parents.
+    if contact_si is not None and (days is None or days > 0.1):
+        try:
+            import services
+            hh = services.active_household()
+            kids = {int(c) for c in contact_si.genealogy.get_children_sim_ids_gen()}
+            if hh is not None and any(
+                    getattr(m, "sim_id", None) in kids
+                    and str(getattr(m, "age", "")).replace("Age.", "") in ("BABY", "INFANT")
+                    for m in hh.sim_info_gen()):
+                days = 0.1
+        except Exception:
+            pass
+    return {"heard_after_days": days}
 
 
 def _contact_has_heard_birth(recipient_sim, contact):
@@ -1953,6 +1971,17 @@ def _describe_recipient(recipient_sim, contact=None, cold=False):
                     if rel_to_contact:
                         pieces.append(f"your {rel_to_contact}")
                     pieces.append(mage)
+                    # Babies / toddlers: has the caller met them in person?
+                    # A relationship in the game's tracker means they have.
+                    # (Francesca's dad, who'd held Miley, commented "can't
+                    # wait to meet Miley".)
+                    if contact_si is not None and mage in ("BABY", "INFANT", "TODDLER"):
+                        try:
+                            pieces.append("you have met them in person"
+                                          if sim_context.has_met_in_person(contact_si, si.sim_id)
+                                          else "you have NOT met them in person yet")
+                        except Exception:
+                            pass
                     ghost_tag = " [DECEASED — only reference in past tense]" if _is_ghost(si) else ""
                     household_lines.append(f"  - {mname} ({', '.join(pieces)}){ghost_tag}")
                 except Exception:
@@ -3379,6 +3408,52 @@ def _get_family_relationship(other_si, contact, recipient=None):
     return None
 
 
+def _household_already_told_line(sender_si, recipient):
+    """When someone in the sender's household already announced the birth
+    to someone in the recipient's household (recorded by births.py), say
+    so outright. The pair history alone missed it: Luca texted Francesca,
+    then Martha called Francesca's husband Aksel with 'we had the baby
+    today'."""
+    try:
+        import services
+        from . import milestones as _ms
+        if sender_si is None or recipient is None:
+            return ""
+
+        def _ids(si):
+            hh = getattr(si, "household", None)
+            ids = {str(m.sim_id) for m in hh.sim_info_gen()} if hh is not None else set()
+            ids.add(str(si.sim_id))
+            return ids
+
+        sender_hh, recip_hh = _ids(sender_si), _ids(recipient)
+        records = [r for r in _ms.told_households(sender_hh) if r[1] in recip_hh]
+        if not records:
+            return ""
+        by_id, to_id, ticks, how = records[-1]
+        sm = services.sim_info_manager()
+
+        def _first(i):
+            s = sm.get(int(i)) if i else None
+            return getattr(s, "first_name", None) or "someone"
+
+        rname = getattr(recipient, "first_name", "the recipient")
+        by = "You" if by_id == str(sender_si.sim_id) else _first(by_id)
+        to = rname if to_id == str(recipient.sim_id) else f"{_first(to_id)} (who lives with {rname})"
+        when = _ms._relative_sim_time(ticks, _ms._now_sim_ticks()) if ticks is not None else None
+        if how == "present":
+            lead = f"ALREADY KNOWN: {to} was there when the baby was born{(' ' + when) if when else ''}."
+        else:
+            lead = f"ALREADY ANNOUNCED: {by} told {to} about the baby{(' ' + when) if when else ''}."
+        return (
+            f"{lead} {rname}'s household already knows. This OVERRIDES the instruction above: do NOT "
+            f"announce it or treat it as news. Mention it naturally if it fits (how the baby "
+            f"is doing, thanks for the congrats)."
+        )
+    except Exception:
+        return ""
+
+
 def _describe_relationship(contact, recipient=None):
     """Build a detailed character description for the prompt.
     All facts are explicitly labeled as belonging to the contact, not the player,
@@ -3697,6 +3772,9 @@ def _describe_relationship(contact, recipient=None):
                             "If the history DOES show it was shared, reference it "
                             "naturally and do NOT announce it again."
                         )
+                        told_line = _household_already_told_line(si, recipient)
+                        if told_line:
+                            parts.append(told_line)
         except Exception:
             pass
 
@@ -3774,6 +3852,18 @@ def _describe_relationship(contact, recipient=None):
             )
             if events_line:
                 parts.append(events_line)
+        except Exception:
+            pass
+
+    # Recent social posts between these two (v3.8): their posts, the
+    # player's posts they saw, and what they commented -- so a text can
+    # say "saw your post!" or pick up a fight from the comments.
+    if si is not None and recipient is not None:
+        try:
+            from . import social
+            sblock = social.format_for_prompt(si, recipient)
+            if sblock:
+                parts.append(sblock)
         except Exception:
             pass
 

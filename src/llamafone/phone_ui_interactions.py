@@ -630,6 +630,27 @@ def _setting_definitions():
             "hint":   "Real-world minutes between auto-event checks (min 5).",
         },
         {
+            "key":    "social_enabled",
+            "label":  "Llamagram: {value}",
+            "kind":   "bool",
+            "getter": config.get_social_enabled,
+            "hint":   "Posting, comments, followers, and friends posting on their own.",
+        },
+        {
+            "key":    "social_post_popups",
+            "label":  "Friends' posts pop up: {value}",
+            "kind":   "bool",
+            "getter": config.get_social_post_popups,
+            "hint":   "Off = new posts from friends go quietly to Llamagram Notifications.",
+        },
+        {
+            "key":    "social_comment_popups",
+            "label":  "Comment / like pop-ups: {value}",
+            "kind":   "bool",
+            "getter": config.get_social_comment_popups,
+            "hint":   "Off = comments, likes, and follower updates on your posts go quietly to Llamagram Notifications.",
+        },
+        {
             "key":    "phone_allow_ghosts",
             "label":  "Ghost sims on phone: {value}",
             "kind":   "bool",
@@ -2344,3 +2365,24 @@ class LlamafoneSettingsInteraction(_LlamafonePhoneInteractionBase):
     def _fire(self):
         sim_info = getattr(self.sim, "sim_info", None) or self.sim
         _show_settings_picker(sim_info)
+
+
+class LlamafonePostInteraction(_LlamafonePhoneInteractionBase):
+    """Llamafone > Post (v3.8) -- write a post, pick Friends or Public.
+    Comments from real save sims arrive later, batched into
+    notifications (social.py)."""
+
+    def _fire(self):
+        sim_info = getattr(self.sim, "sim_info", None) or self.sim
+        from . import social
+        social.start_post_flow(sim_info)
+
+
+class LlamafoneNotificationsInteraction(_LlamafonePhoneInteractionBase):
+    """Llamafone > Notifications (v3.8) -- comments on your posts and your
+    friends' posts; pick one to reply or comment (social.py)."""
+
+    def _fire(self):
+        sim_info = getattr(self.sim, "sim_info", None) or self.sim
+        from . import social
+        social.open_inbox(sim_info)

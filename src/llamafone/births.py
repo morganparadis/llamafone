@@ -31,6 +31,7 @@ _hook_installed = False
 _announced = set()  # (parent_sim_id, tuple(offspring_ids)) -- one text per birth
 
 _CLOSE_FRIEND_MIN = 45   # matches phone._friendship_label "close friends"
+_present_at_birth = {}   # parent_id -> sim ids on the lot when the birth was detected
 _DELAY_RANGE_SECONDS = (5, 20)   # near-immediate: new parents text right away
 
 
@@ -81,12 +82,12 @@ def _family_rank(label):
     l = str(label or "").lower()
     if "in-law" in l or "inlaw" in l or "step" in l:
         return 700
+    if "grand" in l:          # before the parent keywords: "Grandmother" contains "mother"
+        return 900
     if any(k in l for k in ("sibling", "brother", "sister", "mother", "father",
                             "parent", "son", "daughter", "child", "spouse",
                             "wife", "husband")):
         return 1000
-    if "grand" in l:
-        return 900
     if any(k in l for k in ("aunt", "uncle", "niece", "nephew", "cousin")):
         return 800
     return 600
@@ -110,10 +111,56 @@ def _tie_strength(household_si, candidate_entry, candidate_si):
     return None
 
 
-def _best_announcement(parent_si, partner_si):
+def _household_ids_of(sim_id):
+    try:
+        import services
+        si = services.sim_info_manager().get(int(sim_id))
+        hh = _household_of(si) if si is not None else None
+        return {getattr(m, "sim_id", None) for m in hh.sim_info_gen()} if hh is not None else {int(sim_id)}
+    except Exception:
+        return set()
+
+
+def _already_knows(parent_id, present_ids):
+    """Sim ids who already know about this birth: anyone texted about it,
+    anyone who was there when the baby arrived -- and everyone they live
+    with (news is household-level, same as the already-told prompt line)."""
+    from . import milestones
+    out = set()
+    for sid in set(milestones.told_recipient_ids(parent_id)) | {str(s) for s in (present_ids or ())}:
+        out |= _household_ids_of(sid)
+    return out
+
+
+def _other_parent_ids(parent_si, partner_si):
+    """Sim ids of the baby's other parent(s): the pregnancy partner, plus
+    whoever the newborns' genealogy names as mother / father."""
+    ids = set()
+    if partner_si is not None and getattr(partner_si, "sim_id", None) is not None:
+        ids.add(partner_si.sim_id)
+    try:
+        from sims.genealogy_tracker import FamilyRelationshipIndex
+        for b in _newborns(parent_si):
+            gen = getattr(b, "genealogy", None)
+            if gen is None:
+                continue
+            for idx in (FamilyRelationshipIndex.MOTHER, FamilyRelationshipIndex.FATHER):
+                try:
+                    pid = gen.get_family_relationship(idx)
+                    if pid:
+                        ids.add(pid)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    ids.discard(getattr(parent_si, "sim_id", None))
+    return ids
+
+
+def _best_announcement(parent_si, partner_si, exclude=None):
     """Pick the single strongest (recipient, sender_contact, label)
     across the active household x {parent, partner}. None if nothing
-    qualifies."""
+    qualifies. `exclude`: sim ids who already know (told / present)."""
     import services
     from . import sim_context, contact_prefs
     hh = services.active_household()
@@ -124,26 +171,51 @@ def _best_announcement(parent_si, partner_si):
         _log(f"{_name(parent_si)} is in the active household -- player announces their own birth; skipping")
         return None
     senders = [s for s in (parent_si, partner_si) if s is not None]
+    other_parents = _other_parent_ids(parent_si, partner_si)
     best = None
     for hs in hh.sim_info_gen():
         if not _is_teen_plus(hs):
+            continue
+        if exclude and getattr(hs, "sim_id", None) in exclude:
+            _log(f"{_name(hs)} already knows about {_name(parent_si)}'s baby (told / was there) -- not a recipient")
             continue
         try:
             _members, rels = sim_context.get_sim_network(hs, min_friendship=0)
         except Exception:
             continue
         by_id = {r.get("sim_id"): r for r in rels}
+        if getattr(hs, "sim_id", None) in other_parents:
+            # The baby's other parent ALWAYS hears, however bad things are
+            # between them (co-parents aren't a family label, and Ben and
+            # Ingrid's friendship was in the gutter). The circumstances
+            # line carries the awkwardness.
+            try:
+                if contact_prefs.is_muted(getattr(hs, "sim_id", None), getattr(parent_si, "sim_id", None)):
+                    _log(f"{_name(hs)} is the baby's other parent but has {_name(parent_si)} muted -- skipping")
+                    continue
+            except Exception:
+                pass
+            entry = by_id.get(getattr(parent_si, "sim_id", None)) or {
+                "sim_info": parent_si, "sim_id": getattr(parent_si, "sim_id", None), "name": _name(parent_si),
+                "status": "", "friendship": None, "romance": None, "in_household": False}
+            tie = (1100.0, f"the baby's other parent (friendship {entry.get('friendship')})")
+            if best is None or tie[0] > best[0]:
+                best = (tie[0], hs, entry, tie[1])
+            continue
         for sender in senders:
             entry = by_id.get(getattr(sender, "sim_id", None))
             if not entry:
                 continue
             try:
                 if contact_prefs.is_muted(getattr(hs, "sim_id", None), getattr(sender, "sim_id", None)):
+                    _log(f"{_name(hs)} has {_name(sender)} muted -- not a recipient")
                     continue
             except Exception:
                 pass
             tie = _tie_strength(hs, entry, sender)
             if tie is None:
+                _log(f"{_name(hs)}: no qualifying tie to {_name(sender)} "
+                     f"(friendship {entry.get('friendship')}, no family label; close friend needs {_CLOSE_FRIEND_MIN})")
                 continue
             if best is None or tie[0] > best[0]:
                 best = (tie[0], hs, entry, tie[1])
@@ -231,6 +303,13 @@ def _fire_announcement(recipient, contact, parent_si, label, dry_run=False):
             milestones.scan_sims([parent_si, contact.get("sim_info")])
         except Exception as e:
             _log(f"milestone refresh failed: {type(e).__name__}: {e}")
+        # Presence captured before the milestone existed (hook path): write it now.
+        try:
+            from . import milestones
+            for s in _present_at_birth.pop(getattr(parent_si, "sim_id", None), set()):
+                milestones.record_told(getattr(parent_si, "sim_id", None), getattr(parent_si, "sim_id", None), s, how="present")
+        except Exception:
+            pass
         from . import phone
         # Name WHOSE baby. Without this, when the recipient has also just
         # given birth, the model merged the two and announced the
@@ -259,6 +338,17 @@ def _fire_announcement(recipient, contact, parent_si, label, dry_run=False):
         # Test mode never journals: the pretend announcement must not
         # become canon for later prompts.
         phone.generate_text_for(recipient, contact, prompt_suffix=suffix, skip_journal=dry_run)
+        if not dry_run:
+            # Remember who was told, so the OTHER parent doesn't re-announce
+            # to the same household later (Luca told Francesca; Martha then
+            # called Francesca's husband Aksel with "we had the baby today").
+            try:
+                from . import milestones
+                milestones.record_told(getattr(parent_si, "sim_id", None),
+                                       getattr(contact.get("sim_info"), "sim_id", None),
+                                       getattr(recipient, "sim_id", None))
+            except Exception as e:
+                _log(f"record_told failed: {type(e).__name__}: {e}")
     except Exception as e:
         _log(f"_fire_announcement raised: {type(e).__name__}: {e}")
 
@@ -280,18 +370,59 @@ def _on_birth(tracker, offspring_sim_infos):
         _log(f"_on_birth raised: {type(e).__name__}: {e}")
 
 
-def announce_birth(parent_si, partner_si, dedup_key=None):
+def announce_birth(parent_si, partner_si, dedup_key=None, capture_presence=True):
     """Shared entry for every birth detector (complete_pregnancy hook,
     snapshot watcher). Picks the strongest tie into the active household
     and schedules the announcement text. `dedup_key` guards against the
-    same birth being reported by more than one detector."""
+    same birth being reported by more than one detector.
+    `capture_presence`: the birth was JUST detected, so whoever is on the
+    lot with the parent saw it. The sweep passes False -- hours later, on
+    whatever lot the player is on, that would be the wrong crowd."""
     try:
         key = dedup_key or ("parent", getattr(parent_si, "sim_id", None))
         pkey = ("parent", getattr(parent_si, "sim_id", None))
         if key in _announced or pkey in _announced:
             return
-        _announced.add(key)
-        _announced.add(pkey)
+        pid_int = getattr(parent_si, "sim_id", None)
+        # Who was there? If the parent is on the active lot right now (the
+        # birth was just detected), everyone else on it saw the baby arrive
+        # -- the mother doesn't text the father standing next to her.
+        present = set(_present_at_birth.get(pid_int) or ())   # deferred from an earlier detection
+        if not present and capture_presence:
+            try:
+                import services
+                from . import phone
+                lot = phone._get_sims_on_active_lot()
+                if pid_int in lot:
+                    sm = services.sim_info_manager()
+                    for s in lot:
+                        if s == pid_int:
+                            continue
+                        other = sm.get(s)
+                        if other is not None and _is_teen_plus(other):
+                            present.add(s)
+            except Exception:
+                present = set()
+        if present:
+            _present_at_birth[pid_int] = present
+            try:
+                from . import milestones
+                # Writes only once the pregnancy_end exists (the hook fires
+                # before any scan); until then it stays deferred here.
+                if milestones.record_told(pid_int, pid_int, next(iter(present)), how="present"):
+                    for s in present:
+                        milestones.record_told(pid_int, pid_int, s, how="present")
+                    _present_at_birth.pop(pid_int, None)
+            except Exception:
+                pass
+        # Anyone already told (texted, or present at the birth) and their
+        # households are not recipients. Durable across restarts, since the
+        # told record lives on the milestone -- the scan after a reload
+        # can't re-announce to the same household.
+        try:
+            exclude = _already_knows(pid_int, present)
+        except Exception:
+            exclude = set()
         # Config knob (llamafone.cfg: birth_announcements). Checked here
         # rather than at hook install so `llama.reload` toggles it live.
         # The birth itself is still recorded as a milestone either way.
@@ -299,13 +430,21 @@ def announce_birth(parent_si, partner_si, dedup_key=None):
             from . import config
             if not config.get_birth_announcements_enabled():
                 _log(f"birth of {_name(parent_si)}'s baby recorded; announcements disabled in config -- no text")
+                _announced.add(key)
+                _announced.add(pkey)
                 return
         except Exception:
             pass
-        pick = _best_announcement(parent_si, partner_si)
+        pick = _best_announcement(parent_si, partner_si, exclude=exclude)
         if pick is None:
-            _log(f"birth: {_name(parent_si)} -- no family / close-friend tie to the active household; no announcement")
+            # Not marked announced: the player may switch to the household
+            # that should get the text (Ingrid delivers while played, then
+            # the player switches to Ben). _sweep_unannounced retries.
+            _log(f"birth: {_name(parent_si)} -- no family / close-friend tie to the active household; "
+                 f"no announcement for now")
             return
+        _announced.add(key)
+        _announced.add(pkey)
         recipient, contact, label = pick
         delay = random.randint(*_DELAY_RANGE_SECONDS)
         _log(f"birth: {_name(parent_si)} -> scheduling announcement from {contact.get('name')} to {_name(recipient)} in {delay}s ({label})")
@@ -337,16 +476,49 @@ _WATCH_INTERVAL_SECONDS = 120
 _watcher_started = False
 
 
+def _capture_new_pregnancies(snaps):
+    """Household sims who are pregnant RIGHT NOW but whose snapshot doesn't
+    say so yet (a scan hasn't run since conception). Capture them so the
+    watcher tracks them -- snapshots otherwise refresh only on save load
+    and before a text / call prompt, so a brand-new pregnancy was
+    invisible to llama.birthwatch until the next prompt."""
+    import services
+    from . import milestones
+    newly = []
+    try:
+        hh = services.active_household()
+        if hh is None:
+            return newly
+        for si in hh.sim_info_gen():
+            try:
+                if not getattr(si, "is_pregnant", False):
+                    continue
+                snap = snaps.get(str(getattr(si, "sim_id", None))) or {}
+                if snap.get("is_pregnant"):
+                    continue
+                newly.append(si)
+            except Exception:
+                continue
+        if newly:
+            _log(f"watcher: newly pregnant in the household, capturing: {[_name(s) for s in newly]}")
+            milestones.scan_sims(newly)
+    except Exception as e:
+        _log(f"_capture_new_pregnancies raised: {type(e).__name__}: {e}")
+    return newly
+
+
 def _watch_once():
     import services
     from . import milestones, save_id
     if services.current_zone() is None or save_id.get_current_save_id() is None:
         return
     snaps = milestones._load_snapshots()
+    if _capture_new_pregnancies(snaps):
+        snaps = milestones._load_snapshots()
     sm = services.sim_info_manager()
     heartbeat = []
     for sid_key, snap in list(snaps.items()):
-        if not snap.get("is_pregnant"):
+        if not isinstance(snap, dict) or not snap.get("is_pregnant"):
             continue
         try:
             si = sm.get(int(sid_key))
@@ -364,6 +536,14 @@ def _watch_once():
             + (f" +newborn({', '.join(_name(b) for b in newborns)})" if newborns else "")
         )
         if ("parent", getattr(si, "sim_id", None)) in _announced:
+            continue
+        newborn_ids = {getattr(b, "sim_id", None) for b in newborns} - {None}
+        if snap.get("birth_recorded") and snap.get("birth_recorded_babies") is not None \
+                and newborn_ids and newborn_ids <= set(snap.get("birth_recorded_babies") or []):
+            # record_birth_now already wrote THIS birth (tracker still says
+            # pregnant); a restart used to re-record and re-announce it.
+            # Different babies (she delivered again after a rolled-back
+            # session) fall through and count as a new birth.
             continue
         if getattr(si, "is_dead", False):
             continue
@@ -389,7 +569,7 @@ def _watch_once():
         if still:
             _log(f"watcher: {_name(si)} still flagged pregnant but has newborn {[_name(b) for b in newborns]} -- treating as a birth (tracker not cleared)")
             try:
-                milestones.record_birth_now(si, pid)
+                milestones.record_birth_now(si, pid, baby_ids=newborn_ids)
             except Exception as e:
                 _log(f"watcher: record_birth_now failed: {type(e).__name__}: {e}")
         else:
@@ -401,6 +581,93 @@ def _watch_once():
         announce_birth(si, partner_si)
     if heartbeat:
         _log("watcher pass: " + "; ".join(heartbeat))
+    try:
+        _sweep_unannounced()
+    except Exception as e:
+        _log(f"sweep raised: {type(e).__name__}: {e}")
+
+
+_SWEEP_WINDOW_DAYS = 1.5
+
+
+def _in_touch_since(parent_id, household, since_ticks):
+    """Has anyone in the parent's household had a Llamafone text, call, or
+    comment exchange with anyone in `household` since the birth? Then
+    they've been in touch -- the player may well have told him on that
+    call -- and an announcement text now would repeat it. Structural
+    check on the journal; the message text isn't read."""
+    try:
+        from . import journal
+        a = {str(i) for i in _household_ids_of(parent_id)}
+        b = {str(getattr(m, "sim_id", None)) for m in household.sim_info_gen()}
+        for e in journal._load():
+            t = e.get("ticks")
+            if t is None or since_ticks is None or int(t) < int(since_ticks):
+                continue
+            if e.get("type") == "post":   # seeing a post isn't contact
+                continue
+            si, ri = str(e.get("sim_id")), str(e.get("recipient_id"))
+            if (si in a and ri in b) or (si in b and ri in a):
+                return True
+    except Exception:
+        pass
+    return False
+_sweep_tried = set()   # (parent_id, active_household_id): one try per household per birth
+
+
+def _sweep_unannounced():
+    """Recent births with no told record whose parent is NOT in the
+    active household: announce them now. Catches the birth that happened
+    while the player controlled the parent's household (skipped as
+    'player announces their own birth') once they switch to a household
+    that should hear about it. One attempt per (birth, household)."""
+    import services
+    from . import milestones
+    hh = services.active_household()
+    if hh is None:
+        return
+    hh_id = getattr(hh, "id", None)
+    now = milestones._now_sim_ticks()
+    if now is None:
+        return
+    sm = services.sim_info_manager()
+    ends = [e for e in milestones._load_milestones()
+            if e.get("type") == "pregnancy_end" and not e.get("mirror_of")]
+    hh_member_ids = {getattr(m, "sim_id", None) for m in hh.sim_info_gen()}
+    for e in ends:
+        st = e.get("sim_ticks")
+        if st is None or (now - st) / milestones._TICKS_PER_DAY > _SWEEP_WINDOW_DAYS:
+            continue
+        try:
+            pid = int(e.get("sim_id"))
+        except Exception:
+            continue
+        if _already_knows(pid, ()) & hh_member_ids:
+            continue   # this household was told (or was there)
+        if _in_touch_since(pid, hh, st):
+            _sweep_tried.add((pid, hh_id))
+            _log(f"sweep: this household has talked to the parent's household since the birth "
+                 f"(text / call / comment) -- not sending a separate announcement")
+            continue
+        if ("parent", pid) in _announced or (pid, hh_id) in _sweep_tried:
+            continue
+        _sweep_tried.add((pid, hh_id))
+        si = sm.get(pid)
+        if si is None or getattr(si, "household_id", None) == hh_id:
+            continue
+        partner_si = None
+        for m in ends_mirrors(milestones, e):
+            partner_si = sm.get(int(m.get("sim_id"))) if m.get("sim_id") else None
+            if partner_si is not None:
+                break
+        _log(f"sweep: recent birth of {_name(si)}'s baby not yet announced to this household -- trying")
+        announce_birth(si, partner_si, capture_presence=False)
+
+
+def ends_mirrors(milestones, e):
+    return [m for m in milestones._load_milestones()
+            if m.get("type") == "pregnancy_end" and m.get("mirror_of") == str(e.get("sim_id"))
+            and m.get("sim_ticks") == e.get("sim_ticks")]
 
 
 def watch_report():
@@ -414,8 +681,12 @@ def watch_report():
         if services.current_zone() is None or save_id.get_current_save_id() is None:
             return ["zone not loaded / no save id -- watcher idle"]
         snaps = milestones._load_snapshots()
+        fresh = _capture_new_pregnancies(snaps)
+        if fresh:
+            out.append(f"newly pregnant, captured just now: {', '.join(_name(s) for s in fresh)}")
+            snaps = milestones._load_snapshots()
         sm = services.sim_info_manager()
-        flagged = [(k, v) for k, v in snaps.items() if v.get("is_pregnant")]
+        flagged = [(k, v) for k, v in snaps.items() if isinstance(v, dict) and v.get("is_pregnant")]
         out.append(f"{len(flagged)} sim(s) flagged pregnant in the last snapshot")
         for sid_key, snap in flagged:
             try:
@@ -436,6 +707,7 @@ def watch_report():
     except Exception as e:
         out.append(f"report failed: {type(e).__name__}: {e}")
     try:
+        _sweep_tried.clear()   # a manual pass is a retry
         _watch_once()
     except Exception as e:
         out.append(f"watch pass raised: {type(e).__name__}: {e}")

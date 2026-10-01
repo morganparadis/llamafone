@@ -278,6 +278,25 @@ def _apply_one_direction(source_si, target_si, friendship_delta, romance_delta):
         _log(f"_apply_one_direction outer failure: {type(e).__name__}: {e}")
 
 
+_ADULT_AGES = ("YOUNGADULT", "YOUNG_ADULT", "ADULT", "ELDER")
+
+
+def _age_key(si):
+    try:
+        return str(getattr(si, "age", "")).replace("Age.", "").upper().replace(" ", "")
+    except Exception:
+        return ""
+
+
+def _romance_allowed(sim_a, sim_b):
+    """Romance only between two teens or two young-adults-and-up. Unknown
+    ages fail closed."""
+    a, b = _age_key(sim_a), _age_key(sim_b)
+    if a == "TEEN" and b == "TEEN":
+        return True
+    return a in _ADULT_AGES and b in _ADULT_AGES
+
+
 def apply_from_mood(sim_a, sim_b, mood):
     """Look up the delta for `mood`, cap it against config, and apply
     to BOTH directions of the sim_a<->sim_b relationship. Bidirectional
@@ -323,6 +342,11 @@ def apply_from_mood(sim_a, sim_b, mood):
 
     friendship_delta = _clamp(friendship_base, cap)
     romance_delta = _clamp(romance_base, cap)
+    if romance_delta and not _romance_allowed(sim_a, sim_b):
+        # Never move romance across the teen / adult line (or for kids).
+        # Llamagram brings adult strangers and fans onto a teen's public
+        # post, so a "flirty" comment must not touch the romance track.
+        romance_delta = 0
     if friendship_delta == 0 and romance_delta == 0:
         return
 

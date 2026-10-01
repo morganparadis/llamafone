@@ -405,6 +405,8 @@ def build_package(resources, out_path):
 STRINGS = {
     0x00CA1E00: "Llamafone",
     0x00CA1F00: "Llamadate",
+    0x00CA2000: "Llamagram Post",
+    0x00CA2100: "Llamagram Notifications",
 }
 
 # STBL packaging:

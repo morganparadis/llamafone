@@ -22,6 +22,8 @@ _PHONE_INTERACTION_NAMES = (
     "Llamafone_Call",
     "Llamafone_Text",
     "Llamafone_Dating",
+    "Llamafone_Post",
+    "Llamafone_Notifications",
     "Llamafone_Settings",
 )
 

@@ -595,7 +595,7 @@ _REACTION_TRAITS = (
 )
 
 
-def pregnancy_circumstances(sim_info, partner_id=None, addressee_id=None):
+def pregnancy_circumstances(sim_info, partner_id=None, addressee_id=None, after_birth=False):
     """Facts that shape how a sim (and the people around them) would
     FEEL about this pregnancy -- so the AI can react in character
     instead of defaulting to 'thrilled'. Returns a list of short
@@ -699,24 +699,37 @@ def pregnancy_circumstances(sim_info, partner_id=None, addressee_id=None):
     # Existing kids and money.
     try:
         hh = getattr(sim_info, "household", None)
-        if hh is not None:
-            # The newborn itself is not an "existing kid" -- counting it
-            # told the AI a first-time mother already had a child.
-            newborn_ids = set()
+        if hh is None:
             try:
                 from . import births as _births
-                newborn_ids = {getattr(b, "sim_id", None) for b in
-                               _births._newborns(sim_info, max_age_days=3, require_parent=True)}
+                hh = _births._household_of(sim_info)   # None for off-lot NPCs on sim_info
             except Exception:
-                newborn_ids = set()
+                hh = None
+        if hh is not None:
             kids = 0
             for si in hh.sim_info_gen():
-                if getattr(si, "sim_id", None) in newborn_ids:
-                    continue
                 a = str(getattr(si, "age", "")).replace("Age.", "")
                 if a in ("BABY", "INFANT", "TODDLER", "CHILD", "TEEN"):
                     kids += 1
-            facts.append("first child" if kids == 0 else f"already has {kids} kid(s) at home")
+            if after_birth:
+                # Count INCLUDING the new baby. "Already has N" after a birth
+                # depended on whether the newborn still read as a BABY: once
+                # Maxwell aged up to infant he was counted as an existing kid
+                # and Martha announced "two kids in the house".
+                facts.append("this is their first child" if kids <= 1
+                             else f"{kids} kids at home now, including the new baby")
+            else:
+                # Before the birth -- but if the game hasn't cleared the
+                # pregnancy flag yet, a just-born baby is already in the
+                # household: don't count it as an existing kid.
+                try:
+                    from . import births as _births
+                    newborn_ids = {getattr(b, "sim_id", None) for b in
+                                   _births._newborns(sim_info, max_age_days=3, require_parent=True)}
+                except Exception:
+                    newborn_ids = set()
+                kids -= sum(1 for si in hh.sim_info_gen() if getattr(si, "sim_id", None) in newborn_ids)
+                facts.append("first child" if kids <= 0 else f"already has {kids} kid(s) at home")
             try:
                 money = int(getattr(getattr(hh, "funds", None), "money", None))
                 if money < 2000:
@@ -808,7 +821,53 @@ def _capture(sim_info, active_household_id):
 _AGE_ORDER = ("BABY", "INFANT", "TODDLER", "CHILD", "TEEN", "YOUNGADULT", "YOUNG_ADULT", "ADULT", "ELDER")
 
 
-def _diff(prev, curr, name):
+def _young_child_ids(sim_info):
+    """Ids of the BABY / INFANT children of this sim in her household
+    (parent checked through the baby's genealogy when readable, accepted
+    on age alone when not). None when the household can't be read."""
+    try:
+        from . import births
+        hh = births._household_of(sim_info)
+        if hh is None:
+            return None
+        sid = _safe(sim_info, "sim_id", None)
+        out = set()
+        for si in hh.sim_info_gen():
+            if str(getattr(si, "age", "")).replace("Age.", "") not in ("BABY", "INFANT"):
+                continue
+            try:
+                from sims.genealogy_tracker import FamilyRelationshipIndex
+                gen = getattr(si, "genealogy", None)
+                pids = set()
+                if gen is not None:
+                    for idx in (FamilyRelationshipIndex.MOTHER, FamilyRelationshipIndex.FATHER):
+                        try:
+                            p = gen.get_family_relationship(idx)
+                            if p:
+                                pids.add(p)
+                        except Exception:
+                            pass
+                if pids and sid not in pids:
+                    continue
+            except Exception:
+                pass
+            out.add(getattr(si, "sim_id", None))
+        return out
+    except Exception:
+        return None
+
+
+def _has_young_child(sim_info):
+    """Does a BABY or INFANT of this sim live in her household? Used to
+    tell a birth from the game clearing a pregnancy (culling an off-lot
+    sim, MCCC clear-pregnancy) -- the watcher already made this
+    distinction; the load scan didn't. Unreadable household -> True, so
+    a real birth is never suppressed."""
+    ids = _young_child_ids(sim_info)
+    return True if ids is None else bool(ids)
+
+
+def _diff(prev, curr, name, sim_info=None):
     """Compare two snapshots; return a list of milestone dicts."""
     events = []
     if not prev:
@@ -880,8 +939,18 @@ def _diff(prev, curr, name):
     # re-fired pregnancy_start while she still reads as pregnant, and no
     # second pregnancy_end when the flag finally flips.
     birth_already_recorded = bool(prev.get("birth_recorded"))
+    if birth_already_recorded and sim_info is not None and prev.get("birth_recorded_babies") is not None:
+        # The recorded birth was of specific babies. If she now has a
+        # DIFFERENT baby (the earlier session was rolled back without
+        # saving and she delivered again), this is a new birth.
+        kids = _young_child_ids(sim_info)
+        recorded = {int(x) for x in (prev.get("birth_recorded_babies") or [])}
+        if kids is not None and kids and not kids <= recorded:
+            birth_already_recorded = False
     if birth_already_recorded and curr.get("is_pregnant"):
         curr["birth_recorded"] = True
+        if prev.get("birth_recorded_babies") is not None:
+            curr["birth_recorded_babies"] = list(prev.get("birth_recorded_babies"))
     # Legacy-upgrade guard: a snapshot from before pregnancy_visibility
     # existed shows is_pregnant=True but the field is missing. The old
     # code already recorded pregnancy_start at conception for that sim
@@ -912,6 +981,10 @@ def _diff(prev, curr, name):
     # the confirmed phase). Otherwise legacy-upgrade users would lose
     # their birth milestones entirely.
     if (prev.get("is_pregnant") and not curr.get("is_pregnant") and not curr.get("is_dead")
+            and not birth_already_recorded and sim_info is not None and not _has_young_child(sim_info)):
+        _log(f"{name}: pregnancy flag cleared but no baby of hers in the household -- "
+             f"culled / cleared, not a birth; no pregnancy_end recorded")
+    elif (prev.get("is_pregnant") and not curr.get("is_pregnant") and not curr.get("is_dead")
             and not birth_already_recorded):
         ev = {
             "type": "pregnancy_end",
@@ -1043,7 +1116,7 @@ def scan_and_record():
                 if not curr:
                     continue
                 prev = snapshots.get(sid_key)
-                events = _diff(prev, curr, curr.get("name") or "Someone")
+                events = _diff(prev, curr, curr.get("name") or "Someone", sim_info=sim_info)
                 for ev in events:
                     ev["timestamp"] = now_iso
                     # In-game tick when this milestone was captured. Used
@@ -1074,7 +1147,6 @@ def scan_and_record():
                      f"{_save_id.get_current_save_id()!r}); discarding results, nothing written")
                 return
             _save_snapshots(snapshots)
-            _announce_births(born)
             # One-time backfill: pregnancy events recorded before partner
             # mirroring existed get a mirror onto the spouse now, so the
             # other parent's "recent life" shows the baby too.
@@ -1087,11 +1159,96 @@ def scan_and_record():
                 _log(f"Recorded {new_count} new milestone(s) across {len(sims)} sim(s).")
             else:
                 _log(f"Scanned {len(sims)} sim(s), no new milestones since last scan.")
+            # After the save: the announcer writes "who was told / present"
+            # onto the pregnancy_end we just saved, and nothing overwrites it.
+            _announce_births(born)
     except Exception as e:
         _log(f"scan_and_record raised: {type(e).__name__}: {e}")
 
 
-def record_birth_now(sim_info, partner_id=None):
+def record_told(parent_id, by_id, to_id, how="text"):
+    """Record that `by_id` announced `parent_id`'s latest birth to `to_id`
+    (the automatic birth announcement). Stored on the pregnancy_end event
+    and its partner mirror, so prompts for EITHER parent can see that the
+    recipient's household already knows -- no guessing from message text."""
+    pid = str(parent_id)
+    with _lock:
+        milestones = _load_milestones()
+        ends = [e for e in milestones if e.get("type") == "pregnancy_end"
+                and (str(e.get("sim_id")) == pid or str(e.get("mirror_of")) == pid)]
+        if not ends:
+            return False
+        latest = max(e.get("sim_ticks") or 0 for e in ends)
+        rec = {"by": str(by_id), "to": str(to_id), "ticks": _now_sim_ticks(), "how": how}
+        for e in ends:
+            if (e.get("sim_ticks") or 0) == latest:
+                told = e.setdefault("told", [])
+                if not any(t.get("by") == rec["by"] and t.get("to") == rec["to"] for t in told):
+                    told.append(rec)
+        _save_milestones(milestones)
+    _log(f"record_told: birth of {pid}'s baby {'witnessed by' if how == 'present' else 'announced by ' + str(by_id) + ' to'} {to_id}")
+    return True
+
+
+def told_recipient_ids(parent_id, within_days=2.0):
+    """Sim ids already told about this parent's most recent birth (texted
+    or present at it), if that birth is within `within_days`."""
+    try:
+        pid = str(parent_id)
+        now = _now_sim_ticks()
+        ends = [e for e in _load_milestones() if e.get("type") == "pregnancy_end"
+                and (str(e.get("sim_id")) == pid or str(e.get("mirror_of")) == pid)]
+        if not ends:
+            return set()
+        latest = max(e.get("sim_ticks") or 0 for e in ends)
+        if now is not None and latest and (now - latest) / _TICKS_PER_DAY > within_days:
+            return set()
+        out = set()
+        for e in ends:
+            if (e.get("sim_ticks") or 0) == latest:
+                for t in e.get("told") or []:
+                    if t.get("to"):
+                        out.add(str(t.get("to")))
+        return out
+    except Exception:
+        return set()
+
+
+def birth_already_announced(parent_id, within_days=2.0):
+    """True if this parent's most recent birth (within `within_days` in-game
+    days) already carries a told record -- the announcement went out."""
+    try:
+        pid = str(parent_id)
+        now = _now_sim_ticks()
+        ends = [e for e in _load_milestones() if e.get("type") == "pregnancy_end"
+                and (str(e.get("sim_id")) == pid or str(e.get("mirror_of")) == pid)]
+        if not ends:
+            return False
+        latest = max(e.get("sim_ticks") or 0 for e in ends)
+        if now is not None and latest and (now - latest) / _TICKS_PER_DAY > within_days:
+            return False   # an older birth; a new one hasn't been recorded yet
+        return any(e.get("told") for e in ends if (e.get("sim_ticks") or 0) == latest)
+    except Exception:
+        return False
+
+
+def told_households(parent_ids):
+    """[(by_id, to_id, ticks, how)] for the latest births of these parents.
+    `how` is "text" (the announcement went out) or "present" (they were
+    on the lot when the baby arrived)."""
+    ids = {str(i) for i in parent_ids}
+    out = []
+    for e in _load_milestones():
+        if e.get("type") != "pregnancy_end":
+            continue
+        if str(e.get("sim_id")) not in ids and str(e.get("mirror_of")) not in ids:
+            continue
+        for t in e.get("told") or []:
+            out.append((t.get("by"), t.get("to"), t.get("ticks"), t.get("how") or "text"))
+    return out
+
+
+def record_birth_now(sim_info, partner_id=None, baby_ids=None):
     """Record a birth for a sim whose pregnancy tracker still says
     pregnant (baby exists, flag not cleared). Writes pregnancy_end plus
     the partner mirror, and flags the snapshot so the eventual flag flip
@@ -1125,6 +1282,7 @@ def record_birth_now(sim_info, partner_id=None):
                 milestones.append(m)
         snap = dict(snapshots.get(sid_key) or {})
         snap["birth_recorded"] = True
+        snap["birth_recorded_babies"] = sorted(int(b) for b in (baby_ids or []) if b is not None)
         snapshots[sid_key] = snap
         _save_snapshots(snapshots)
         _save_milestones(milestones)
@@ -1238,7 +1396,7 @@ def scan_sims(sim_infos):
                 if not curr:
                     continue
                 prev = snapshots.get(sid_key)
-                events = _diff(prev, curr, curr.get("name") or "Someone")
+                events = _diff(prev, curr, curr.get("name") or "Someone", sim_info=sim_info)
                 for ev in events:
                     ev["timestamp"] = now_iso
                     # In-game tick when this milestone was captured. Used
@@ -1269,10 +1427,10 @@ def scan_sims(sim_infos):
                      f"{_save_id.get_current_save_id()!r}); discarding results, nothing written")
                 return
             _save_snapshots(snapshots)
-            _announce_births(born)
             if new_count > 0:
                 _save_milestones(milestones)
                 _log(f"Targeted scan: {new_count} new milestone(s) across {len(sim_infos)} sim(s).")
+            _announce_births(born)   # after the save, see scan_and_record
     except Exception as e:
         _log(f"scan_sims raised: {type(e).__name__}: {e}")
 
@@ -1457,26 +1615,21 @@ def format_for_prompt(sim_info, contact_id=None, mark_seen=True, known_by_defaul
             else:
                 deduped.append(e)
         events = deduped
+        # Identical copies (same type, text, and time -- e.g. a partner
+        # mirror written twice) would print the same line twice.
+        _seen_keys, _unique = set(), []
+        for e in events:
+            k = (e.get("type"), e.get("description"), e.get("sim_ticks"))
+            if k in _seen_keys:
+                continue
+            _seen_keys.add(k)
+            _unique.append(e)
+        events = _unique
         if not events:
             return ""
         now_ticks = _now_sim_ticks()
         _viewer = str(contact_id) if contact_id is not None else None
 
-        def _participant(e):
-            return _viewer is not None and _viewer in (str(e.get("sim_id")), str(e.get("mirror_of")))
-
-        def _known_outright(e):
-            return known_by_default or _participant(e)
-
-        # Once a BIRTH is known to this contact (heard, or they live with
-        # her), the earlier "is expecting" line is stale -- drop it so the
-        # prompt doesn't say "expecting" and "had the baby" side by side.
-        # If the birth is NOT yet heard, keep "expecting": that is exactly
-        # what this contact still believes.
-        _birth_known = any(
-            e.get("type") == "pregnancy_end" and (_known_outright(e) or _has_heard(e, now_ticks, knowledge))
-            for e in events
-        )
         _all_for_partner = None
 
         def _other_parent_id(e):
@@ -1498,6 +1651,26 @@ def format_for_prompt(sim_info, contact_id=None, mark_seen=True, known_by_defaul
                         and m.get("sim_ticks") == e.get("sim_ticks")):
                     return m.get("sim_id")
             return None
+
+        def _participant(e):
+            # The sim the event is about, or (for a mirror) the pregnant
+            # sim it points at. NOT the other parent when they live
+            # elsewhere: nobody has told him yet -- he hears through the
+            # news-spread model, at parent speed (phone._contact_knowledge).
+            return _viewer is not None and _viewer in (str(e.get("sim_id")), str(e.get("mirror_of")))
+
+        def _known_outright(e):
+            return known_by_default or _participant(e)
+
+        # Once a BIRTH is known to this contact (heard, or they live with
+        # her), the earlier "is expecting" line is stale -- drop it so the
+        # prompt doesn't say "expecting" and "had the baby" side by side.
+        # If the birth is NOT yet heard, keep "expecting": that is exactly
+        # what this contact still believes.
+        _birth_known = any(
+            e.get("type") == "pregnancy_end" and (_known_outright(e) or _has_heard(e, now_ticks, knowledge))
+            for e in events
+        )
         if _birth_known:
             events = [e for e in events if e.get("type") != "pregnancy_start"]
         lines = ["Recent in their life:"]
@@ -1598,7 +1771,7 @@ def format_for_prompt(sim_info, contact_id=None, mark_seen=True, known_by_defaul
             if (e.get("type") == "pregnancy_start" and ev_vis in ("confirmed", "visible")) or _recent_birth:
                 try:
                     facts = (pregnancy_circumstances(ev_sim, partner_id=_other_parent_id(e),
-                                                     addressee_id=addressee_id)
+                                                     addressee_id=addressee_id, after_birth=(e.get("type") == "pregnancy_end"))
                              if ev_sim is not None else [])
                 except Exception:
                     facts = []

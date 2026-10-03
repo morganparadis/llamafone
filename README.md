@@ -23,7 +23,7 @@ A phone-first AI mod for The Sims 4. Random sims call and text you in character 
 4. **In The Sims 4:** **Game Options > Other > enable Custom Content and Script Mods**, then restart the game.
 5. You'll see a notification popup when the mod loads. Type `llama.status` in the cheat console to confirm setup and see all commands. Or tap your sim's phone → the Llamafone tile.
 
-If you forget the cfg, the mod writes a default one to your Mods folder on first launch with `api_key = YOUR_API_KEY_HERE`. You'll get a "not configured yet" notification directing you to edit it.
+If you forget the cfg, the mod writes a default one to your Mods folder on first launch with `api_key = YOUR_API_KEY_HERE`. You'll get a "not configured yet" notification directing you to edit it. This works wherever your Sims 4 folder lives (OneDrive, another drive, non-English folder names). Type `llama.status` to see the provider, the cfg file, and the Mods folder Llamafone is using.
 
 No Python install required for end users — the release ships compiled `.pyc` bytecode.
 

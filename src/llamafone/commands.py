@@ -63,6 +63,9 @@ try:
             output(f"[Llamafone]   Language      : {config.get_language()}")
         else:
             output("[Llamafone] ✗ NOT configured — edit llamafone.cfg and add your API key")
+        output(f"[Llamafone] Provider: {config.get_provider()}")
+        output(f"[Llamafone] Config file: {config.config_path() or 'NOT FOUND'}")
+        output(f"[Llamafone] Mods folder: {config.mods_folder() or 'NOT FOUND'}")
 
         output(f"[Llamafone] {auto_events.status()}")
         output(f"[Llamafone] Journal: {journal.get_entry_count()} entries saved")
@@ -105,6 +108,7 @@ try:
             output("[Llamafone] Config reloaded. API key found — you're good to go!")
         else:
             output("[Llamafone] Config reloaded. Still no API key found.")
+            output(f"[Llamafone] Config file: {config.config_path() or 'NOT FOUND'}")
             output("[Llamafone] Make sure llamafone.cfg is in your Mods folder.")
 
     @sims4.commands.Command("llama.saveinfo", command_type=sims4.commands.CommandType.Live)

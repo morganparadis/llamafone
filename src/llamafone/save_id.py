@@ -396,11 +396,25 @@ def _sanitize_for_path(name):
 
 
 def _saves_folder():
-    """Sims 4's saves folder. Stable path on Windows + macOS."""
-    return os.path.join(
+    """Sims 4's saves folder: next to the Mods folder the mod found
+    (handles a Documents folder moved by OneDrive or to another drive,
+    and localized game folder names). Players who already have Llamafone
+    data at the classic <profile>/Documents path keep using it, so no
+    existing data moves."""
+    legacy = os.path.join(
         os.path.expanduser("~"), "Documents",
         "Electronic Arts", "The Sims 4", "saves",
     )
+    if os.path.isdir(os.path.join(legacy, "Llamafone")):
+        return legacy
+    try:
+        from . import config
+        game_dir = config.game_user_folder()
+        if game_dir:
+            return os.path.join(game_dir, "saves")
+    except Exception:
+        pass
+    return legacy
 
 
 def data_dir():

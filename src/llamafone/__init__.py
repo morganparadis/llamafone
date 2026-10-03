@@ -15,7 +15,7 @@ Commands (open cheat console with Ctrl+Shift+C):
 """
 
 MOD_NAME = "Llamafone"
-MOD_VERSION = "3.8.0"
+MOD_VERSION = "3.8.1"
 
 # Captured at module-load time -- the moment Sims 4 imported this build.
 # Used in prompts so a llama.dumpprompt definitively shows which load
@@ -227,11 +227,19 @@ try:
                         f"Type 'llama.status' in the cheat console for all commands."
                     )
                     notifications.show(MOD_NAME, body)
+                elif not config.config_path():
+                    body = (
+                        f"v{MOD_VERSION} loaded but couldn't find llamafone.cfg.\n"
+                        f"Put llamafone.cfg in your Mods folder (next to Llamafone.ts4script),\n"
+                        f"then type 'llama.reload' in the cheat console."
+                    )
+                    notifications.show(MOD_NAME, body)
                 else:
                     body = (
                         f"v{MOD_VERSION} loaded but NOT configured.\n"
                         f"Edit llamafone.cfg and add your API key,\n"
-                        f"then type 'llama.reload' in the cheat console."
+                        f"then type 'llama.reload' in the cheat console.\n"
+                        f"Using: {config.config_path()}"
                     )
                     notifications.show(MOD_NAME, body)
 

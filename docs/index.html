@@ -925,6 +925,20 @@ fast_model    = llama3.2:3b</code></pre>
   <ol class="changelog-list">
 
     <li class="changelog-entry">
+      <div class="changelog-date">October 3, 2026</div>
+      <div class="changelog-body">
+        <h3>Config file fix (v3.8.1)</h3>
+        <p>A fix for players whose <code>llamafone.cfg</code> was never created, or whose settings were ignored. Drop-in over v3.8.</p>
+        <ul>
+          <li><strong>The cfg is created and found wherever your Sims 4 folder lives.</strong> Llamafone used to look for the Mods folder only at <code>Documents\Electronic Arts\The Sims 4\Mods</code> in your user folder. If Windows keeps your Documents in OneDrive or on another drive, the cfg was never created, and a cfg you added yourself was never read, so the mod fell back to its defaults (Claude, no key) even when you'd picked Ollama. Llamafone now finds the Mods folder it's installed in, and works with non-English game folders like "Die Sims 4".</li>
+          <li><strong><code>llamafone.cfg.txt</code> works too.</strong> Windows hides file extensions, so a cfg saved from Notepad can end up named <code>llamafone.cfg.txt</code>. Llamafone now reads it.</li>
+          <li><strong><code>llama.status</code> shows what's in use:</strong> the provider, the cfg file, and the Mods folder, or "NOT FOUND". If the cfg can't be found at startup, the popup now says so instead of asking for an API key.</li>
+          <li>Your per-save Llamafone data stays where it is.</li>
+        </ul>
+      </div>
+    </li>
+
+    <li class="changelog-entry">
       <div class="changelog-date">October 1, 2026</div>
       <div class="changelog-body">
         <h3>Llamagram: social media for your sims (v3.8)</h3>

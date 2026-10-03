@@ -211,31 +211,138 @@ def _write_default_config(target_path):
         return False
 
 
+_mods_folder_cache = None
+_last_config_path = None
+
+
+def _documents_folders():
+    """Where Windows actually keeps this user's Documents folder, most
+    authoritative first. Documents is often NOT <profile>/Documents:
+    OneDrive backup moves it to <profile>/OneDrive/Documents, and players
+    can move it to another drive (Properties > Location). The game follows
+    the move, so we ask Windows (registry) instead of assuming."""
+    found = []
+    try:
+        import winreg
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as k:
+            val, _t = winreg.QueryValueEx(k, "Personal")
+        if val:
+            found.append(os.path.expandvars(val))
+    except Exception:
+        pass
+    try:
+        import winreg
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders"
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as k:
+            val, _t = winreg.QueryValueEx(k, "Personal")
+        if val:
+            found.append(val)
+    except Exception:
+        pass
+    found.append(os.path.join(os.path.expanduser("~"), "Documents"))
+    out = []
+    for p in found:
+        p = os.path.normpath(p)
+        if p.lower() not in [o.lower() for o in out]:
+            out.append(p)
+    return out
+
+
+def _mods_folder_candidates():
+    """Possible Sims 4 Mods folders, best first:
+      1. The Mods folder this script is installed in (walk up from the
+         .ts4script), when the path looks like one.
+      2. <Documents>/Electronic Arts/The Sims 4/Mods for each Documents
+         location Windows reports.
+      3. <Documents>/Electronic Arts/<any folder>/Mods -- the game's
+         folder is localized ("Die Sims 4", "Les Sims 4", ...)."""
+    out = []
+    try:
+        here = os.path.abspath(__file__)
+        parts = here.split(os.sep)
+        for i in range(len(parts) - 1, 0, -1):
+            if parts[i].lower() == "mods":
+                out.append(os.sep.join(parts[: i + 1]))
+                break
+    except Exception:
+        pass
+    for docs in _documents_folders():
+        ea = os.path.join(docs, "Electronic Arts")
+        out.append(os.path.join(ea, "The Sims 4", "Mods"))
+        try:
+            for name in sorted(os.listdir(ea)):
+                if "sims 4" in name.lower() or "sims4" in name.lower():
+                    out.append(os.path.join(ea, name, "Mods"))
+        except Exception:
+            pass
+    deduped = []
+    for p in out:
+        if p.lower() not in [d.lower() for d in deduped]:
+            deduped.append(p)
+    return deduped
+
+
+def mods_folder():
+    """The Sims 4 Mods folder in use, or None when none is found. Cached
+    after the first hit; logged once so support can see where it looked."""
+    global _mods_folder_cache
+    if _mods_folder_cache:
+        return _mods_folder_cache
+    candidates = _mods_folder_candidates()
+    _log(f"script location: {__file__}")
+    for p in candidates:
+        if os.path.isdir(p):
+            _mods_folder_cache = p
+            _log(f"Mods folder: {p}")
+            return p
+    _log("no Mods folder found; looked in: " + " | ".join(candidates))
+    return None
+
+
+def game_user_folder():
+    """The game's user folder (parent of Mods: holds saves, Screenshots).
+    None when no Mods folder was found."""
+    m = mods_folder()
+    return os.path.dirname(m) if m else None
+
+
+def config_path():
+    """The llamafone.cfg path last loaded, or None if none was found."""
+    return _last_config_path
+
+
 def _find_config_file():
-    """Search for the config file in the Mods folder, then walk up from
-    the script location as a dev-mode fallback. If nothing exists AND
-    the Mods folder is present, materialize a default cfg there so a
-    fresh install has a working config without the user having to
-    include one in the download. Returns the first existing / newly-
-    created file, or None if neither the Mods folder nor a dev-mode
-    parent directory is writable."""
-    mods_folder = os.path.join(
-        os.path.expanduser("~"), "Documents",
-        "Electronic Arts", "The Sims 4", "Mods",
-    )
-    mods_path = os.path.join(mods_folder, _CONFIG_FILENAME)
-    if os.path.isfile(mods_path):
-        return os.path.abspath(mods_path)
+    """Search for the config file in the Mods folder (wherever Windows
+    keeps Documents), then walk up from the script location as a dev-mode
+    fallback. If nothing exists AND a Mods folder is present, materialize
+    a default cfg there so a fresh install has a working config without
+    the user having to include one in the download. Returns the first
+    existing / newly-created file, or None if neither the Mods folder nor
+    a dev-mode parent directory is writable."""
+    # Called on every get_setting(); reuse the last hit while it exists.
+    if _last_config_path and os.path.isfile(_last_config_path):
+        return _last_config_path
+    # Windows hides extensions by default, so a cfg saved from Notepad
+    # can really be "llamafone.cfg.txt" while Explorer shows
+    # "llamafone.cfg". Accept that name too, after the real one.
+    names = (_CONFIG_FILENAME, _CONFIG_FILENAME + ".txt")
+    folders = list(_mods_folder_candidates())
     script_dir = os.path.dirname(os.path.abspath(__file__))
     for up in ("", "..", os.path.join("..", ".."), os.path.join("..", "..", "..")):
-        path = os.path.join(script_dir, up, _CONFIG_FILENAME)
-        if os.path.isfile(path):
-            return os.path.abspath(path)
+        folders.append(os.path.join(script_dir, up))
+    for name in names:
+        for folder in folders:
+            path = os.path.join(folder, name)
+            if os.path.isfile(path):
+                return os.path.abspath(path)
     # Nothing on disk yet. If the Mods folder exists (real game
     # install), create a default cfg there so the mod comes up
     # configured with placeholders on first launch. Skip when the
     # folder isn't present (headless / dev-only environment).
-    if os.path.isdir(mods_folder):
+    folder = mods_folder()
+    if folder:
+        mods_path = os.path.join(folder, _CONFIG_FILENAME)
         if _write_default_config(mods_path):
             return os.path.abspath(mods_path)
     return None
@@ -323,7 +430,7 @@ def _set_cfg_value(key, value, section=None):
     if not path:
         return False
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8-sig") as f:
             lines = f.readlines()
     except Exception:
         return False
@@ -395,12 +502,31 @@ def _set_cfg_value(key, value, section=None):
 
 
 def get_config():
-    global _config
+    global _config, _last_config_path
     if _config is None:
         _config = configparser.ConfigParser()
         path = _find_config_file()
+        _last_config_path = path
         if path:
-            _config.read(path)
+            # utf-8-sig: the cfg is UTF-8 (its comments have box-drawing
+            # characters) and Notepad may add a BOM. Reading with the
+            # Windows default codepage can fail on non-English systems,
+            # which silently left every setting at its default.
+            try:
+                _config.read(path, encoding="utf-8-sig")
+            except UnicodeDecodeError:
+                # An older cfg saved as ANSI with an accented character:
+                # read it the way earlier versions did.
+                _config = configparser.ConfigParser()
+                try:
+                    _config.read(path)
+                except Exception as e:
+                    _log(f"could not read {path}: {type(e).__name__}: {e}")
+            except Exception as e:
+                _log(f"could not read {path}: {type(e).__name__}: {e}")
+            _log(f"loaded {path} (provider={_config.get(_SECTION, 'provider', fallback='claude')})")
+        else:
+            _log("no llamafone.cfg found; using defaults")
     return _config
 
 

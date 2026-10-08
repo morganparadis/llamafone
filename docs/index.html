@@ -1188,7 +1188,10 @@ fast_model    = llama3.2:3b</code></pre>
 </footer>
 
 <script>
-// GitHub download count -- sums asset download_count across every release.
+// GitHub download count -- one per download that gives a player the
+// mod's script: the .ts4script file itself, or a release zip (v3.7+,
+// which bundles it). The .package and .cfg files aren't counted, so a
+// player who grabs every file still counts once.
 // Cached for 1 hour in localStorage so repeat visits don't burn the
 // unauthenticated 60-req/hour rate limit. Fails silently if the API is
 // unreachable or returns junk -- the count line just stays hidden.
@@ -1197,11 +1200,9 @@ fast_model    = llama3.2:3b</code></pre>
   var value = document.getElementById('download-count-value');
   if (!line || !value) return;
 
-  // Bumped to v2 when we started dividing the asset-download total by 3
-  // (releases ship 3 assets and most users grab all). Old v1 caches held
-  // the undivided number, so we ignore them by changing the key.
-  var CACHE_KEY = 'llamafone_dl_count_v2';
-  var CACHE_TIME = 'llamafone_dl_count_at_v2';
+  // v3: counts script + zip downloads (v2 divided every asset by 3).
+  var CACHE_KEY = 'llamafone_dl_count_v3';
+  var CACHE_TIME = 'llamafone_dl_count_at_v3';
   var ONE_HOUR = 60 * 60 * 1000;
 
   function show(text) {
@@ -1225,18 +1226,16 @@ fast_model    = llama3.2:3b</code></pre>
     })
     .then(function (releases) {
       if (!Array.isArray(releases)) throw new Error('not an array');
-      var assetTotal = 0;
+      var total = 0;
       for (var i = 0; i < releases.length; i++) {
         var assets = releases[i].assets || [];
         for (var j = 0; j < assets.length; j++) {
-          assetTotal += (assets[j].download_count || 0);
+          var name = (assets[j].name || '').toLowerCase();
+          if (/\.(ts4script|zip)$/.test(name)) {
+            total += (assets[j].download_count || 0);
+          }
         }
       }
-      // Each release ships 3 assets (.ts4script, .package, and the config
-      // bundle) and most users grab all of them per update -- so the
-      // unique-download count is asset-downloads / 3. Round to nearest
-      // whole number for display.
-      var total = Math.round(assetTotal / 3);
       if (total <= 0) return;  // don't render "0 downloads"
       var formatted = total.toLocaleString();
       show(formatted);

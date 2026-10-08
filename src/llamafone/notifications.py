@@ -115,7 +115,8 @@ def show_update_prompt(current_version, latest_version, url):
     can't be constructed (early load / no client / API not ready)."""
     title = "Llamafone update available"
     message = (
-        f"A newer version is available on CurseForge.\n\n"
+        f"A newer version is available on CurseForge\n"
+        f"(also on Nexus Mods and GitHub).\n\n"
         f"You have:   v{current_version}\n"
         f"Latest:     v{latest_version}\n\n"
         f"Click Update now to open the download page in your browser."

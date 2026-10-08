@@ -75,6 +75,7 @@
       <a href="#features">Features</a>
       <a href="#install">Install</a>
       <a href="https://www.curseforge.com/sims4/mods/llamafone" target="_blank" rel="noopener">CurseForge</a>
+      <a href="https://www.nexusmods.com/thesims4/mods/7232" target="_blank" rel="noopener">Nexus</a>
       <a href="https://github.com/morganparadis/llamafone" target="_blank" rel="noopener" aria-label="GitHub">GitHub</a>
       <a class="topbar-patreon" href="https://www.patreon.com/c/morgkorg" target="_blank" rel="noopener">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
@@ -116,7 +117,13 @@
         </p>
       </div>
       <div class="cta-download">
-        <a class="btn btn-ghost" href="https://github.com/morganparadis/llamafone/releases/latest">Download on GitHub</a>
+        <a class="btn btn-ghost" href="https://www.nexusmods.com/thesims4/mods/7232" target="_blank" rel="noopener">Download on Nexus Mods</a>
+        <p class="download-count" id="nexus-count" hidden>
+          <span id="nexus-count-value">…</span> downloads on Nexus Mods
+        </p>
+      </div>
+      <div class="cta-download">
+        <a class="btn btn-ghost btn-icon" href="https://github.com/morganparadis/llamafone/releases/latest"><svg viewBox="0 0 16 16" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Download on GitHub</a>
         <p class="download-count" id="download-count" hidden>
           <span id="download-count-value">…</span> downloads on GitHub
         </p>
@@ -674,7 +681,7 @@
       <div class="step-num">1</div>
       <div class="step-body">
         <h3>Download the mod</h3>
-        <p>Two places to grab it, same files either way — <a href="https://www.curseforge.com/sims4/mods/llamafone" target="_blank" rel="noopener">CurseForge</a> (recommended for most players) or the <a href="https://github.com/morganparadis/llamafone/releases/latest">GitHub releases page</a>. You need three files: <code>Llamafone.ts4script</code> (the script), <code>Llamafone.package</code> (the phone UI tunings), and <code>llamafone.cfg</code> (the settings file).</p>
+        <p>Three places to grab it, same files everywhere — <a href="https://www.curseforge.com/sims4/mods/llamafone" target="_blank" rel="noopener">CurseForge</a> (recommended for most players), <a href="https://www.nexusmods.com/thesims4/mods/7232" target="_blank" rel="noopener">Nexus Mods</a>, or the <a href="https://github.com/morganparadis/llamafone/releases/latest">GitHub releases page</a>. You need three files: <code>Llamafone.ts4script</code> (the script), <code>Llamafone.package</code> (the phone UI tunings), and <code>llamafone.cfg</code> (the settings file).</p>
       </div>
     </li>
 
@@ -1172,6 +1179,7 @@ fast_model    = llama3.2:3b</code></pre>
     </div>
     <div class="footer-links">
       <a href="https://www.curseforge.com/sims4/mods/llamafone" target="_blank" rel="noopener">CurseForge</a>
+      <a href="https://www.nexusmods.com/thesims4/mods/7232" target="_blank" rel="noopener">Nexus Mods</a>
       <a href="https://github.com/morganparadis/llamafone">GitHub</a>
       <a href="https://github.com/morganparadis/llamafone/blob/main/README.md">README</a>
       <a href="https://console.anthropic.com/" target="_blank" rel="noopener">Get an API key</a>
@@ -1295,6 +1303,60 @@ fast_model    = llama3.2:3b</code></pre>
     })
     .catch(function (err) {
       console.warn('[llamafone] CurseForge count: fetch failed', err && err.message);
+    });
+})();
+
+// Nexus Mods download count -- Nexus's public v2 GraphQL API needs no
+// key for public mod data and sends CORS headers. The Sims 4 is game id
+// 641; legacyMods takes the numeric mod id from the page URL. Same
+// 1-hour cache + fail-silent + hide-at-zero pattern as above.
+(function () {
+  var line = document.getElementById('nexus-count');
+  var value = document.getElementById('nexus-count-value');
+  if (!line || !value) return;
+
+  var CACHE_KEY = 'llamafone_nexus_count_v1';
+  var CACHE_TIME = 'llamafone_nexus_count_at_v1';
+  var ONE_HOUR = 60 * 60 * 1000;
+
+  function show(text) {
+    value.textContent = text;
+    line.hidden = false;
+  }
+
+  try {
+    var cached = localStorage.getItem(CACHE_KEY);
+    var at = parseInt(localStorage.getItem(CACHE_TIME) || '0', 10);
+    if (cached && (Date.now() - at) < ONE_HOUR) {
+      show(cached);
+      return;
+    }
+  } catch (_) { /* localStorage disabled -- carry on */ }
+
+  fetch('https://api.nexusmods.com/v2/graphql', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query: 'query { legacyMods(ids: [{gameId: 641, modId: 7232}]) { nodes { downloads } } }'
+    })
+  })
+    .then(function (r) {
+      if (!r.ok) throw new Error('http ' + r.status);
+      return r.json();
+    })
+    .then(function (payload) {
+      var nodes = payload && payload.data && payload.data.legacyMods && payload.data.legacyMods.nodes;
+      var count = nodes && nodes[0] && nodes[0].downloads;
+      if (typeof count !== 'number' || count <= 0) return;
+      var formatted = Math.round(count).toLocaleString();
+      show(formatted);
+      try {
+        localStorage.setItem(CACHE_KEY, formatted);
+        localStorage.setItem(CACHE_TIME, Date.now().toString());
+      } catch (_) { /* localStorage disabled -- carry on */ }
+    })
+    .catch(function (err) {
+      console.warn('[llamafone] Nexus count: fetch failed', err && err.message);
     });
 })();
 </script>

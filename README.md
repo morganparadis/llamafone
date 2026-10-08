@@ -14,7 +14,7 @@ A phone-first AI mod for The Sims 4. Random sims call and text you in character 
 
 ## Installation
 
-1. **Download the latest release** from [Releases](https://github.com/morganparadis/llamafone/releases) — grab `Llamafone.ts4script`, `Llamafone.package`, and `llamafone.cfg`.
+1. **Download the latest release** from [Releases](https://github.com/morganparadis/llamafone/releases) (also on [CurseForge](https://www.curseforge.com/sims4/mods/llamafone) and [Nexus Mods](https://www.nexusmods.com/thesims4/mods/7232)) — grab `Llamafone.ts4script`, `Llamafone.package`, and `llamafone.cfg`.
 2. **Drop all three into your Mods folder:**
    - **Windows:** `Documents\Electronic Arts\The Sims 4\Mods\`
    - **macOS:** `~/Documents/Electronic Arts/The Sims 4/Mods/`

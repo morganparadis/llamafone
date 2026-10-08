@@ -207,7 +207,7 @@ kbd {
     radial-gradient(circle at 85% 30%, rgba(255, 107, 157, 0.18) 0%, transparent 35%),
     radial-gradient(circle at 50% 90%, rgba(111, 207, 64, 0.22) 0%, transparent 45%),
     linear-gradient(180deg, #fff 0%, var(--cream) 100%);
-  padding: 5rem 0 6rem;
+  padding: 5rem 0 4rem;
   overflow: hidden;
 }
 
@@ -303,10 +303,14 @@ kbd {
   .topbar-brand span { display: none; }      /* logo only on phones */
   .topbar-links a { padding: 0.35rem 0.55rem; font-size: 0.88rem; }
   .topbar-links a[href*="github.com"] { display: none; }  /* drop GitHub on small screens */
+  .topbar-links a[href="#install"] { display: none; }     /* next section down anyway */
 }
 @media (max-width: 400px) {
   /* Four links + Patreon overflow ~375px phones by a few px. */
   .topbar-links a { padding: 0.35rem 0.4rem; font-size: 0.82rem; }
+}
+@media (max-width: 340px) {
+  .topbar-links a[href="#features"] { display: none; }  /* 320px phones */
 }
 
 .hero-inner {
@@ -428,6 +432,13 @@ kbd {
   gap: 6px;
 }
 
+/* Button with a leading icon (GitHub mark). */
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .download-count {
   margin: 0;
   font-size: 0.85rem;
@@ -435,7 +446,8 @@ kbd {
   text-align: center;
 }
 .download-count #download-count-value,
-.download-count #curseforge-count-value {
+.download-count #curseforge-count-value,
+.download-count #nexus-count-value {
   font-weight: 700;
   color: var(--plumbob-dark);
 }
@@ -1498,7 +1510,7 @@ section > p { max-width: 780px; margin-left: auto; margin-right: auto; }
 
 @media (max-width: 600px) {
   body { font-size: 16px; }
-  .hero { padding: 3.5rem 0 4rem; }
+  .hero { padding: 3.5rem 0 3rem; }
   /* Bigger than the section h2s below it (min 1.75rem) so the hero
      line reads as the page title on phones. */
   .hero h1 { font-size: 1.9rem; line-height: 1.2; }

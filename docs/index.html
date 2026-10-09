@@ -719,7 +719,7 @@
               <li>Click <em>Create API key</em> (free tier requires no billing setup)</li>
               <li>Copy the <code>AIza…</code> key</li>
             </ol>
-            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = gemini</code> + <code>default_model = gemini-1.5-flash</code> (free tier) or <code>gemini-1.5-pro</code></p>
+            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = gemini</code> + <code>default_model</code> set to a current Flash model from <a href="https://ai.google.dev/gemini-api/docs/models" target="_blank" rel="noopener">Google's model list</a> (Flash models are on the free tier).</p>
           </div>
 
           <div class="provider-card">
@@ -914,8 +914,7 @@ fast_model    = llama-3.2-3b-instruct</code></pre>
             <tr><td>Anthropic Claude</td><td>claude-opus-4-8</td><td>~$0.05–0.15</td></tr>
             <tr><td>OpenAI</td><td>gpt-4o-mini</td><td>~$0.003</td></tr>
             <tr><td>OpenAI</td><td>gpt-4o</td><td>~$0.03</td></tr>
-            <tr><td>Google Gemini</td><td>gemini-1.5-flash</td><td><strong>free</strong> (rate limited)</td></tr>
-            <tr><td>Google Gemini</td><td>gemini-1.5-pro</td><td>~$0.01</td></tr>
+            <tr><td>Google Gemini</td><td>a current Flash model</td><td><strong>free</strong> (rate limited)</td></tr>
             <tr><td>Ollama / LM Studio (local)</td><td>any model</td><td><strong>free</strong> (uses your GPU)</td></tr>
           </tbody>
         </table>

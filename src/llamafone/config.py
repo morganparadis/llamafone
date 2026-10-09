@@ -66,7 +66,7 @@ lmstudio_endpoint = http://localhost:1234
 ; Examples per provider:
 ;   claude      -> claude-opus-4-8, claude-sonnet-4-6, claude-haiku-4-5
 ;   openai      -> gpt-4o, gpt-4o-mini, gpt-4-turbo
-;   gemini      -> gemini-1.5-pro, gemini-1.5-flash
+;   gemini      -> a current Flash model: see ai.google.dev/gemini-api/docs/models
 ;   openrouter  -> anthropic/claude-haiku-4-5, openai/gpt-4o-mini,
 ;                  meta-llama/llama-3.1-8b-instruct, deepseek/deepseek-chat
 ;                  (browse full catalog at https://openrouter.ai/models)

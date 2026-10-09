@@ -39,7 +39,7 @@ No Python install required for end users — the release ships compiled `.pyc` b
 |---|---|---|---|
 | `claude` | Yes | `claude-haiku-4-5`, `claude-sonnet-4-6`, `claude-opus-4-8` | [console.anthropic.com](https://console.anthropic.com/) |
 | `openai` | Yes | `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo` | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
-| `gemini` | Yes | `gemini-1.5-pro`, `gemini-1.5-flash` | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| `gemini` | Yes | a current Flash model from [Google's model list](https://ai.google.dev/gemini-api/docs/models) (free tier) | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
 | `openrouter` | Yes | `anthropic/claude-haiku-4-5`, `openai/gpt-4o-mini`, `meta-llama/llama-3.1-8b-instruct`, `deepseek/deepseek-chat` — [full catalog](https://openrouter.ai/models) | [openrouter.ai/keys](https://openrouter.ai/keys) |
 | `ollama` (techy) | **No** — runs locally | whatever you've `ollama pull`-ed (`llama3.2:3b` recommended for most hardware) | [ollama.com](https://ollama.com) |
 | `lmstudio` (techy) | **No** — runs locally | whatever model you've loaded in LM Studio (e.g. `llama-3.2-3b-instruct`) | [lmstudio.ai](https://lmstudio.ai) |

@@ -1076,84 +1076,10 @@ fast_model    = llama-3.2-3b-instruct</code></pre>
       </div>
     </li>
 
-    <li class="changelog-entry">
-      <div class="changelog-date">August 16, 2026</div>
-      <div class="changelog-body">
-        <h3>Messages move relationships, custom world context, sim bios, service NPCs, OpenRouter (v3.6)</h3>
-        <p>Player-authored context you can pass into every prompt, messages that actually move friendship and romance, service-NPC roles, time-of-day awareness, and a fifth AI provider. Drop-in over v3.5.</p>
-        <p><strong>New:</strong></p>
-        <ul>
-          <li><strong>Save notes.</strong> One free-form text field per save, prepended to every AI prompt as WORLD CONTEXT. Use it for challenge rulesets, long-running narrative context, or house rules the AI should treat as universally binding. Under Llamafone → Settings → Save notes.</li>
-          <li><strong>Sim bios.</strong> Per-sim character notes — backstory, motivations, secrets, quirks — that get injected into that sim's descriptor block anywhere they appear in a prompt. Distinct from the Llamadate bio (dating-facing) and the per-relationship contact note (scoped to one pair). Under Llamafone → Settings → Sim bios. Travels with the save.</li>
-          <li><strong>Service NPCs stay in role.</strong> Hired butlers, maids, babysitters, nannies, gardeners, and repair techs now write in the right register — butlers professional and deferential, maids task-focused, babysitters kids-first, gardeners talking plants and season, repair techs quoting parts and timing. Layered detection reads the household's live service records, the active zone's situation manager, direct household attributes, and the sim's career track, so it works across pack combinations. When a hired service NPC is on shift, the prompt says "currently on shift as the household's butler" instead of the generic "at work right now" — no more contradictions when you call your live-in butler.</li>
-          <li><strong>Messages move relationships.</strong> Warm, flirty, hostile, or otherwise emotionally-charged messages now nudge the actual Sims 4 friendship and romance tracks — bidirectional, hard-capped, tunable. Default cap is ±3 per message, well below the game's own social-action deltas, so exchanges accumulate naturally without one text reshaping a relationship. Toggle and cap under Llamafone → Settings.</li>
-          <li><strong>Time-of-day awareness.</strong> Every prompt now includes the current in-game clock (e.g. <code>[CURRENT IN-GAME TIME: 7:15 PM (evening)]</code>). No more "dinner ready by six" replies when it's already 7. Same for morning / afternoon / night phrasing.</li>
-          <li><strong>Llamadate origin persists across sessions.</strong> When two sims connect via Llamadate, that fact is now stored on both sides of the pair and referenced in every future prompt between them. Reconnect with a match three in-game weeks later and the AI still knows how you met. Includes mutual-friend intros (records the mutual's name too). Stored alongside contact preferences in a structure ready for future asymmetric events (who kissed who, who proposed to who, etc.).</li>
-          <li><strong>OpenRouter provider support.</strong> Fifth provider option in <code>llamafone.cfg</code>: one API key, dozens of models (Claude, GPT, Llama, Mistral, DeepSeek, etc.) via <code>vendor/model</code> naming. Useful if you want to A/B-test models without juggling separate accounts.</li>
-          <li><strong>Update-mod button in the startup notification.</strong> When a newer release is on GitHub, the startup popup now has an "Update now / Later" dialog. "Update now" opens the CurseForge project page in your default browser.</li>
-        </ul>
-        <p><strong>Bug fixes and polish:</strong></p>
-        <ul>
-          <li><strong>Llamadate matches now know your name.</strong> The bio-only privacy block was worded so vaguely ("this is ALL you know about them") that AI-driven matches occasionally asked what your sim's name was, even mid-conversation. Now explicit: they know your first name from your profile and can't ask.</li>
-          <li><strong>Llamadate initial friendship boost tuned down.</strong> Reduced from +15 to +5 on both sides at match, so subsequent messages have room to grow the relationship naturally under the new per-message impact.</li>
-          <li><strong>Llamadate outreach no longer fakes IRL sightings.</strong> Cold outreach messages used to open with "I swear I saw you at the coffee shop last week" or "I think we do the same gym" even for total strangers. Fixed — the sender stays in-character as someone who found an interesting profile online, no fabricated past encounters.</li>
-          <li><strong>Long-distance calls and texts now engage with your in-person visit proposals.</strong> The "different worlds" rule used to make sims push back three messages in a row when the player suggested "come see me this weekend." Now there's an explicit exception: when you propose a visit, the AI says yes, negotiates timing, or expresses excitement instead of stonewalling.</li>
-        </ul>
-      </div>
-    </li>
-
-    <li class="changelog-entry">
-      <div class="changelog-date">August 9, 2026</div>
-      <div class="changelog-body">
-        <h3>Standalone app + Llamadate dating (v3.5)</h3>
-        <p>Two big features and a stack of bundled bug fixes. Drop-in over v3.4.2.</p>
-        <p><strong>New:</strong></p>
-        <ul>
-          <li><strong>Standalone app on the phone.</strong> Llamafone has its own home-screen tile now, with Call, Send Text, Llamadate, and Settings all inside it. No more digging through Social.</li>
-          <li><strong>Llamadate.</strong> An opt-in dating layer, per played sim. Set your bio, browse Hinge-style profiles, message someone, or wait for a match to text you. Every played sim has their own opt-in toggle, gender filter, and age filter. If you write a bio, matches see only that &#8212; not your career, engagement, aspirations, or traits. Reply-gated: interested replies add the sim to your contacts, polite declines don't. Committed sims (married, engaged) are filtered out of the pool on both sides. Mutual-friend intros only fire when there's a real friendship between the mutual and both parties. A sim who has cold-outreached you is excluded from your future pool permanently.</li>
-        </ul>
-        <p><strong>Bug fixes bundled since v3.4.2:</strong></p>
-        <ul>
-          <li><strong>Breakup context finally lands in prompts.</strong> Broken engagements, bad-romance bits, cheating history, and sentiments like "Bitter Over Phone Breakup" now surface in the AI prompt with direction preserved ("you feel bitter toward them," "they cheated with you"). Previously an ex showed as "close friends" and the AI had no idea you'd broken up &#8212; you'd get a warm "great to hear from you!" reply from a sim you dumped an hour ago. Affects every text and call in the mod, not just Llamadate.</li>
-          <li><strong>Save-id resilience.</strong> Sims 4's persistence service occasionally reports a sentinel slot id during transient CAS / menu / interaction hooks. Prior behavior: mod created a bogus <code>Slot_ffffffff/</code> folder OR silently dropped writes. Now it rejects sentinels AND falls back to the last-known-good save id while a zone is loaded &#8212; restoring journal, past-events, interactions, and dating writes during those windows.</li>
-          <li><strong>Career switch detection.</strong> Your sim changing careers now flows into the milestone scan + prompts + journal correctly.</li>
-          <li><strong>Wedding scan TypeError</strong> for My Wedding Stories couples with non-standard role naming (<code>Host_Couple</code>).</li>
-          <li><strong>Journal preview cap raised</strong> (700 chars, was 220) so recent conversation context isn't truncated when the AI needs to reference it.</li>
-          <li><strong>Journal silent-save-failure now logs.</strong> If a per-save write drops for any reason, the log file records it so you can diagnose instead of silently losing entries.</li>
-        </ul>
-      </div>
-    </li>
-
-    <li class="changelog-entry">
-      <div class="changelog-date">August 7, 2026</div>
-      <div class="changelog-body">
-        <h3>Bug fix and polish release (v3.4.2)</h3>
-        <p>Drop-in over v3.4.1.</p>
-        <ul>
-          <li><strong>Gemini users: replies come back complete.</strong> If you were on a Gemini model and seeing your sims send back short, cut-off, or completely empty texts, that's fixed. Full replies again.</li>
-          <li>
-            <strong>Sims know which wedding event they're going to.</strong> Every wedding sub-event you planned — engagement dinner, rehearsal dinner, ceremony, reception, bachelor/bachelorette party — was showing up to the AI as the same generic "wedding event." Now they get the specific one, so a text about tomorrow's rehearsal dinner sounds like a rehearsal dinner, not a wedding. The same resolver may help other packs' scheduled events (funerals, planned parties, dine-out reservations) if they follow the same tuning convention, but only weddings have been directly confirmed on this release.
-            <figure class="changelog-figure">
-              <img src="img/weddingevent.PNG" alt="Text conversation referencing an engagement dinner specifically, not just a generic wedding event">
-              <figcaption>Real in-game example — the prompt now says <em>Engagement Dinner</em>, not <em>Player Planned Wedding</em>.</figcaption>
-            </figure>
-          </li>
-          <li><strong>Cleaner holiday and event names in sim conversations.</strong> Vanilla holidays used to leak into prompts as "Premade Holidays Harvestfest"; modded holidays showed up with their author's mod prefix attached. Both cleaned up — the AI sees "Harvestfest" and the modded holiday's actual name. Past events are similarly cleaner (no more "Custom Goals Pre Post Wedding Parties Engagement Dinner"), and when the same event was recorded through two internal paths, the duplicate lines are merged.</li>
-          <li><strong>"How long ago" phrasing is correct now.</strong> Every "N sim days/hours ago" phrase in prompts was off by 40× because the mod's internal tick-math constant was wrong. An event from 3 sim days ago used to read as "86 minutes ago" and got labeled "today." Verified against the game's own live clock this time, and a runtime self-check now watches for drift so this can't silently break again.</li>
-          <li><strong>Family reunion (and similar) no longer stuck showing as "today" forever.</strong> Related to the tick fix above: the internal recorder was also rewriting an event's start time to "now" every time it noticed the situation, so a reunion from days ago kept looking like it just happened. Both bugs are gone.</li>
-          <li><strong>Honored-sim phrasing matches the event.</strong> "In memory of" is now reserved for funerals. Weddings, birthdays, and other honored-sim events use appropriate phrasing — "for", "honoring", or the honored sim's name in possessive form.</li>
-          <li><strong>Outgoing texts and calls no longer silently fail.</strong> If a past event with honored sims was surfaced in the prompt (weddings, funerals, birthdays after the wedding sub-event fix), the send would dispatch and then nothing would happen. Fixed — outgoing sends now go through even when the events context is fully populated.</li>
-          <li><strong>"FAILED TO LOAD" line in the log is gone.</strong> The mod was actually loading fine — a harmless startup call was mis-reporting itself as a fatal error and scaring people. Cleaned up.</li>
-          <li><strong>Log files stay smaller during long play sessions.</strong> A diagnostic line was repeating on every AI prompt for certain sims — now logs once per sim per session.</li>
-          <li><strong>Sims know when they (or you) are at work or in class.</strong> If a sim is currently on the clock or at school when the prompt is built, the AI sees it and can react in-character — "hey, in class, catch you at lunch" or "sorry, just got to work, later?" — instead of writing a paragraph as if they're free. Covers regular work careers, active careers, part-time gigs, and schools (grade school, high school, university).</li>
-        </ul>
-      </div>
-    </li>
-
   </ol>
 
   <p class="changelog-footer">
-    <a href="https://github.com/morganparadis/llamafone/commits/main" target="_blank" rel="noopener">See the full commit history on GitHub →</a>
+    <a href="https://github.com/morganparadis/llamafone/releases" target="_blank" rel="noopener">See every release and its full changelog on GitHub →</a>
   </p>
 </section>
 

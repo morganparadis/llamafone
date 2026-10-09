@@ -1731,7 +1731,7 @@ def _maybe_settle(post_id, poster_si):
     _settle_reception(post_id, poster_si, picked)
 
 
-_RESUME_MAX_AGE_SECONDS = 2 * 24 * 3600
+_RESUME_MAX_AGE_DAYS = 2.0    # IN-GAME days
 
 
 def resume_pending():
@@ -1744,7 +1744,12 @@ def resume_pending():
     if not data:
         return
     hh = _household_ids()
-    now = time.time()
+    now_ticks = _now_ticks()
+    try:
+        from . import milestones
+        per_day = float(milestones._TICKS_PER_DAY)
+    except Exception:
+        per_day = 1500.0 * 60 * 24
     resumed = 0
     _resume_slot[0] = 0
     longest = 0.0
@@ -1752,11 +1757,17 @@ def resume_pending():
     for post in list(data["posts"]):
         if not post.get("is_player") or post.get("reception") or post.get("author_id") not in hh:
             continue
+        # Age on the game clock. Time doesn't pass in-game while the game
+        # is closed, so a post interrupted by a quit is resumed however
+        # many real days later the player comes back. (This used to be 2
+        # REAL days: come back on day 3 and the comments never arrived.)
+        age_days = None
         try:
-            age = now - datetime.datetime.fromisoformat(post.get("ts")).timestamp()
+            if post.get("ticks") is not None and now_ticks is not None:
+                age_days = (now_ticks - int(post["ticks"])) / per_day
         except Exception:
-            age = 0
-        if age > _RESUME_MAX_AGE_SECONDS:
+            age_days = None
+        if age_days is not None and age_days > _RESUME_MAX_AGE_DAYS:
             continue
         poster_si = _resolve(post.get("author_id"))
         if poster_si is None:
@@ -1846,6 +1857,66 @@ def _recent_posts_by(author_id, n=3):
     return mine[-n:]
 
 
+_NPC_REPEAT_DAYS = 1.0   # in-game days before the same friend posts to the same feed again
+
+
+def _recent_npc_posters(viewer_id, days=_NPC_REPEAT_DAYS):
+    """Sim ids of friends who posted to this viewer's feed in the last
+    `days` in-game days."""
+    data = _load()
+    now = _now_ticks()
+    if not data or now is None:
+        return set()
+    try:
+        from . import milestones
+        per_day = float(milestones._TICKS_PER_DAY)
+    except Exception:
+        per_day = 1500.0 * 60 * 24
+    out = set()
+    for p in data["posts"]:
+        if p.get("is_player") or str(p.get("viewer_id")) != str(viewer_id) or p.get("ticks") is None:
+            continue
+        try:
+            if 0 <= (now - int(p["ticks"])) / per_day <= days:
+                out.add(str(p.get("author_id")))
+        except Exception:
+            continue
+    return out
+
+
+def _pick_npc_poster():
+    """(viewer, contact) for a friend's post, or (None, None).
+
+    Every teen+ household sim gets a fair turn as the viewer: the viewer is
+    chosen first and only THEIR contacts are drawn from, restricted to sims
+    old enough for social media. (The old way drew a contact through the
+    call/text picker -- which allows kids -- then threw the whole pick away
+    if the contact was too young, so a sim whose closest people are kids
+    almost never got a post: the retry usually landed on someone else.)
+
+    Posters are weighted by the square root of relationship strength, so
+    casual friends post too, not just the closest family; and whoever
+    posted to that feed in the last in-game day is skipped while anyone
+    else is available."""
+    import math
+    from . import phone
+    viewers = phone._eligible_recipients()   # shuffled
+    for viewer in viewers:
+        recent = _recent_npc_posters(viewer.sim_id)
+        contact = phone._pick_random_relationship_sim(
+            recipient=viewer,
+            pool_filter=lambda c: _can_post(c.get("sim_info")),
+            weight_fn=lambda score: math.sqrt(max(score, 10)),
+            exclude_ids=recent,
+        )
+        if contact is not None:
+            _log(f"npc post: viewer {_name(viewer)}, poster {_name(contact.get('sim_info'))}"
+                 f" (skipped recent: {len(recent)})")
+            return viewer, contact
+        _log(f"npc post: {_name(viewer)} has no teen+ contacts who could post; trying another household sim")
+    return None, None
+
+
 def generate_npc_post(callback=None, author_si=None, viewer_si=None, output=None):
     """A friend of the household posts about their own life; the viewer
     (a household sim who follows them) sees it with Comment / Scroll past."""
@@ -1860,12 +1931,7 @@ def generate_npc_post(callback=None, author_si=None, viewer_si=None, output=None
         return
     try:
         if author_si is None or viewer_si is None:
-            contact = None
-            for _ in range(4):
-                viewer_si, contact = phone._pick_recipient_and_contact()
-                if contact is not None and _can_post(contact.get("sim_info")):
-                    break
-                contact = None
+            viewer_si, contact = _pick_npc_poster()
             if contact is None:
                 _log("npc post: no teen+ contact available")
                 if callback:

@@ -15,7 +15,7 @@ Commands (open cheat console with Ctrl+Shift+C):
 """
 
 MOD_NAME = "Llamafone"
-MOD_VERSION = "3.8.1"
+MOD_VERSION = "3.8.2"
 
 # Captured at module-load time -- the moment Sims 4 imported this build.
 # Used in prompts so a llama.dumpprompt definitively shows which load
@@ -135,6 +135,10 @@ try:
     # Belt-and-braces detector for births that bypass the hook (MCCC,
     # off-lot NPC deliveries): polls known-pregnant sims every 2 minutes.
     births.start_watcher()
+    # Trip memory: polls the active household's travel group (vacations,
+    # getaways) every minute and records who went where.
+    from . import trips
+    trips.start_watcher()
 
     # Wire up phone-UI injection BEFORE object tunings finish loading.
     # The companion .package supplies the interaction tunings (which are

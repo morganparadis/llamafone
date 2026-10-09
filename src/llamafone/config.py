@@ -32,6 +32,7 @@ _DEFAULT_CONFIG_TEMPLATE = """[llamafone]
 ;   openrouter  -- OpenRouter aggregator (one key, dozens of models: Claude,
 ;                  GPT, Llama, Mistral, DeepSeek, etc. -- pick per model name)
 ;   ollama      -- A local Ollama server (no API key required)
+;   lmstudio    -- LM Studio's local server (no API key required)
 provider = claude
 
 ; API key for whichever provider you picked above. Only the matching one
@@ -41,10 +42,24 @@ provider = claude
 ;   gemini      -> https://aistudio.google.com/apikey
 ;   openrouter  -> https://openrouter.ai/keys
 ;   ollama      -> not needed; runs locally
+;   lmstudio    -> not needed; runs locally
 api_key = YOUR_API_KEY_HERE
 
-; If using Ollama, point at your local server:
+; If using Ollama, set provider = ollama above, set Context length to 16k in
+; Ollama's settings (its default is too small), then point at your local server:
 ollama_endpoint = http://localhost:11434
+
+; If using LM Studio, set provider = lmstudio above, then:
+;   1. In LM Studio, load a model with Context Length 16384 (12288 at the
+;      very least). Llamafone's prompts run about 8,000 tokens.
+;   2. Developer tab -> switch the server on.
+;   3. Put the model's name (as LM Studio shows it) in default_model and
+;      fast_model below. llama.testconnection lists the names.
+; Local models (Ollama, LM Studio) are free, but slower and less capable than
+; the cloud options: each reply takes ~15 seconds with a decent graphics card
+; to a minute or more without one, and small models sometimes mix up details
+; (when an event is, what to call a family member).
+lmstudio_endpoint = http://localhost:1234
 
 ; ── Models ─────────────────────────────────────────────────────────────────
 ; Model for detailed tasks (stories, storylines, drama)
@@ -56,6 +71,7 @@ ollama_endpoint = http://localhost:11434
 ;                  meta-llama/llama-3.1-8b-instruct, deepseek/deepseek-chat
 ;                  (browse full catalog at https://openrouter.ai/models)
 ;   ollama      -> llama3.1, mistral, qwen2.5 (whatever you've `ollama pull`-ed)
+;   lmstudio    -> the model's name in LM Studio, e.g. llama-3.2-3b-instruct
 default_model = claude-haiku-4-5
 
 ; Model for quick tasks (dialogue, events, calls, texts). Cheaper/faster.
@@ -546,6 +562,7 @@ def get_provider():
       openai           -- OpenAI Chat Completions API
       gemini           -- Google Gemini Generative Language API
       ollama           -- Local Ollama server (no API key needed)
+      lmstudio         -- LM Studio's local server (no API key needed)
     """
     raw = get_config().get(_SECTION, "provider", fallback="claude")
     return (raw or "claude").strip().lower()
@@ -556,6 +573,14 @@ def get_ollama_endpoint():
     return get_config().get(
         _SECTION, "ollama_endpoint",
         fallback="http://localhost:11434",
+    )
+
+
+def get_lmstudio_endpoint():
+    """Base URL for LM Studio's local server. Ignored unless provider=lmstudio."""
+    return get_config().get(
+        _SECTION, "lmstudio_endpoint",
+        fallback="http://localhost:1234",
     )
 
 
@@ -577,9 +602,9 @@ def get_language():
 
 def is_configured():
     """A provider is configured if its credentials are present. Ollama
-    needs no key (just a reachable endpoint); the cloud providers need
-    a non-placeholder api_key."""
-    if get_provider() == "ollama":
+    and LM Studio need no key (just a reachable endpoint); the cloud
+    providers need a non-placeholder api_key."""
+    if get_provider() in ("ollama", "lmstudio"):
         return True
     key = get_api_key()
     return bool(key and key != "YOUR_API_KEY_HERE")

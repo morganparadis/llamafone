@@ -771,35 +771,39 @@ def get_shared_upcoming_events(recipient_sim_info, contact_sim_info, max_events=
             # within 24h. Non-holidays kept if started within ~6h (long
             # enough for a wedding / party / funeral to still be
             # in-progress, short enough to avoid ancient events).
-            _TICKS_PER_HOUR = 60 * 100  # 60 mins/hour * 100 ticks/min
-            _HOLIDAY_ACTIVE_TICKS = 24 * _TICKS_PER_HOUR
-            _EVENT_IN_PROGRESS_TICKS = 6 * _TICKS_PER_HOUR
+            # Hours are read with the game's own TimeSpan.in_hours(). The
+            # old hand-written 100 ticks/minute was 15x too small (the
+            # game uses 1500), so a wedding counted as "happening now"
+            # for ~24 in-game minutes instead of 6 hours.
+            _HOLIDAY_ACTIVE_HOURS = 24
+            _EVENT_IN_PROGRESS_HOURS = 6
             _in_progress = False
             try:
                 if start < now:
-                    # Measure how long ago the start was (raw tick delta)
+                    # How long ago the start was, in in-game hours.
                     hours_since = None
                     try:
                         diff = now - start
-                        for attr in ("in_ticks", "absolute_ticks", "value", "ticks"):
-                            fn = getattr(diff, attr, None)
-                            if callable(fn):
-                                hours_since = int(fn())
-                                break
-                            if fn is not None:
-                                hours_since = int(fn)
-                                break
+                        fn = getattr(diff, "in_hours", None)
+                        if callable(fn):
+                            hours_since = float(fn())
+                        else:
+                            for attr in ("in_ticks", "absolute_ticks", "value", "ticks"):
+                                t = getattr(diff, attr, None)
+                                if t is not None:
+                                    hours_since = int(t() if callable(t) else t) / (1500.0 * 60)
+                                    break
                     except Exception:
                         hours_since = None
 
                     if is_holiday:
-                        if hours_since is None or hours_since > _HOLIDAY_ACTIVE_TICKS:
+                        if hours_since is None or hours_since > _HOLIDAY_ACTIVE_HOURS:
                             counts["past"] += 1
                             continue
                         # Currently-active holiday -- prompt labels it "TODAY".
                         _active_today = True
                     else:
-                        if hours_since is None or hours_since > _EVENT_IN_PROGRESS_TICKS:
+                        if hours_since is None or hours_since > _EVENT_IN_PROGRESS_HOURS:
                             counts["past"] += 1
                             continue
                         # Started recently -- treat as in-progress so the

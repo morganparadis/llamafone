@@ -58,7 +58,7 @@ def _mod_ready():
             notifications.show_error(
                 "Llamafone is not configured yet. Open llamafone.cfg in "
                 "your Mods folder, pick a provider, and add your API key "
-                "(or use provider=ollama for no-key local AI). Then run "
+                "(or use provider=ollama or lmstudio for no-key local AI). Then run "
                 "llama.reload."
             )
             return False

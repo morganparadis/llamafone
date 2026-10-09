@@ -298,6 +298,21 @@ def get_recent(n=_PROMPT_ENTRIES):
     return _load()[-n:]
 
 
+def _ago_label(e, now_ticks):
+    """'How long ago' for a journal entry, on the in-game calendar (see
+    milestones.in_game_when). Never a real-world date. Entries saved
+    before in-game time was recorded get a vague label."""
+    entry_ticks = e.get("ticks")
+    if entry_ticks is None or now_ticks is None:
+        return "a while ago"
+    try:
+        from . import milestones
+        label = milestones.in_game_when(entry_ticks, now_ticks, precise=True)
+    except Exception:
+        label = None
+    return f"{label} (in-game)" if label and label != "earlier" else (label or "a while ago")
+
+
 def format_for_prompt(n=_PROMPT_ENTRIES):
     """
     Return a compact, prompt-friendly summary of recent journal entries.
@@ -308,12 +323,9 @@ def format_for_prompt(n=_PROMPT_ENTRIES):
         return ""
 
     lines = ["Story so far (recent journal entries):"]
+    now_ticks = _now_ingame_ticks()
     for e in entries:
-        try:
-            dt = datetime.datetime.fromisoformat(e["timestamp"])
-            date_str = dt.strftime("%b %d, %Y")
-        except Exception:
-            date_str = "unknown date"
+        date_str = _ago_label(e, now_ticks)
 
         label = e.get("type", "note").replace("_", " ").title()
         sim_part = f" [{e['sim']}]" if e.get("sim") else ""
@@ -432,59 +444,12 @@ def format_sim_history_for_prompt(sim_name, n=12, recipient_name=None,
         return ""
 
     lines = [f"Past interactions with {sim_name}:"]
-    now_real = datetime.datetime.now()
     now_ticks = _now_ingame_ticks()
     for e in entries:
-        # For very recent entries, hours-ago carries urgency that a
-        # bare date does not. Prevents the AI from saying 'missing
-        # you today' when the last conversation was 3 hours ago.
-        #
-        # Prefer in-game ticks (sim time). Falls back to real time for
-        # legacy entries without a ticks field OR when time_service
-        # isn't ready. Real time drifts wrong when the player shelves
-        # the game (11 real days = 0 in-game days), but ticks nail it.
-        date_str = "?"
-        try:
-            entry_ticks = e.get("ticks")
-            if entry_ticks is not None and now_ticks is not None and now_ticks >= int(entry_ticks):
-                diff_ticks = now_ticks - int(entry_ticks)
-                if diff_ticks < _TICKS_PER_HOUR:
-                    mins = max(1, diff_ticks // _TICKS_PER_MINUTE)
-                    date_str = f"~{mins} in-game min ago"
-                elif diff_ticks < _TICKS_PER_DAY:
-                    hours = diff_ticks // _TICKS_PER_HOUR
-                    date_str = f"~{hours}h ago in-game, earlier today"
-                elif diff_ticks < 2 * _TICKS_PER_DAY:
-                    date_str = "yesterday in-game"
-                elif diff_ticks < 7 * _TICKS_PER_DAY:
-                    days = diff_ticks // _TICKS_PER_DAY
-                    date_str = f"{days} in-game days ago"
-                else:
-                    # For older entries, fall back to real-time date --
-                    # the exact number of in-game days gets fuzzy past
-                    # a week and a real date is still useful as an anchor.
-                    try:
-                        dt = datetime.datetime.fromisoformat(e["timestamp"])
-                        date_str = dt.strftime("%b %d")
-                    except Exception:
-                        date_str = f"{diff_ticks // _TICKS_PER_DAY} in-game days ago"
-            else:
-                # Legacy entry without ticks -- fall back to real-time delta
-                dt = datetime.datetime.fromisoformat(e["timestamp"])
-                delta = now_real - dt
-                seconds = delta.total_seconds()
-                if 0 <= seconds < 3600:
-                    mins = max(1, int(seconds // 60))
-                    date_str = f"~{mins} min ago"
-                elif seconds < 86400:
-                    hours = int(seconds // 3600)
-                    date_str = f"~{hours}h ago"
-                elif seconds < 2 * 86400:
-                    date_str = "yesterday (real time)"
-                else:
-                    date_str = dt.strftime("%b %d")
-        except Exception:
-            date_str = "?"
+        # Hours-ago carries urgency a bare day count doesn't: prevents
+        # 'missing you today' when the last conversation was 3 hours ago.
+        # Game clock only -- see _ago_label.
+        date_str = _ago_label(e, now_ticks)
 
         label = e.get("type", "note").replace("_", " ").title()
         preview = e.get("content", "").replace("\n", " ").strip()[:_PREVIEW_CHARS]

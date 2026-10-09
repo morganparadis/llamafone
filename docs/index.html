@@ -13,9 +13,9 @@
     gtag('config', 'G-QMPCP5RVPD');
   </script>
 
-  <title>Llamafone — AI calls, texts, dating & social media for The Sims 4 (Claude, OpenAI, Gemini, or local Ollama)</title>
-  <meta name="description" content="A free phone-first script mod for The Sims 4: AI-generated calls, texts, dating, and Llamagram social media (bring your own AI -- Claude, OpenAI, Gemini, or local Ollama). Sims call, text, and comment on your posts in character, shaped by their traits, careers, relationships, and what's actually happening in your save.">
-  <meta name="keywords" content="sims 4, sims 4 mod, sims 4 phone mod, ai mod, llamafone, claude, openai, gemini, openrouter, ollama, sims 4 ai, sims 4 dialogue mod, sims 4 text mod, scriptmod">
+  <title>Llamafone — AI calls, texts, dating & social media for The Sims 4 (Claude, OpenAI, Gemini, Ollama, or LM Studio)</title>
+  <meta name="description" content="A free phone-first script mod for The Sims 4: AI-generated calls, texts, dating, and Llamagram social media (bring your own AI -- Claude, OpenAI, Gemini, or a local model through Ollama or LM Studio). Sims call, text, and comment on your posts in character, shaped by their traits, careers, relationships, and what's actually happening in your save.">
+  <meta name="keywords" content="sims 4, sims 4 mod, sims 4 phone mod, ai mod, llamafone, claude, openai, gemini, openrouter, ollama, lm studio, sims 4 ai, sims 4 dialogue mod, sims 4 text mod, scriptmod">
   <meta name="author" content="morganparadis">
   <link rel="canonical" href="https://morganparadis.github.io/llamafone/">
 
@@ -23,7 +23,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://morganparadis.github.io/llamafone/">
   <meta property="og:title" content="Llamafone — AI calls, texts, dating & social media for The Sims 4">
-  <meta property="og:description" content="A free phone-first script mod for The Sims 4: AI-generated calls, texts, dating, and social media (Claude, OpenAI, Gemini, or local Ollama). Sims call, text, and comment on your posts in character — shaped by their traits, careers, and what's happening in your save.">
+  <meta property="og:description" content="A free phone-first script mod for The Sims 4: AI-generated calls, texts, dating, and social media (Claude, OpenAI, Gemini, or a local model through Ollama or LM Studio). Sims call, text, and comment on your posts in character — shaped by their traits, careers, and what's happening in your save.">
   <meta property="og:image" content="https://morganparadis.github.io/llamafone/img/llamafone-logo.jpg">
   <meta property="og:image:alt" content="Llamafone logo — a cartoon llama wearing a flower crown and holding a phone, with the title 'Llamafone — Sims 4 Mod'">
   <meta property="og:site_name" content="Llamafone — AI calls & texts for The Sims 4">
@@ -31,7 +31,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Llamafone — AI calls, texts, dating & social media for The Sims 4">
-  <meta name="twitter:description" content="A free phone-first script mod for The Sims 4: AI-generated calls, texts, dating, and social media (Claude, OpenAI, Gemini, or local Ollama). Sims call, text, and comment on your posts in character — shaped by their traits, careers, and what's happening in your save.">
+  <meta name="twitter:description" content="A free phone-first script mod for The Sims 4: AI-generated calls, texts, dating, and social media (Claude, OpenAI, Gemini, or a local model through Ollama or LM Studio). Sims call, text, and comment on your posts in character — shaped by their traits, careers, and what's happening in your save.">
   <meta name="twitter:image" content="https://morganparadis.github.io/llamafone/img/llamafone-logo.jpg">
   <meta name="twitter:image:alt" content="Llamafone logo — a cartoon llama holding a phone, with the title 'Llamafone — Sims 4 Mod'">
 
@@ -44,7 +44,7 @@
     "operatingSystem": "Windows, macOS",
     "applicationCategory": "GameApplication",
     "applicationSubCategory": "Game Mod",
-    "description": "A free phone-first script mod for The Sims 4 that generates AI-powered phone calls and text messages (bring your own AI -- Claude, OpenAI, Gemini, or local Ollama). Random sims call and text you in character, shaped by their traits, careers, relationships, and what's actually happening in your save.",
+    "description": "A free phone-first script mod for The Sims 4 that generates AI-powered phone calls and text messages (bring your own AI -- Claude, OpenAI, Gemini, or a local model through Ollama or LM Studio). Random sims call and text you in character, shaped by their traits, careers, relationships, and what's actually happening in your save.",
     "url": "https://morganparadis.github.io/llamafone/",
     "downloadUrl": "https://github.com/morganparadis/llamafone/releases/latest",
     "softwareVersion": "3.3.1",
@@ -683,7 +683,7 @@
       <div class="step-num">2</div>
       <div class="step-body">
         <h3>Pick an AI provider and get a key</h3>
-        <p>Llamafone works with five different AI providers — pick whichever fits your budget, preferences, or paranoia. You only need credentials for the one you pick. Ollama is free because it runs entirely on your computer.</p>
+        <p>Llamafone works with six different AI providers — pick whichever fits your budget, preferences, or paranoia. You only need credentials for the one you pick. Ollama and LM Studio are free because they run entirely on your computer.</p>
 
         <div class="provider-grid">
           <div class="provider-card">
@@ -740,10 +740,32 @@
             <ol class="api-substeps">
               <li>Install <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>. Make sure the tray icon stays running.</li>
               <li>Pull a model &#8212; e.g. <code>ollama pull llama3.2:3b</code> (small, fast) or a bigger one if your hardware handles it.</li>
+              <li>In Ollama's settings, set <strong>Context length to 16k</strong>. Ollama's default is too small for Llamafone's prompts and it quietly cuts them short.</li>
               <li>Leave <code>api_key</code> blank.</li>
             </ol>
             <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = ollama</code> + <code>default_model = llama3.2:3b</code> (must match <code>ollama list</code>). Run <code>llama.testconnection</code> in the cheat console to verify setup.</p>
           </div>
+
+          <div class="provider-card">
+            <h4>🖥️ LM Studio (local &#8212; no API key) <span class="provider-tag" style="background:#fdecc8;color:#8b5a2b;">techy</span></h4>
+            <p>Also runs on your own computer, with an app for finding and loading models. No API key, no internet, no cost.</p>
+            <ol class="api-substeps">
+              <li>Install <a href="https://lmstudio.ai" target="_blank" rel="noopener">LM Studio</a> and download a model (a small one like Llama 3.2 3B Instruct is a good start).</li>
+              <li>Load it with <strong>Context Length 16384</strong> (12288 at the very least) &#8212; Llamafone's prompts run around 8,000 tokens.</li>
+              <li>Switch to Power User mode, open the Developer tab, and turn the server on.</li>
+              <li>Leave <code>api_key</code> blank.</li>
+            </ol>
+            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = lmstudio</code> + <code>default_model</code> set to the model's name in LM Studio. Run <code>llama.testconnection</code> to verify setup &#8212; it lists the names LM Studio offers.</p>
+          </div>
+        </div>
+
+        <div class="warning-box" style="margin-top:1.25rem">
+          <strong>Using a local model (Ollama or LM Studio)?</strong> Free and private, with a few things to know.
+          <ul>
+            <li><strong>Set the context length to 16k</strong> (12k at the very least). A call or text sends the AI everything it needs to know about your sims &#8212; relationships, history, life events, the calendar &#8212; which comes to about 8,000 tokens, plus room for the reply. With less, replies fail or the model quietly loses part of what it was told.</li>
+            <li><strong>Replies are slower</strong>: about 15 seconds with a decent graphics card, a minute or more without one. Cloud models answer in a few seconds.</li>
+            <li><strong>Small models make more mistakes.</strong> The kind that run alongside the game sometimes mix up details, like when an event is or what to call a family member. The cloud models follow the mod's instructions much more closely.</li>
+          </ul>
         </div>
 
         <div class="warning-box" style="margin-top:1.25rem">
@@ -772,7 +794,7 @@
       <div class="step-body">
         <h3>Set your provider + API key in the config</h3>
         <p>Open <code>llamafone.cfg</code> with any plain text editor (TextEdit, Notepad, VS Code — anything that saves plain text). Two lines to update near the top:</p>
-        <pre><code>provider = claude          # or: openai, gemini, openrouter, ollama
+        <pre><code>provider = claude          # or: openai, gemini, openrouter, ollama, lmstudio
 api_key  = YOUR_API_KEY_HERE</code></pre>
         <p>Replace <code>YOUR_API_KEY_HERE</code> with the key you copied. Examples per provider:</p>
         <pre><code>provider = claude
@@ -800,8 +822,15 @@ fast_model    = anthropic/claude-haiku-4-5
 provider      = ollama
 api_key       =
 default_model = llama3.2:3b     # must match the model you pulled -- see `ollama list`
-fast_model    = llama3.2:3b</code></pre>
-        <p>Save the file. If you're on Ollama, also confirm <code>ollama_endpoint = http://localhost:11434</code> matches wherever your server runs. Ollama users can run <code>llama.testconnection</code> in the cheat console after loading a save &#8212; it verifies Ollama is reachable, the model is downloaded, and end-to-end generation works.</p>
+fast_model    = llama3.2:3b
+
+# or (no key needed)
+
+provider      = lmstudio
+api_key       =
+default_model = llama-3.2-3b-instruct   # the model's name in LM Studio
+fast_model    = llama-3.2-3b-instruct</code></pre>
+        <p>Save the file. If you're on Ollama, also confirm <code>ollama_endpoint = http://localhost:11434</code> matches wherever your server runs. Ollama users can run <code>llama.testconnection</code> in the cheat console after loading a save &#8212; it verifies Ollama is reachable, the model is downloaded, and end-to-end generation works. LM Studio users: the server runs at <code>http://localhost:1234</code> by default; if LM Studio shows a different address, set <code>lmstudio_endpoint</code> to it. <code>llama.testconnection</code> checks LM Studio the same way.</p>
       </div>
     </li>
 
@@ -828,7 +857,7 @@ fast_model    = llama3.2:3b</code></pre>
     <details class="faq-item">
       <summary>Why use AI in The Sims 4?</summary>
       <div class="faq-body">
-        <p>For storytelling. The base game's phone calls and texts are limited dropdown options — useful for gameplay, repetitive for narrative. This mod replaces them with text written specifically for your household by the AI provider you configure (Claude, OpenAI, Gemini, or local Ollama).</p>
+        <p>For storytelling. The base game's phone calls and texts are limited dropdown options — useful for gameplay, repetitive for narrative. This mod replaces them with text written specifically for your household by the AI provider you configure (Claude, OpenAI, Gemini, or a local model through Ollama or LM Studio).</p>
         <p>If you're a storytelling-focused player who's tired of the same scripted lines and wants your sims' relationships to feel alive, this is for you.</p>
       </div>
     </details>
@@ -853,7 +882,7 @@ fast_model    = llama3.2:3b</code></pre>
       <summary>Is my API key safe?</summary>
       <div class="faq-body">
         <p>Yes. The key lives only in <code>llamafone.cfg</code> on your computer. It's never uploaded anywhere except to make the API call to whichever provider you chose. The mod doesn't have a server, doesn't phone home, and isn't open to anyone else.</p>
-        <p>That said, treat the key like a password — don't paste it in screenshots, Discord, or screen-shares. If you ever suspect it leaked, revoke it on your provider's dashboard and make a new one. (Or just switch to Ollama — no key, no exposure.)</p>
+        <p>That said, treat the key like a password — don't paste it in screenshots, Discord, or screen-shares. If you ever suspect it leaked, revoke it on your provider's dashboard and make a new one. (Or just switch to Ollama or LM Studio — no key, no exposure.)</p>
       </div>
     </details>
 
@@ -887,10 +916,10 @@ fast_model    = llama3.2:3b</code></pre>
             <tr><td>OpenAI</td><td>gpt-4o</td><td>~$0.03</td></tr>
             <tr><td>Google Gemini</td><td>gemini-1.5-flash</td><td><strong>free</strong> (rate limited)</td></tr>
             <tr><td>Google Gemini</td><td>gemini-1.5-pro</td><td>~$0.01</td></tr>
-            <tr><td>Ollama (local)</td><td>any model</td><td><strong>free</strong> (uses your GPU)</td></tr>
+            <tr><td>Ollama / LM Studio (local)</td><td>any model</td><td><strong>free</strong> (uses your GPU)</td></tr>
           </tbody>
         </table>
-        <p>A typical session of ~30 calls on Claude Haiku or GPT-4o-mini lands around 15-25 cents. Heavier sessions with long-form storyline generation run a dollar or two on the premium models. Gemini's free tier covers most casual play. Ollama is fully free if you've got the hardware.</p>
+        <p>A typical session of ~30 calls on Claude Haiku or GPT-4o-mini lands around 15-25 cents. Heavier sessions with long-form storyline generation run a dollar or two on the premium models. Gemini's free tier covers most casual play. Ollama and LM Studio are fully free if you've got the hardware.</p>
         <p><strong>Llamagram adds a little.</strong> Each of your posts is one larger call (it writes all the comments at once), and each reply you post to a comment is one more. With auto-events on, friends posting on their own is one call per post, about one in five auto-events at the default setting. Set <code>social_npc_post_weight = 0</code> to turn friends' posts off.</p>
       </div>
     </details>
@@ -924,6 +953,37 @@ fast_model    = llama3.2:3b</code></pre>
   <p class="muted">What's changed in each release, newest first.</p>
 
   <ol class="changelog-list">
+
+    <li class="changelog-entry">
+      <div class="changelog-date">October 9, 2026</div>
+      <div class="changelog-body">
+        <h3>Trip memory, LM Studio, and squashed bugs (v3.8.2)</h3>
+        <p>Sims remember vacations, a new free local AI option, and a round of bug fixes. Drop-in over v3.8.1.</p>
+        <p><strong>New:</strong></p>
+        <ul>
+          <li><strong>Trip memory.</strong> Llamafone now notices when your household goes on a vacation or getaway, and who came along. Sims on the trip talk about being away together while it's happening and remember it together afterward ("Apollo and Francesca went to Gibbi Point together&hellip; got back yesterday"). Everyone else hears about it the way news travels: parents within a few hours, close friends in a couple of days, acquaintances only if they're told. Trips stay in conversations for a week of game time after you get home. Type <code>llama.trips</code> to see what's been recorded.</li>
+          <li><strong>LM Studio support.</strong> Set <code>provider = lmstudio</code> to run Llamafone on a model loaded in <a href="https://lmstudio.ai" target="_blank" rel="noopener">LM Studio</a>: free, private, no API key. Load the model with a context length of 16k. <code>llama.testconnection</code> checks the server, lists your models, and tells you exactly what's wrong if something's off.</li>
+        </ul>
+        <p><strong>Other bug fixes:</strong></p>
+        <ul>
+          <li><strong>Claude Haiku 5.5 works.</strong> Longer texts failed with "Empty response from Claude" because Llamafone only read the first part of the reply.</li>
+          <li><strong>Babies you've met aren't strangers.</strong> A grandparent who's been introduced to the new baby no longer gets a "you may not know this person" warning about them.</li>
+          <li><strong>Best friends aren't described as exes.</strong> Old "No Longer Friends" tags from a past falling-out no longer count when two sims are close now.</li>
+          <li><strong>Times read right.</strong> Something from last night is "last night," not "earlier today," and every part of a conversation agrees on when something happened.</li>
+          <li><strong>Life events stick around.</strong> They're remembered for a week of game time, however long you're away from the game between sessions.</li>
+          <li><strong>Events last as long as they should.</strong> Weddings, parties, and holidays stay "happening now" for as long as they actually last.</li>
+          <li><strong>In-person memories last.</strong> "Saw each other in person" memories no longer clear early.</li>
+          <li><strong>Llamagram comments survive a break.</strong> Comments still on the way when you quit always arrive, even after a long break.</li>
+          <li><strong>Fair Llamagram feeds.</strong> Every household sim gets friends' posts, from casual friends too, without the same friend posting twice in a day.</li>
+          <li><strong>Shared weather.</strong> A sim on the same lot or trip as you shares your weather.</li>
+          <li><strong>No phantom thank-yous.</strong> Baby follow-ups don't thank you for congratulations you never sent.</li>
+          <li><strong>Cleaner labels.</strong> Relationships read "Good Friend," not "Good," and Lovestruck's hidden relationship settings no longer show up as traits.</li>
+          <li><strong>No real-world dates.</strong> Conversations only ever use in-game time.</li>
+          <li><strong>Local model fixes.</strong> Ollama and LM Studio get up to 5 minutes per reply, models that "think" first (like Gemma 4) no longer come back empty, and dashes and apostrophes no longer come out garbled.</li>
+          <li><strong>Clearer errors.</strong> LM Studio problems are explained in plain English with the fix, an empty reply shows an error instead of nothing, and failed requests are noted in <code>Llamafone_Log.txt</code>.</li>
+        </ul>
+      </div>
+    </li>
 
     <li class="changelog-entry">
       <div class="changelog-date">October 3, 2026</div>
@@ -1117,9 +1177,15 @@ fast_model    = llama3.2:3b</code></pre>
     </li>
 
     <li class="roadmap-card">
+      <div class="roadmap-status status-planned">Planned</div>
+      <h3>Core memories</h3>
+      <p>Right now sims remember recent messages, and life events and trips for about a week of game time. Core memories would be the moments that define a relationship and never fade: the day Apollo walked Francesca down the aisle, the fight Ingrid and Ben never got past, the vacation in Sulani. A short permanent list for each pair of sims, picked out of big conversations and events, and something you can view, edit, or pin yourself.</p>
+    </li>
+
+    <li class="roadmap-card">
       <div class="roadmap-status status-investigating">Investigating</div>
-      <h3>Photo posts on Llamagram</h3>
-      <p>Your sim takes a photo with their phone in-game and posts it to Llamagram, and the AI actually looks at the picture: comments react to who's in it, where they are, and what they're doing. Needs a vision-capable model. Still confirming the mod can reliably grab the exact photo your sim took.</p>
+      <h3>Photos in texts and on Llamagram</h3>
+      <p>Your sim takes a photo with their phone in-game and texts it to someone or posts it to Llamagram, and the AI actually looks at the picture: replies and comments react to who's in it, where they are, and what they're doing. Needs a vision-capable model. Still confirming the mod can reliably grab the exact photo your sim took.</p>
     </li>
 
     <li class="roadmap-card roadmap-card-cta">
@@ -1164,7 +1230,7 @@ fast_model    = llama3.2:3b</code></pre>
   <div class="container footer-inner">
     <div>
       <strong>Llamafone — AI for The Sims 4</strong>
-      <p class="muted">An open-source script mod. Not affiliated with EA, Maxis, Anthropic, OpenAI, Google, or Ollama.</p>
+      <p class="muted">An open-source script mod. Not affiliated with EA, Maxis, Anthropic, OpenAI, Google, Ollama, or LM Studio.</p>
     </div>
     <div class="footer-links">
       <a href="https://www.curseforge.com/sims4/mods/llamafone" target="_blank" rel="noopener">CurseForge</a>

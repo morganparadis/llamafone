@@ -1,6 +1,8 @@
 # Llamafone
 
-A phone-first AI mod for The Sims 4. Random sims call and text you in character — voices shaped by their traits, mood, relationships, and what's actually happening in your save. Bring your own AI — Claude, OpenAI, Gemini, or a local Ollama model — and pick up calls and texts that read like they were written for the people in front of you.
+A phone-first AI mod for The Sims 4. Random sims call and text you in character — voices shaped by their traits, mood, relationships, and what's actually happening in your save. Bring your own AI — Claude, OpenAI, Gemini, or a local model through Ollama or LM Studio — and pick up calls and texts that read like they were written for the people in front of you.
+
+**v3.8.2:** trip memory (sims remember vacations and who went, and everyone else hears about it the way news travels), LM Studio support (free, local, no key), and bug fixes, including Claude Haiku 5.5 support.
 
 **v3.8 highlights:** **Llamagram**, social media for your sims. Post to friends or the whole world, and real sims from your save comment, like, and follow. Your friends post about their own lives, big accounts draw fans, posts carry into calls and texts ("I saw your post..."), and with Get Famous, posts that truly go viral raise your fame. Plus a round of birth-announcement fixes.
 
@@ -40,8 +42,17 @@ No Python install required for end users — the release ships compiled `.pyc` b
 | `gemini` | Yes | `gemini-1.5-pro`, `gemini-1.5-flash` | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
 | `openrouter` | Yes | `anthropic/claude-haiku-4-5`, `openai/gpt-4o-mini`, `meta-llama/llama-3.1-8b-instruct`, `deepseek/deepseek-chat` — [full catalog](https://openrouter.ai/models) | [openrouter.ai/keys](https://openrouter.ai/keys) |
 | `ollama` (techy) | **No** — runs locally | whatever you've `ollama pull`-ed (`llama3.2:3b` recommended for most hardware) | [ollama.com](https://ollama.com) |
+| `lmstudio` (techy) | **No** — runs locally | whatever model you've loaded in LM Studio (e.g. `llama-3.2-3b-instruct`) | [lmstudio.ai](https://lmstudio.ai) |
 
 For Ollama, `ollama_endpoint` in the config points at your local server (default `http://localhost:11434`). No key, no cost, no internet required after the model download. It's the most technical option — you install Ollama, keep the tray icon running, and `ollama pull` a model before the mod can use it. Run `llama.testconnection` in-game to verify setup end-to-end (checks reachability, lists installed models, verifies your configured models match, runs a tiny generation).
+
+For LM Studio, set `provider = lmstudio`. In LM Studio, load a model with **Context Length 16384** (12288 at the very least), then switch the server on in the Developer tab. `lmstudio_endpoint` defaults to `http://localhost:1234`; the address LM Studio shows (ending in `/v1`) works too. Put the model's name in `default_model` and `fast_model`; `llama.testconnection` lists the names LM Studio offers.
+
+**Context size:** a call or text prompt is about 8,000 tokens (relationships, history, life events, the calendar), plus room for the reply. Give local models a context length of **16k** (12k at the very least): in LM Studio, set it when loading the model; in Ollama, set **Context length** in its settings (its default is too small, and it quietly cuts long prompts). With less, replies fail or the model loses part of what it was told.
+
+Local models get up to 5 minutes per reply (cloud providers: 60 seconds). Without a supported graphics card, a local model can take minutes per text; a small model (around 3B) is the most practical.
+
+**A note on local models:** they're free, but slower and less capable than the cloud options. Each reply takes anywhere from about 15 seconds with a decent graphics card to a minute or more without one, where cloud models answer in a few seconds. Small models also sometimes mix up details, like when an event is or what to call a family member. The cloud models follow the mod's instructions much more closely.
 
 For OpenRouter, model names use the `vendor/model` form so `default_model = anthropic/claude-haiku-4-5` gets you Claude via OpenRouter's proxy, `default_model = openai/gpt-4o-mini` gets you GPT, etc. One key covers everything — useful if you want to try several models without juggling separate accounts.
 
@@ -91,6 +102,16 @@ Social media for your sims. Everyone who comments, replies, or posts is a real s
 - **Relationships:** comment moods nudge friendship / romance only between sims who already know each other. Strangers' comments never change relationships and never add anyone to the relationship panel. No romance changes across the teen / adult line.
 - **Controls:** Llamafone Settings has toggles for Llamagram itself, friends'-post pop-ups, and comment / like pop-ups (off = quiet, still in the inbox). Muted contacts never post to you or comment on your posts.
 - **Durable:** pending comments are saved to `Feed.json` (per save, hand-editable) and delivered quietly after a quit, with one "while you were away" notification.
+
+## Trip memory (v3.8.2)
+
+When your household goes on a vacation or getaway, Llamafone records where, when, and who came along (it reads the game's own travel group; guests staying over at your house don't count).
+
+- **Sims on the trip** talk about being away together while it's happening, and remember it together afterward ("Apollo and Francesca went to Gibbi Point together… got back yesterday").
+- **Everyone else** hears about it the way news travels (see below): parents within a few hours, close friends in a couple of days, acquaintances only if they're told.
+- **People who join mid-trip** are added; restarts and loading screens don't end a trip early. A trip ends once the household is back home.
+- Trips stay in conversations for 7 in-game days after you get home, and are kept in `Trips.json` in the save's Llamafone folder.
+- `llama.trips` lists every recorded trip.
 
 ## Birth announcements & news that spreads (v3.7)
 
@@ -246,11 +267,12 @@ Llamafone has its own home-screen tile on the phone — no more digging through 
 | `llama.journal` / `llama.journal_sim First Last` / `llama.journal_clear` | View or clear journal entries |
 | `llama.auto_events on\|off` / `llama.fire_auto <type>` | Toggle or fire auto-events |
 | `llama.reload` | Reload config file after editing `llamafone.cfg` by hand |
-| `llama.testconnection` | Provider-aware diagnostic — for Ollama users, walks through reachability, installed models, and end-to-end generation |
+| `llama.testconnection` | Provider-aware diagnostic — for Ollama and LM Studio users, walks through reachability, available models, and end-to-end generation |
 | `llama.testprovider` / `llama.testweather` / `llama.scanworlds` | Provider ping / weather-service dump / household world audit |
 | `llama.debug` / `llama.debugsim` / `llama.dumpphone` / `llama.dumpprompt` | Internal state dumps for diagnostics |
 | `llama.saveinfo` | Which per-save folder is in use and how it was resolved |
 | `llama.birthwatch` | Run a birth-watcher pass now and show what it saw |
+| `llama.trips` | Check for a trip now and list every recorded vacation / getaway |
 | `llama.pregdebug First Last` / `llama.testbirth First Last` | Pregnancy visibility details / dry-run a birth announcement (never journaled) |
 | `llama.journal_undo First Last [count]` | Remove the last journal entries for a sim |
 
@@ -300,11 +322,12 @@ Two paths to change settings:
 
 | Setting | Default | Editable in UI | Description |
 |---|---|---|---|
-| `provider` | `claude` | ❌ | `claude`, `openai`, `gemini`, `openrouter`, or `ollama` |
-| `api_key` | *(required for cloud providers)* | ❌ | Blank for Ollama |
+| `provider` | `claude` | ❌ | `claude`, `openai`, `gemini`, `openrouter`, `ollama`, or `lmstudio` |
+| `api_key` | *(required for cloud providers)* | ❌ | Blank for Ollama and LM Studio |
 | `default_model` | `claude-haiku-4-5` | ❌ | Used for briefings and storyline generation |
 | `fast_model` | `claude-haiku-4-5` | ❌ | Used for calls, texts, and reply generation |
 | `ollama_endpoint` | `http://localhost:11434` | ❌ | Only used when provider = `ollama` |
+| `lmstudio_endpoint` | `http://localhost:1234` | ❌ | Only used when provider = `lmstudio` |
 | `max_tokens` | `512` | ❌ | Max length of responses |
 | `language` | `English` | ❌ | Language for all generated content |
 | `main_sim_name` | *(blank)* | ❌ | Your protagonist's full name. Blank = active sim. |
@@ -323,7 +346,7 @@ Two paths to change settings:
 | `social_comment_popups` | `true` | ✅ | Comment / like / follower pop-ups on your posts (off = inbox only) |
 | `social_npc_post_weight` | `25` | ❌ | How often friends post, relative to call:50 / text:50. 0 = never |
 
-Per-save data (journal, milestones, group threads, contact preferences, past events, interactions, Llamagram feed) lives in `Documents/Electronic Arts/The Sims 4/saves/Llamafone/Slot_NNNNNNNN/`. Multiple saves get their own folders — no cross-contamination.
+Per-save data (journal, milestones, group threads, contact preferences, past events, interactions, Llamagram feed, trips) lives in `Documents/Electronic Arts/The Sims 4/saves/Llamafone/Slot_NNNNNNNN/`. Multiple saves get their own folders — no cross-contamination.
 
 ---
 
@@ -338,7 +361,7 @@ You pay your AI provider directly for what the mod uses — no subscription to t
 | OpenAI | gpt-4o-mini | ~$0.005 |
 | OpenAI | gpt-4o | ~$0.03 |
 | Gemini | Flash | free tier covers most casual play |
-| Ollama | any local model | **free** (uses your GPU) |
+| Ollama / LM Studio | any local model | **free** (uses your GPU) |
 
 A typical session with ~30 Haiku or gpt-4o-mini commands lands around **$0.15**. Heavy sessions with long-form storyline generation run **$0.50 – $1.50** on premium models. Gemini's free tier covers most casual play. Ollama is fully free if you have the hardware.
 
@@ -385,7 +408,7 @@ src/
   llamafone/
     __init__.py                 mod entry point, startup notification, save-load hooks
     config.py                   reads & writes llamafone.cfg, runtime settings layer
-    api_client.py               AI provider HTTP calls (Claude/OpenAI/Gemini/Ollama) via curl
+    api_client.py               AI provider HTTP calls (Claude/OpenAI/Gemini/OpenRouter/Ollama/LM Studio) via curl
     sim_context.py              reads sim data, protagonist system, relationship network
     save_id.py                  per-save data folder resolution + save-switch hook
     dialogue.py                 dialogue, conversation, backstory generation
@@ -400,6 +423,7 @@ src/
     milestones.py               detects & dedups life events (job, marriage, birth, ...), pregnancy visibility, news-spread gating
     births.py                   birth announcements: complete_pregnancy hook, snapshot watcher, household-switch sweep
     social.py                   Llamagram: posts, comment passes, followers / fame, inbox, Feed.json
+    trips.py                    trip memory: travel-group watcher, Trips.json, trip lines in prompts
     interactions.py             logs in-person interactions via Relationship.add_relationship_bit
     group_texts.py              persistent group thread storage (per save)
     contact_prefs.py            per-pair contact prefs (state + note) + relationship_events (origin, etc.) + auto-detection

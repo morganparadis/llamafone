@@ -310,28 +310,29 @@ def cleanup_old(days=_RETENTION_DAYS):
     that were logged only hours ago in-game). Falls back to the
     real-time ISO timestamp for legacy entries that predate the ticks
     field. Idempotent; safe to call on every save load."""
-    # 24h * 60min * 100ticks/min per in-game day (matches past_events).
-    _TICKS_PER_DAY = 24 * 60 * 100
+    # 1500 ticks per in-game minute (_TICKS_PER_DAY_INTX). This used to
+    # say 100, which trimmed entries 15x sooner than `days` intended.
     with _lock:
         data = _load()
         if not data:
             return
         now_ticks = _now_ingame_ticks()
-        cutoff_ticks = (now_ticks - days * _TICKS_PER_DAY) if now_ticks is not None else None
-        cutoff = datetime.datetime.now() - datetime.timedelta(days=days)
-        cutoff_iso = cutoff.isoformat()
+        if now_ticks is None:
+            return  # can't judge age without the game clock -- keep everything
+        cutoff_ticks = now_ticks - days * _TICKS_PER_DAY_INTX
 
         def _keep(entry):
             if not isinstance(entry, dict):
                 return False
             t = entry.get("ticks")
-            if t is not None and cutoff_ticks is not None:
-                try:
-                    return int(t) >= cutoff_ticks
-                except Exception:
-                    pass
-            # Legacy entry or time_service not ready -- fall back to real time.
-            return entry.get("timestamp", "") >= cutoff_iso
+            if t is None:
+                # No in-game time recorded: never delete by the real-world
+                # calendar. Keep it.
+                return True
+            try:
+                return int(t) >= cutoff_ticks
+            except Exception:
+                return True
 
         before = len(data)
         keep = {k: v for k, v in data.items() if _keep(v)}
@@ -574,23 +575,6 @@ def _format_recency(entry):
             return f"{days} in-game day{'s' if days != 1 else ''} ago"
         except Exception:
             pass
-    # Legacy: use real-time delta
-    ts = entry.get("timestamp", "")
-    if not ts:
-        return ""
-    try:
-        dt = datetime.datetime.fromisoformat(ts)
-        delta = datetime.datetime.now() - dt
-        seconds = delta.total_seconds()
-        if seconds < 0:
-            return ""
-        if seconds < 3600:
-            mins = max(1, int(seconds // 60))
-            return f"about {mins} min ago"
-        if seconds < 86400:
-            hours = int(seconds // 3600)
-            return f"about {hours} hour{'s' if hours != 1 else ''} ago"
-        days = int(seconds // 86400)
-        return f"{days} day{'s' if days != 1 else ''} ago"
-    except Exception:
-        return ""
+    # No in-game time recorded (legacy entry): no time label. The
+    # real-world calendar says nothing about when sims last met.
+    return ""

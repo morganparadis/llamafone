@@ -39,7 +39,7 @@ _MAX_MILESTONES = 200
 _PROMPT_MILESTONES_PER_SIM = 4
 
 # Only include milestones from the last N real-world days in prompts.
-_PROMPT_RECENCY_DAYS = 7
+_PROMPT_RECENCY_DAYS = 7    # IN-GAME days (was real days -- see _in_game_age_days)
 
 
 def _log(message):
@@ -110,38 +110,75 @@ def _now_sim_ticks():
         return None
 
 
-def _relative_sim_time(then_ticks, now_ticks):
-    """Turn a delta between two in-game tick counts into a natural phrase
-    a sim would actually say. Real-world dates are meaningless in Sims 4
-    ("Sep 25" tells the AI nothing about season or timing), so milestones
-    render as "yesterday" / "a few days ago" / "last week" / etc. Returns
-    None if either tick value is missing -- caller falls back."""
+def _part_of_day(ticks):
+    """'morning' / 'afternoon' / 'evening' / 'night' for an in-game tick.
+    Absolute ticks start at midnight, so ticks % one day is the time of
+    day (checked against the game clock shown in prompts)."""
+    hour = (ticks % _TICKS_PER_DAY) // _TICKS_PER_HOUR
+    if hour < 5:
+        return "night"
+    if hour < 12:
+        return "morning"
+    if hour < 17:
+        return "afternoon"
+    if hour < 22:
+        return "evening"
+    return "night"
+
+
+def in_game_when(then_ticks, now_ticks, precise=False):
+    """When something happened, by the in-game CALENDAR, the way a sim
+    would say it. Calendar days, not elapsed hours: at 2 PM, something
+    from 10 PM last night is "last night" (16 hours ago is NOT "earlier
+    today"), and something from 7 PM two days ago is "two days ago" (43
+    hours is NOT "yesterday").
+
+    precise=True adds hour / day counts for history lists
+    ("~4h ago, earlier today", "3 days ago"). None if either tick is
+    missing; "earlier" for a rolled-back (future) tick."""
     if then_ticks is None or now_ticks is None:
+        return None
+    try:
+        then_ticks, now_ticks = int(then_ticks), int(now_ticks)
+    except Exception:
         return None
     delta = now_ticks - then_ticks
     if delta < 0:
-        return "recently"
-    hours = delta / _TICKS_PER_HOUR
-    days = delta / _TICKS_PER_DAY
-    if hours < 1:
-        return "just now"
-    if hours < 5:
-        return "a few hours ago"
-    if hours < 20:
-        return "earlier today"
-    if days < 1.75:
-        return "yesterday"
-    if days < 4:
-        return "a few days ago"
-    if days < 8:
-        # A Sims 4 in-game week is one season, so this range covers "the
-        # last week or so" without spilling into "last season".
-        return "earlier this week"
-    if days < 15:
+        return "earlier"
+    day_diff = now_ticks // _TICKS_PER_DAY - then_ticks // _TICKS_PER_DAY
+    hours = delta // _TICKS_PER_HOUR
+    part = _part_of_day(then_ticks)
+    if delta < _TICKS_PER_HOUR:
+        # Under an hour reads as minutes, even across midnight.
+        mins = max(1, delta // _TICKS_PER_MINUTE)
+        return f"~{mins} min ago" if precise else "just now"
+    if day_diff == 0:
+        if part == "night" and (then_ticks % _TICKS_PER_DAY) < 5 * _TICKS_PER_HOUR:
+            # Small hours of today: people call that "last night".
+            return f"last night (~{hours}h ago)" if precise else "last night"
+        if precise:
+            return f"~{hours}h ago, earlier today"
+        return "a few hours ago" if hours < 5 else "earlier today"
+    if day_diff == 1:
+        if part == "night":
+            label = "late last night" if (then_ticks % _TICKS_PER_DAY) >= 22 * _TICKS_PER_HOUR else "yesterday"
+        else:
+            label = f"yesterday {part}"
+        return f"{label} (~{hours}h ago)" if precise else label
+    if day_diff == 2:
+        return "two days ago"
+    if day_diff < 7:
+        return f"{day_diff} days ago"
+    if day_diff < 14:
         return "last week"
-    if days < 30:
+    if day_diff < 30:
         return "a couple of weeks ago"
     return "a while back"
+
+
+def _relative_sim_time(then_ticks, now_ticks):
+    """Natural 'when' for milestones and posts. See in_game_when."""
+    return in_game_when(then_ticks, now_ticks)
 
 
 def _atomic_write_json(path, data):
@@ -1316,7 +1353,6 @@ def _backfill_partner_mirrors(milestones, now_sim_ticks):
     for the other parent after the fact). Marks the original so this
     runs once per event. Returns the number of mirrors added."""
     import services
-    cutoff = (datetime.datetime.now() - datetime.timedelta(days=_PROMPT_RECENCY_DAYS)).isoformat()
     sm = services.sim_info_manager()
     added = 0
     for ev in list(milestones):
@@ -1324,7 +1360,7 @@ def _backfill_partner_mirrors(milestones, now_sim_ticks):
             continue
         if "mirror_of" in ev or ev.get("mirrored"):
             continue
-        if (ev.get("timestamp") or "") < cutoff:
+        if not _is_recent(ev, now_sim_ticks, _PROMPT_RECENCY_DAYS):
             continue
         try:
             si = sm.get(int(ev.get("sim_id")))
@@ -1439,6 +1475,40 @@ def scan_sims(sim_infos):
 # Prompt formatting
 # ---------------------------------------------------------------------------
 
+def _in_game_age_days(ev, now_ticks):
+    """How many in-game days ago a milestone happened, or None when it
+    can't be told (no in-game time recorded -- entries from before
+    sim_ticks existed -- or the clock isn't ready). Negative means the
+    event is 'in the future': it was recorded in a session the player
+    has since rolled back by loading an older save.
+
+    Recency is measured on the game clock ONLY. The real-world calendar
+    has nothing to do with how long ago something happened to a sim: a
+    player who plays on weekends would otherwise have every life event
+    expire between sessions, and one who plays three in-game weeks in
+    an evening would see stale news treated as fresh."""
+    st = ev.get("sim_ticks")
+    if st is None or now_ticks is None:
+        return None
+    try:
+        return (now_ticks - int(st)) / _TICKS_PER_DAY
+    except Exception:
+        return None
+
+
+def _is_recent(ev, now_ticks, days):
+    """True if the milestone is within `days` in-game days. Entries with
+    no in-game time are treated as old (they predate sim_ticks)."""
+    age = _in_game_age_days(ev, now_ticks)
+    if age is None:
+        # Clock not ready but the entry has a time: keep it (callers
+        # run in-game, so this is rare and dropping would hide news).
+        return now_ticks is None and ev.get("sim_ticks") is not None
+    # A small negative tolerance for same-tick writes; anything clearly
+    # in the future belongs to a rolled-back timeline.
+    return -0.01 <= age <= days
+
+
 def get_recent_for_sim(sim_id, days=_PROMPT_RECENCY_DAYS, limit=_PROMPT_MILESTONES_PER_SIM,
                        exclude_for_contact=None):
     """Return a list of recent milestone dicts for one sim, newest first.
@@ -1447,7 +1517,7 @@ def get_recent_for_sim(sim_id, days=_PROMPT_RECENCY_DAYS, limit=_PROMPT_MILESTON
     already had surfaced are filtered out -- so the same contact doesn't
     keep asking about the same job-quit / promotion across calls."""
     sid_key = str(sim_id)
-    cutoff = datetime.datetime.now() - datetime.timedelta(days=days)
+    now_ticks = _now_sim_ticks()
     entries = _load_milestones()
     skip_ts = _referenced_timestamps(exclude_for_contact, sim_id)
     # Milestone types that should ALWAYS surface fresh every prompt,
@@ -1464,12 +1534,8 @@ def get_recent_for_sim(sim_id, days=_PROMPT_RECENCY_DAYS, limit=_PROMPT_MILESTON
     for e in entries:
         if e.get("sim_id") != sid_key:
             continue
-        ts_str = e.get("timestamp")
-        try:
-            ts = datetime.datetime.fromisoformat(ts_str)
-            if ts < cutoff:
-                continue
-        except Exception:
+        ts_str = e.get("timestamp")   # identity key for the seen-tracker, not a time check
+        if not _is_recent(e, now_ticks, days):
             continue
         # Already surfaced to this contact: KEEP it, flagged, rather than
         # dropping it. Dropping meant the fact vanished from the prompt

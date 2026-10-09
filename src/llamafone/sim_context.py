@@ -514,6 +514,8 @@ _NOISE_TRAIT_KEYWORDS = (
     "hidden", "ghost",  # internal/occult flag traits
     "reputation",       # Get Famous reputation tracker
     "simpreference",    # Lovestruck preferences (likes/dislikes)
+    "relexpectations",  # Lovestruck relationship expectations, stored as traits --
+                        # showed up as "Relexpectations Physicalexclusivity Yes" on a baby
     "handedness",       # Left/Right-handed
     "hometurf",         # Snowy Escape lifestyle marker
     "lifestyle",        # Snowy Escape lifestyles (Energetic, Workaholic, etc.)

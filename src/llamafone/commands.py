@@ -90,6 +90,7 @@ try:
         output("  llama.post [public] text   — post as the active sim; comments arrive later")
         output("  llama.npcpost [First Last] — a friend posts now")
         output("  llama.feed / llama.inbox   — recent posts / social notifications")
+        output("  llama.trips                — recorded vacations and getaways")
         output("  llama.sendtext First Last msg — text a specific sim")
         output("  llama.sendcall First Last msg — call a specific sim")
         output("  llama.contact First Last ... — mute/pause/priority a contact")
@@ -242,6 +243,38 @@ try:
                 return
             output(f"[Llamafone] OK Both configured models ({fast_model}, {default_model}) are installed.")
             output("[Llamafone] Running a tiny generation to confirm end-to-end...")
+        elif provider == "lmstudio":
+            endpoint = config.get_lmstudio_endpoint()
+            output(f"[Llamafone] LM Studio endpoint: {endpoint}")
+            output("[Llamafone] Checking if LM Studio's server is reachable...")
+            health = api_client.check_lmstudio_health(endpoint)
+            if not health.get("reachable"):
+                output("[Llamafone] X FAILED to reach LM Studio.")
+                output(f"[Llamafone]   {health.get('error')}")
+                output("[Llamafone] Fix that, then run llama.testconnection again.")
+                return
+            output(f"[Llamafone] OK Reached LM Studio at {health['endpoint']}.")
+            models = health.get("models") or []
+            output(f"[Llamafone] Models LM Studio offers: {len(models)}")
+            for m in models:
+                output(f"[Llamafone]   - {m}")
+            if not models:
+                output("[Llamafone] X No models available. In LM Studio, download and load a model")
+                output("[Llamafone] (a small one like Llama 3.2 3B Instruct works well), with")
+                output("[Llamafone] Context Length set to 16384 (12288 at the very least).")
+                return
+            missing = [m for m in {default_model, fast_model} if m and m not in models]
+            if missing:
+                output("[Llamafone] X Models in llamafone.cfg aren't offered by LM Studio:")
+                for m in missing:
+                    output(f"[Llamafone]      {m}")
+                output("[Llamafone] Copy a name from the list above into default_model and")
+                output("[Llamafone] fast_model in llamafone.cfg, then run llama.reload.")
+                return
+            output(f"[Llamafone] OK Both configured models ({fast_model}, {default_model}) are available.")
+            output("[Llamafone] Reminder: load the model with Context Length 16384 -- the")
+            output("[Llamafone] tiny test below passes either way, but real texts need it.")
+            output("[Llamafone] Running a tiny generation to confirm end-to-end...")
         else:
             # Cloud provider -- check that an API key is set.
             if not config.is_configured():
@@ -258,6 +291,9 @@ try:
                     output("[Llamafone] Ollama was reachable earlier, so this is likely a model-")
                     output("[Llamafone] specific issue (e.g. the model is too large for your RAM).")
                     output("[Llamafone] Try a smaller model like llama3.2:3b or qwen2.5:3b.")
+                elif provider == "lmstudio":
+                    output("[Llamafone] LM Studio was reachable earlier, so this is likely a model")
+                    output("[Llamafone] issue: make sure the model is loaded, or try a smaller one.")
                 else:
                     output("[Llamafone] Check provider, api_key, default_model, and fast_model in llamafone.cfg.")
                 return
@@ -865,6 +901,18 @@ try:
         output = sims4.commands.CheatOutput(_connection)
         from . import social
         for line in social.debug_summary():
+            output(f"[Llamafone] {line}")
+
+    @sims4.commands.Command("llama.trips", command_type=sims4.commands.CommandType.Live)
+    def cmd_trips(_connection=None):
+        """Check for a trip now, then list every recorded vacation / getaway."""
+        output = sims4.commands.CheatOutput(_connection)
+        from . import trips
+        try:
+            trips.poll_once()
+        except Exception as e:
+            output(f"[Llamafone] trip check failed: {type(e).__name__}: {e}")
+        for line in trips.debug_summary():
             output(f"[Llamafone] {line}")
 
     @sims4.commands.Command("llama.inbox", command_type=sims4.commands.CommandType.Live)

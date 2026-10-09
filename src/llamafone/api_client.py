@@ -9,6 +9,7 @@ Routes `call_ai_async()` to one of five providers based on the
   gemini      -> Google Gemini Generative Language API
   openrouter  -> OpenRouter (OpenAI-compatible aggregator, any hosted model)
   ollama      -> Local Ollama server (no API key needed)
+  lmstudio    -> LM Studio's local server (OpenAI-compatible, no key)
 
 We talk to every provider via `curl` because the Sims 4's embedded
 Python 3.7 lacks SSL support. Each provider's request/response shape
@@ -26,6 +27,7 @@ import re
 import subprocess
 import sys
 import threading
+import time
 
 from . import config
 
@@ -101,7 +103,12 @@ def _log_prompt(system, messages, model, provider):
             f.write("=== Llamafone - Last Prompt ===\n")
             f.write(f"Timestamp: {datetime.datetime.now().isoformat()}\n")
             f.write(f"Provider:  {provider}\n")
-            f.write(f"Model:     {model}\n\n")
+            f.write(f"Model:     {model}\n")
+            try:
+                from . import LOAD_TIMESTAMP, MOD_VERSION
+                f.write(f"Build:     v{MOD_VERSION}, loaded {LOAD_TIMESTAMP} (not sent to the AI)\n\n")
+            except Exception:
+                f.write("\n")
             f.write("=== SYSTEM PROMPT ===\n")
             f.write((system or "(none)") + "\n\n")
             f.write("=== USER MESSAGES ===\n")
@@ -110,6 +117,25 @@ def _log_prompt(system, messages, model, provider):
                 f.write(str(m.get("content", "")) + "\n\n")
     except Exception:
         pass
+
+
+def _log_failure(provider, model, error, elapsed):
+    """One line in Llamafone_Log.txt per failed request, so a bug report
+    that includes the log already says what failed and how long it took
+    (a 60s+ elapsed on a local model means 'too slow', not 'broken')."""
+    try:
+        path = os.path.join(os.path.expanduser("~"), "Documents", "Llamafone_Log.txt")
+        ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"[{ts}] [api] {provider}/{model} failed after {elapsed:.1f}s: {error}\n")
+    except Exception:
+        pass
+
+
+# Local models (Ollama, LM Studio) run on the player's own PC. Without a
+# supported GPU, reading our ~7K-token prompts can take minutes; 60s (fine
+# for cloud APIs) made every text silently time out on those PCs.
+_LOCAL_TIMEOUT = 300
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +175,7 @@ def _curl(url, headers, body_json, timeout=60, method="POST"):
     args += [url]
     try:
         result = subprocess.run(
-            args, capture_output=True, text=True, timeout=timeout,
+            args, capture_output=True, encoding="utf-8", errors="replace", timeout=timeout,
             startupinfo=startupinfo,
             input=body_json if body_json is not None else None,
         )
@@ -206,9 +232,9 @@ def _friendly_ollama_error(err, returncode, endpoint):
     if returncode == 28:
         return (
             f"{base} The request timed out. Ollama may be busy loading "
-            f"a large model, or the machine is under heavy load. Try "
-            f"again in a moment; if it keeps timing out, try a smaller "
-            f"model (e.g. llama3.2:3b)."
+            f"a large model, or running without a graphics card, which "
+            f"is slow for long prompts. Try again in a moment; if it "
+            f"keeps timing out, try a smaller model (e.g. llama3.2:3b)."
         )
     hint = _CURL_EXIT_HINTS.get(returncode)
     if hint:
@@ -220,8 +246,16 @@ def _friendly_ollama_error(err, returncode, endpoint):
 # Provider implementations -- each returns (text, error).
 # ---------------------------------------------------------------------------
 
+# Extra output room on Claude requests for models that think before
+# answering (adaptive thinking -- e.g. Claude Haiku 5.5 thought for ~350
+# tokens on a real Llamafone prompt). Thinking counts against max_tokens,
+# so without headroom a 512-token cap could be spent before any message.
+# Only tokens actually generated are billed.
+_CLAUDE_THINKING_HEADROOM = 2048
+
+
 def _call_claude(api_key, model, max_tokens, system, messages):
-    body = {"model": model, "max_tokens": max_tokens, "messages": messages}
+    body = {"model": model, "max_tokens": int(max_tokens) + _CLAUDE_THINKING_HEADROOM, "messages": messages}
     if system:
         body["system"] = system
     headers = {
@@ -239,10 +273,21 @@ def _call_claude(api_key, model, max_tokens, system, messages):
     if "error" in data:
         msg = data["error"].get("message", str(data["error"])) if isinstance(data.get("error"), dict) else str(data["error"])
         return "", f"API error: {msg}"
-    try:
-        return data["content"][0]["text"], None
-    except (KeyError, IndexError, TypeError):
-        return "", "Empty response from Claude."
+    # A reply is a list of content blocks; models that think put a
+    # "thinking" block before the "text" block. Read every text block --
+    # content[0] alone was the thinking block on Haiku 5.5 ("Empty
+    # response from Claude." on every long prompt).
+    blocks = data.get("content") or []
+    text = "".join(b.get("text", "") for b in blocks if isinstance(b, dict) and b.get("type") == "text").strip()
+    if text:
+        return text, None
+    stop = data.get("stop_reason")
+    if stop == "refusal":
+        return "", "Claude declined to write this reply."
+    if stop == "max_tokens":
+        return "", ("Claude ran out of room before writing the message. Raise max_tokens in "
+                    "llamafone.cfg (e.g. 1024).")
+    return "", f"Empty response from Claude (stop reason: {stop or 'unknown'})."
 
 
 def _call_openai(api_key, model, max_tokens, system, messages):
@@ -434,7 +479,7 @@ def _call_ollama(endpoint, model, max_tokens, system, messages):
     }
     base = (endpoint or "http://localhost:11434").rstrip("/")
     headers = {"Content-Type": "application/json"}
-    stdout, err, rc = _curl(f"{base}/api/chat", headers, json.dumps(body))
+    stdout, err, rc = _curl(f"{base}/api/chat", headers, json.dumps(body), timeout=_LOCAL_TIMEOUT)
     if err:
         # The #1 reported Ollama issue from non-technical users is
         # 'Network error: curl exited with code' -- opaque and offers
@@ -448,9 +493,156 @@ def _call_ollama(endpoint, model, max_tokens, system, messages):
     if "error" in data:
         return "", f"Ollama error: {data['error']}"
     try:
-        return data["message"]["content"], None
-    except (KeyError, TypeError):
+        msg = data["message"]
+        text = _strip_thinking(msg.get("content") or "")
+    except (KeyError, TypeError, AttributeError):
         return "", "Empty response from Ollama."
+    if not text and msg.get("thinking"):
+        return "", _THINKING_ONLY_ERROR
+    return text, None
+
+
+def _lmstudio_base(endpoint):
+    """LM Studio's server root. Players often paste the address LM Studio
+    shows, which ends in /v1 -- accept it with or without."""
+    base = (endpoint or "http://localhost:1234").strip().rstrip("/")
+    if base.lower().endswith("/v1"):
+        base = base[:-3]
+    return base
+
+
+def _friendly_lmstudio_error(err, returncode, endpoint):
+    base = f"Can't reach LM Studio at {endpoint}."
+    if returncode == 7:
+        return (
+            f"{base} Is LM Studio's server running? Open LM Studio, go to "
+            f"the Developer tab, and switch the server on (Status: Running). "
+            f"The address it shows should match lmstudio_endpoint in "
+            f"llamafone.cfg (default http://localhost:1234)."
+        )
+    if returncode == 6:
+        return (
+            f"{base} The address in lmstudio_endpoint (in llamafone.cfg) "
+            f"couldn't be resolved. Default should be http://localhost:1234."
+        )
+    if returncode == 28 or "timed out" in (err or "").lower():
+        return (
+            f"{base} The request timed out. Without a graphics card, long "
+            f"prompts can be very slow; try a smaller model."
+        )
+    hint = _CURL_EXIT_HINTS.get(returncode)
+    if hint:
+        return f"{base} {hint} (curl exit code {returncode})"
+    return f"{base} {err}"
+
+
+_THINK_RE = re.compile(r"<think>.*?</think>", re.S | re.I)
+
+
+def _strip_thinking(text):
+    """Drop a reasoning model's inline <think>...</think> block, if the
+    server left it in the reply text."""
+    if not text:
+        return text
+    return _THINK_RE.sub("", text).strip()
+
+
+_THINKING_ONLY_ERROR = (
+    "The model spent its whole reply 'thinking' and wrote no message. "
+    "Use a non-reasoning model, or turn thinking off for this model."
+)
+
+
+_LMSTUDIO_CONTEXT_HINT = (
+    "The conversation is longer than the model's context length. In LM Studio, "
+    "reload the model with Context Length set to 16384 (12288 at the very least)."
+)
+
+
+def _clean_lmstudio_error(raw):
+    """A player-readable LM Studio error. The server often wraps the real
+    message in engine noise -- 'Engine protocol predict stream returned an
+    error: {"code":500,"message":"Context size has been exceeded.",...}' --
+    so pull out the innermost "message", then swap known problems for the
+    fix."""
+    msg = str(raw or "").strip()
+    inner = re.findall(r'"message"\s*:\s*"((?:[^"\\]|\\.)*)"', msg)
+    if inner:
+        msg = inner[-1].replace('\\"', '"').strip()
+    low = msg.lower()
+    if "context" in low or "n_ctx" in low or "too long" in low:
+        return _LMSTUDIO_CONTEXT_HINT
+    if "no models loaded" in low or "model not found" in low or "not loaded" in low:
+        return ("No model is loaded. Load one in LM Studio, or set default_model / fast_model "
+                "in llamafone.cfg to a loaded model's name (llama.testconnection lists them).")
+    return msg or "the server returned an error with no message."
+
+
+def check_lmstudio_health(endpoint=None):
+    """Diagnostic for llama.testconnection: is LM Studio's server up, and
+    which models does it offer? Same return shape as check_ollama_health."""
+    from . import config as _config
+    base = _lmstudio_base(endpoint or _config.get_lmstudio_endpoint())
+    stdout, err, rc = _curl(f"{base}/v1/models", headers={}, body_json=None, timeout=5, method="GET")
+    out = {"reachable": False, "endpoint": base, "models": [], "error": None, "curl_returncode": rc}
+    if err:
+        out["error"] = _friendly_lmstudio_error(err, rc, base)
+        return out
+    try:
+        data = json.loads(stdout)
+        models = data.get("data") or []
+        out["models"] = [m.get("id", "") for m in models if isinstance(m, dict)]
+        out["reachable"] = True
+    except Exception as e:
+        out["error"] = f"LM Studio replied but the response wasn't valid JSON: {type(e).__name__}"
+    return out
+
+
+def _call_lmstudio(endpoint, model, max_tokens, system, messages):
+    # LM Studio's server speaks the OpenAI chat-completions format. No key:
+    # it's a local server.
+    full = []
+    if system:
+        full.append({"role": "system", "content": system})
+    full.extend(messages)
+    # reasoning_effort "none": reasoning models (Gemma 4, Qwen 3, ...)
+    # otherwise think before answering, and the thinking counts against
+    # max_tokens -- with our long prompts they used the whole budget and
+    # returned an empty message. Tested on Gemma 4: 0 reasoning tokens.
+    body = {"model": model, "messages": full, "max_tokens": max_tokens, "stream": False,
+            "reasoning_effort": "none"}
+    base = _lmstudio_base(endpoint)
+    headers = {"Content-Type": "application/json"}
+    url = f"{base}/v1/chat/completions"
+    stdout, err, rc = _curl(url, headers, json.dumps(body), timeout=_LOCAL_TIMEOUT)
+    if err:
+        return "", _friendly_lmstudio_error(err, rc, base)
+    try:
+        data = json.loads(stdout)
+    except json.JSONDecodeError:
+        return "", f"Invalid response from LM Studio: {stdout[:200]}"
+    if "error" in data and "reasoning" in str(data["error"]).lower():
+        # A server/model that rejects the parameter: retry without it.
+        body.pop("reasoning_effort", None)
+        stdout, err, rc = _curl(url, headers, json.dumps(body), timeout=_LOCAL_TIMEOUT)
+        if err:
+            return "", _friendly_lmstudio_error(err, rc, base)
+        try:
+            data = json.loads(stdout)
+        except json.JSONDecodeError:
+            return "", f"Invalid response from LM Studio: {stdout[:200]}"
+    if "error" in data:
+        e = data["error"]
+        msg = e.get("message", str(e)) if isinstance(e, dict) else str(e)
+        return "", "LM Studio: " + _clean_lmstudio_error(msg)
+    try:
+        msg = data["choices"][0]["message"]
+        text = _strip_thinking(msg.get("content") or "")
+    except (KeyError, IndexError, TypeError):
+        return "", "Empty response from LM Studio."
+    if not text and msg.get("reasoning_content"):
+        return "", _THINKING_ONLY_ERROR + " (LM Studio: pick a model without reasoning, or lower its reasoning setting.)"
+    return text, None
 
 
 # ---------------------------------------------------------------------------
@@ -511,6 +703,7 @@ def call_ai_async(messages, system=None, use_fast_model=False, callback=None, ma
 
         # Log the prompt so we can debug what the AI actually saw
         _log_prompt(effective_system, effective_messages, model, provider)
+        started = time.time()
 
         try:
             if provider == "claude":
@@ -523,21 +716,31 @@ def call_ai_async(messages, system=None, use_fast_model=False, callback=None, ma
                 text, err = _call_openrouter(config.get_api_key(), model, max_tokens, effective_system, effective_messages)
             elif provider == "ollama":
                 text, err = _call_ollama(config.get_ollama_endpoint(), model, max_tokens, effective_system, effective_messages)
+            elif provider == "lmstudio":
+                text, err = _call_lmstudio(config.get_lmstudio_endpoint(), model, max_tokens, effective_system, effective_messages)
             else:
                 if callback:
-                    callback(None, f"Unknown provider '{provider}'. Set provider to claude/openai/gemini/openrouter/ollama in llamafone.cfg.")
+                    callback(None, f"Unknown provider '{provider}'. Set provider to claude/openai/gemini/openrouter/ollama/lmstudio in llamafone.cfg.")
                 return
         except Exception as e:
+            err = f"Unexpected error: {type(e).__name__}: {e}"
+            _log_failure(provider, model, err, time.time() - started)
             if callback:
-                callback(None, f"Unexpected error: {type(e).__name__}: {e}")
+                callback(None, err)
             return
 
+        # Strip emojis from every successful response. Done at the
+        # client boundary so it covers all features (phone, story,
+        # event, etc.) without each call site having to remember.
+        if text and not err:
+            text = _strip_emojis(text)
+        # An empty reply used to reach callers as ("", None): no message
+        # AND no error, so the player saw nothing at all.
+        if not err and not (text or "").strip():
+            err = "The AI sent back an empty reply. Try again, or try a different model."
+        if err:
+            _log_failure(provider, model, err, time.time() - started)
         if callback:
-            # Strip emojis from every successful response. Done at the
-            # client boundary so it covers all features (phone, story,
-            # event, etc.) without each call site having to remember.
-            if text and not err:
-                text = _strip_emojis(text)
             callback(text, err)
 
     thread = threading.Thread(target=_request, daemon=True, name="Llamafone-Request")

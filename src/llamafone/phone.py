@@ -1579,7 +1579,7 @@ def _journal_obsolescence_note(contact):
     return ""
 
 
-def _pick_random_relationship_sim(recipient=None):
+def _pick_random_relationship_sim(recipient=None, pool_filter=None, weight_fn=None, exclude_ids=None):
     """Pick a random non-household sim from the recipient's relationship network.
     Hard filters: pets, ghosts (when disabled in config), sims currently on
     the active lot (no "calling from the next room"), and cross-generational
@@ -1638,6 +1638,16 @@ def _pick_random_relationship_sim(recipient=None):
         if not contact_prefs.is_muted(_recipient_sid, _sid(c))
     ]
 
+    # Optional narrowing for callers with their own rules (Llamagram:
+    # posters must be teen+; skip whoever just posted). Calls and texts
+    # pass none of these, so their behavior is unchanged.
+    if pool_filter is not None:
+        chosen_pool = [c for c in chosen_pool if pool_filter(c)]
+    if exclude_ids:
+        trimmed = [c for c in chosen_pool if str(_sid(c)) not in exclude_ids]
+        if trimmed:
+            chosen_pool = trimmed
+
     if not chosen_pool:
         _log_picker(
             f"{recipient_name}: 0 strict contacts (initial {initial_count}). "
@@ -1648,7 +1658,7 @@ def _pick_random_relationship_sim(recipient=None):
     weights = []
     for contact in chosen_pool:
         score = abs(contact.get("friendship") or 0) + abs(contact.get("romance") or 0)
-        base = max(score, 10)
+        base = weight_fn(score) if weight_fn is not None else max(score, 10)
         mult = contact_prefs.auto_event_multiplier(_recipient_sid, _sid(contact))
         weights.append(base * mult)
 
@@ -1929,6 +1939,7 @@ def _describe_recipient(recipient_sim, contact=None, cold=False):
     # Household members the recipient lives with — so the AI knows about kids/spouses/etc
     # who might come up in conversation but aren't in the contact's relationship tracker.
     household_lines = []
+    unknown_members = 0
     recipient_household_ids = set()
     contact_si = contact.get("sim_info") if contact else None
     # News-spread knowledge for this contact about the recipient's private
@@ -1971,6 +1982,20 @@ def _describe_recipient(recipient_sim, contact=None, cold=False):
                     if rel_to_contact:
                         pieces.append(f"your {rel_to_contact}")
                     pieces.append(mage)
+                    # Does the caller know this person? Any relationship in
+                    # the caller's tracker counts -- family, friends, or a
+                    # baby they were introduced to. Only people with no
+                    # relationship get the "may not know" flag.
+                    if contact_si is not None and contact_si.sim_id != si.sim_id:
+                        try:
+                            # RelationshipTracker.has_relationship(target_sim_id),
+                            # verified in relationships/relationship_tracker.pyc.
+                            known = bool(contact_si.relationship_tracker.has_relationship(si.sim_id))
+                        except Exception:
+                            known = True   # unknown -> don't add a warning we can't back up
+                        if not known:
+                            pieces.append("you may not know them")
+                            unknown_members += 1
                     # Babies / toddlers: has the caller met them in person?
                     # A relationship in the game's tracker means they have.
                     # (Francesca's dad, who'd held Miley, commented "can't
@@ -1999,15 +2024,19 @@ def _describe_recipient(recipient_sim, contact=None, cold=False):
         # uncertain-knowledge for you. Don't lead with them or ask
         # about them by name -- play along if the recipient mentions
         # them first.
-        parts.append(
-            f"\n{recipient_sim.first_name}'s household "
-            "(you may or may not personally know these people -- "
-            "you know a household member only if they ALSO appear in "
-            "your mutual contacts list above. Anyone else, do not lead "
-            "with them, do not ask about them by name, do not bring up "
-            "news about them. Play along naturally if the recipient "
-            "mentions them.):"
-        )
+        # Each member is marked individually: anyone the caller has a
+        # relationship with (family, friend, a baby they were introduced
+        # to) is simply listed; only people with no relationship carry
+        # "you may not know them", and only then does the warning appear.
+        if unknown_members:
+            parts.append(
+                f"\n{recipient_sim.first_name}'s household (anyone marked "
+                "\"you may not know them\": do not lead with them, do not ask "
+                "about them by name, do not bring up news about them. Play "
+                "along naturally if the recipient mentions them.):"
+            )
+        else:
+            parts.append(f"\n{recipient_sim.first_name}'s household:")
         parts.extend(household_lines)
 
     # Surface any recent milestones for the recipient so the caller can
@@ -2128,6 +2157,11 @@ def _clean_bit_label(bn):
 
     kept = [p for p in parts if p in KEEP]
     if kept:
+        # "Friendship_Good" keeps only "Good" (Friendship isn't a kept word),
+        # which surfaced as "Francesca's Good"; "Friend_Good" read "Friend Good".
+        for q in ("Best", "Good"):
+            if q in kept and (kept == [q] or set(kept) <= {q, "Friend", "Friends"}):
+                return f"{q} Friend"
         return " ".join(kept).strip()
     # If nothing matched, this is an internal/system bit — drop it
     return ""
@@ -2979,6 +3013,26 @@ def _get_world_climate(world_name, season=None):
     return seasons.get("Spring")
 
 
+def _contact_is_with_player(main_si, other_si):
+    """Why the contact is physically with the player right now -- "same
+    lot" or "same trip" -- or None if they aren't."""
+    if main_si is None or other_si is None:
+        return None
+    try:
+        if other_si.sim_id in _get_sims_on_active_lot():
+            return "same lot"
+    except Exception:
+        pass
+    try:
+        from . import trips
+        for t in trips.recent_trips_for(main_si.sim_id):
+            if t.get("end_ticks") is None and str(other_si.sim_id) in (t.get("members") or {}):
+                return "same trip"
+    except Exception:
+        pass
+    return None
+
+
 def _weather_context(main_si, contact):
     """Build a [WEATHER: ...] block with two pieces of context:
       1. Player (callee) -- live weather where they actually are, since
@@ -3012,8 +3066,18 @@ def _weather_context(main_si, contact):
             )
 
     # Caller -- climate norms for their world (skip if same world as player).
+    # A caller who is physically WITH the player -- on the same lot, or on
+    # the same trip right now -- shares the player's weather. Their home
+    # world's climate would contradict the trip / same-lot lines ("Vivian
+    # is in Nordhaven this Winter" while she stood next to Francesca on
+    # vacation in Gibbi Point).
     caller_reason = None
-    if not other_home:
+    together = _contact_is_with_player(main_si, other_si)
+    if together:
+        caller_reason = f"caller is with the player ({together})"
+        if lines:
+            lines.append(f"{contact['name']} is there too, so it's the same weather for both of you.")
+    elif not other_home:
         caller_reason = "other_home=None (couldn't read caller's home world from sim_info)"
     elif current_world and other_home.lower() == current_world.lower():
         caller_reason = f"caller is in the same world as player ({other_home})"
@@ -3448,7 +3512,9 @@ def _household_already_told_line(sender_si, recipient):
         return (
             f"{lead} {rname}'s household already knows. This OVERRIDES the instruction above: do NOT "
             f"announce it or treat it as news. Mention it naturally if it fits (how the baby "
-            f"is doing, thanks for the congrats)."
+            f"is doing). Only thank {rname} for congratulating you if the past-interaction "
+            f"history shows {rname} actually did; if they haven't replied about the baby, "
+            f"don't assume they did."
         )
     except Exception:
         return ""
@@ -3580,16 +3646,29 @@ def _describe_relationship(contact, recipient=None):
     # grandfather with any negative family sentiment would get flagged as an ex.
     status = contact.get("status", "") or ""
     status_low = status.lower().replace("_", "").replace(" ", "")
+    # Romantic breakup vs platonic strain are different things. The game
+    # also keeps old tags around: Olivia (best friend, maid of honor) still
+    # carried "Has Been Friends" / "No Longer Friends" from a past falling-
+    # out next to "Bff", and was told she was "a former OR strained
+    # romantic relationship".
     is_ex = ("broken" in status_low or "ex" in status_low.split() or
              "former" in status_low or "divorced" in status_low or
              "brokenup" in status_low or "brokenengagement" in status_low or
-             "badromance" in status_low or "spiteful" in status_low or
-             "bitter" in status_low or "rejected" in status_low)
+             "badromance" in status_low or "rejected" in status_low or
+             "cheat" in status_low or (romance is not None and romance < 0))
     is_estranged = ("nolonger" in status_low or "estranged" in status_low or
                     "hasbeenfriends" in status_low or "lostfriends" in status_low or
                     "awkward" in status_low or "betrayal" in status_low or
-                    "cheat" in status_low)
-    if not family_label and (is_ex or is_estranged or (romance is not None and romance < 0)):
+                    "spiteful" in status_low or "bitter" in status_low)
+    friendship_now = contact.get("friendship")
+    close_now = friendship_now is not None and friendship_now >= 50
+    if not family_label and not is_ex and is_estranged and not close_now:
+        parts.append(
+            "RELATIONSHIP STATUS NOTE: This friendship has been strained or has "
+            "lapsed at some point. Let the current closeness shown above set the "
+            "tone, not older, warmer history."
+        )
+    if not family_label and is_ex:
         parts.append(
             "RELATIONSHIP STATUS NOTE: This is a former OR strained romantic "
             "relationship. They are NOT currently dating/together. Any past "
@@ -3867,6 +3946,18 @@ def _describe_relationship(contact, recipient=None):
         except Exception:
             pass
 
+    # Trips (vacations / getaways) the household sim took: shared memory
+    # for a contact who went along; news-spread timing for everyone else.
+    if si is not None and recipient is not None:
+        try:
+            from . import trips
+            heard = _contact_knowledge(recipient, contact)["heard_after_days"]
+            tblock = trips.format_for_prompt(si, recipient, heard_after_days=heard)
+            if tblock:
+                parts.append(tblock)
+        except Exception:
+            pass
+
     return "\n".join(parts)
 
 
@@ -4112,9 +4203,10 @@ def generate_call_for(recipient, contact, callback=None, output=None):
     last_conv_iso = journal.last_entry_timestamp_for_pair(contact_id, recipient_sim_id)
     interaction_tag = interactions.format_for_prompt(contact_id, recipient_sim_id, last_conv_iso=last_conv_iso)
 
-    from . import LOAD_TIMESTAMP as _LT
+    # (A "[llamafone build loaded at <real date>]" debug stamp used to
+    # lead this prompt -- it sent the AI the real-world date on every
+    # call. The build time is in Llamafone_LastPrompt.txt's header now.)
     prompt = (
-        f"[llamafone build loaded at {_LT}]\n\n"
         f"Caller info:\n{rel_desc}{history_block}{mutual_block}\n\n"
         f"{recipient_block}{events_block}{past_events_block}\n\n"
         f"They are calling {recipient_name}{_location_context(recipient, contact)}.{_season_context()}{_time_context()}{_weather_context(recipient, contact)}{interaction_tag}"

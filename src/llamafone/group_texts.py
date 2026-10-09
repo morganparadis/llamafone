@@ -55,10 +55,12 @@ from . import save_id as _save_id
 
 _FILENAME = "GroupTexts.json"
 
-# Real-world day retention window. Threads older than this get dropped
-# on the next cleanup_old pass. Kept modest so the file stays small
-# even for players who send lots of group texts.
+# In-game day retention window for cleanup_old (which nothing calls
+# today -- threads are kept). Measured on the game clock only.
 _RETENTION_DAYS = 14
+
+# 1500 ticks per in-game minute (same as journal / milestones).
+_TICKS_PER_DAY = 1500 * 60 * 24
 
 
 _cache = None
@@ -84,6 +86,37 @@ def _path():
 
 def _now_iso():
     return datetime.datetime.now().isoformat()
+
+
+def _now_ticks():
+    """In-game time, or None when the clock isn't ready. Recency of a
+    thread is judged on this, never on the real-world calendar."""
+    try:
+        from . import journal as _journal
+        return _journal._now_ingame_ticks()
+    except Exception:
+        return None
+
+
+def _touch(group):
+    """Mark a group active now (real ISO kept for display / ordering
+    ties; in-game ticks drive every 'how recent' decision)."""
+    group["last_activity"] = _now_iso()
+    t = _now_ticks()
+    if t is not None:
+        group["last_activity_ticks"] = t
+
+
+def _age_days(group, now_ticks):
+    """In-game days since the group's last message, or None if unknown
+    (threads saved before in-game time was recorded)."""
+    t = group.get("last_activity_ticks")
+    if t is None or now_ticks is None:
+        return None
+    try:
+        return (now_ticks - int(t)) / _TICKS_PER_DAY
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +228,7 @@ def create_group(anchor_sim_id, participant_sim_ids, participant_names=None):
                     int(p) for p in (existing.get("participant_sim_ids") or [])
                 )
                 if existing_set == wanted_set:
-                    existing["last_activity"] = now
+                    _touch(existing)
                     # Refresh name snapshot if the previous one was
                     # empty (edge case where the first creation missed
                     # names but this one has them).
@@ -213,6 +246,8 @@ def create_group(anchor_sim_id, participant_sim_ids, participant_names=None):
             "group_id": group_id,
             "created_at": now,
             "last_activity": now,
+            "created_ticks": _now_ticks(),
+            "last_activity_ticks": _now_ticks(),
             "anchor_sim_id": anchor_int,
             "participant_sim_ids": ids,
             "participant_names": names,
@@ -236,7 +271,7 @@ def set_briefing(group_id, briefing):
             _log(f"set_briefing: unknown group_id {group_id}")
             return
         group["briefing"] = str(briefing)
-        group["last_activity"] = _now_iso()
+        _touch(group)
         _save(data)
 
 
@@ -277,8 +312,9 @@ def _append_history(group_id, entry):
         if not group:
             _log(f"_append_history: unknown group_id {group_id}")
             return
+        entry.setdefault("ticks", _now_ticks())
         group.setdefault("history", []).append(entry)
-        group["last_activity"] = _now_iso()
+        _touch(group)
         _save(data)
 
 
@@ -299,7 +335,11 @@ def list_active_groups(anchor_sim_id=None):
         if anchor_sim_id is not None and g.get("anchor_sim_id") != int(anchor_sim_id):
             continue
         out.append(g)
-    out.sort(key=lambda g: g.get("last_activity", ""), reverse=True)
+    # Newest first by game clock; threads with no in-game time (saved by
+    # older versions) sort after every timed one.
+    out.sort(key=lambda g: (g.get("last_activity_ticks") is not None,
+                            g.get("last_activity_ticks") or 0,
+                            g.get("last_activity", "")), reverse=True)
     return out
 
 
@@ -314,8 +354,8 @@ def most_recent_group():
 def find_shared_groups(sim_a_id, sim_b_id, max_days=3):
     """Return groups where BOTH sim_a and sim_b are participants (or
     where one is the anchor and the other is a participant). Newest
-    first, filtered to those with last_activity within max_days real-
-    world days.
+    first, filtered to those with a message within max_days IN-GAME
+    days. Threads saved before in-game time was recorded are skipped.
 
     Used by 1:1 prompt builders so when Alice later texts Sarah, the
     AI knows they were both just in a group with Bob and Kate.
@@ -331,11 +371,7 @@ def find_shared_groups(sim_a_id, sim_b_id, max_days=3):
         return []
     if sim_a == sim_b:
         return []
-    cutoff = None
-    try:
-        cutoff = datetime.datetime.now() - datetime.timedelta(days=max_days)
-    except Exception:
-        cutoff = None
+    now_ticks = _now_ticks()
     matches = []
     for g in list_active_groups():
         try:
@@ -344,15 +380,10 @@ def find_shared_groups(sim_a_id, sim_b_id, max_days=3):
             in_group = lambda sid: (sid == anchor) or (sid in parts)
             if not (in_group(sim_a) and in_group(sim_b)):
                 continue
-            if cutoff is not None:
-                last_iso = g.get("last_activity") or g.get("created_at") or ""
-                if last_iso:
-                    try:
-                        last = datetime.datetime.fromisoformat(last_iso)
-                        if last < cutoff:
-                            continue
-                    except Exception:
-                        pass
+            if now_ticks is not None:
+                age = _age_days(g, now_ticks)
+                if age is None or age < -0.01 or age > max_days:
+                    continue
             matches.append(g)
         except Exception:
             continue
@@ -376,26 +407,22 @@ def format_shared_for_prompt(sim_a_id, sim_b_id, sim_a_name=None, sim_b_name=Non
         return ""
     a_name = sim_a_name or "you"
     b_name = sim_b_name or "the other sim"
-    now_real = datetime.datetime.now()
+    now_ticks = _now_ticks()
 
-    def _recency(iso_str):
-        """Human-friendly 'how long ago' for the group's last activity."""
-        try:
-            when = datetime.datetime.fromisoformat(iso_str)
-            delta = now_real - when
-            seconds = delta.total_seconds()
-            if seconds < 3600:
-                mins = max(1, int(seconds // 60))
-                return f"about {mins} minute{'s' if mins != 1 else ''} ago"
-            if seconds < 86400:
-                hours = int(seconds // 3600)
-                return f"about {hours} hour{'s' if hours != 1 else ''} ago (earlier today)"
-            if seconds < 3 * 86400:
-                days = int(seconds // 86400)
-                return f"{days} day{'s' if days != 1 else ''} ago"
-            return when.strftime("on %b %d")
-        except Exception:
+    def _recency(group):
+        """'How long ago' for the group's last message, on the game clock."""
+        age = _age_days(group, now_ticks)
+        if age is None or age < 0:
             return ""
+        minutes = age * 24 * 60
+        if minutes < 60:
+            mins = max(1, int(minutes))
+            return f"about {mins} in-game minute{'s' if mins != 1 else ''} ago"
+        if age < 1:
+            hours = int(minutes // 60)
+            return f"about {hours} in-game hour{'s' if hours != 1 else ''} ago (earlier today)"
+        days = int(age)
+        return f"{days} in-game day{'s' if days != 1 else ''} ago"
 
     # Dedupe by participant set: if the player has multiple group
     # threads between the SAME participants, only surface the most
@@ -458,8 +485,7 @@ def format_shared_for_prompt(sim_a_id, sim_b_id, sim_a_name=None, sim_b_name=Non
                     from_name = turn.get("from_name", "?")
                     excerpt_lines.append(f"  {from_name}: {turn.get('text','')[:120]}")
             excerpt = "\n".join(excerpt_lines) if excerpt_lines else "  (no messages yet)"
-            last_iso = g.get("last_activity") or g.get("created_at") or ""
-            when_str = _recency(last_iso)
+            when_str = _recency(g)
             when_tail = f" Last message: {when_str}." if when_str else ""
             block = (
                 f"[SHARED GROUP TEXT: {a_name} and {b_name} were both in a group "
@@ -488,31 +514,22 @@ def delete_group(group_id):
 # ---------------------------------------------------------------------------
 
 def cleanup_old(max_days=_RETENTION_DAYS):
-    """Drop groups whose last_activity is older than max_days real-world
-    days. Mirrors interactions.cleanup_old / past_events.cleanup_old."""
-    try:
-        cutoff = datetime.datetime.now() - datetime.timedelta(days=max_days)
-    except Exception:
+    """Drop groups with no message in max_days IN-GAME days. Groups with
+    no in-game time recorded are kept -- never deleted by the real-world
+    calendar. (Not called anywhere today; threads are kept.)"""
+    now_ticks = _now_ticks()
+    if now_ticks is None:
         return 0
     dropped = 0
     with _lock:
         data = _load()
         keep = {}
         for gid, g in data["groups"].items():
-            try:
-                last_iso = g.get("last_activity") or g.get("created_at") or ""
-                if not last_iso:
-                    keep[gid] = g
-                    continue
-                last = datetime.datetime.fromisoformat(last_iso)
-                if last >= cutoff:
-                    keep[gid] = g
-                else:
-                    dropped += 1
-            except Exception:
-                # If we can't parse the timestamp, keep the group --
-                # better than losing data on a parse edge case.
+            age = _age_days(g, now_ticks)
+            if age is None or age <= max_days:
                 keep[gid] = g
+            else:
+                dropped += 1
         if dropped:
             data["groups"] = keep
             _save(data)

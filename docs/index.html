@@ -74,6 +74,7 @@
     <div class="topbar-links">
       <a href="#features">Features</a>
       <a href="#install">Install</a>
+      <a href="#errors">Help</a>
       <a href="https://www.curseforge.com/sims4/mods/llamafone" target="_blank" rel="noopener">CurseForge</a>
       <a href="https://www.nexusmods.com/thesims4/mods/7232" target="_blank" rel="noopener">Nexus</a>
       <a href="https://github.com/morganparadis/llamafone" target="_blank" rel="noopener" aria-label="GitHub">GitHub</a>
@@ -674,6 +675,104 @@
   </div>
 </section>
 
+<section class="faq container">
+  <h2>Common questions</h2>
+  <div class="faq-list">
+
+    <details class="faq-item">
+      <summary>Why use AI in The Sims 4?</summary>
+      <div class="faq-body">
+        <p>For storytelling. The base game's phone calls and texts are limited dropdown options — useful for gameplay, repetitive for narrative. This mod replaces them with text written specifically for your household by the AI provider you configure (Claude, OpenAI, Gemini, or a local model through Ollama or LM Studio).</p>
+        <p>If you're a storytelling-focused player who's tired of the same scripted lines and wants your sims' relationships to feel alive, this is for you.</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>Does this affect my saved game?</summary>
+      <div class="faq-body">
+        <p>The mod never edits your save files. It reads game data (who lives in the household, their traits, careers, and relationships) to write its calls and texts. A few things it does change in-game, which the game then keeps when you save: messages nudge friendship and romance (turn it off under Llamafone Settings), a charged message can give a sim a moodlet, and with Get Famous a Llamagram post that truly goes viral can raise fame.</p>
+        <p>Llamafone's own data (journal, sim bios, save notes, Llamagram posts, and so on) lives in its own folder per save: <code>Documents/Electronic Arts/The Sims 4/saves/Llamafone/Slot_&hellip;</code>. Those are plain JSON files you can open and edit. To uninstall, delete <code>Llamafone.ts4script</code>, <code>Llamafone.package</code>, and <code>llamafone.cfg</code> from your Mods folder, and the <code>saves/Llamafone</code> folder if you don't want to keep the history.</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>What does the AI know about my sims?</summary>
+      <div class="faq-body">
+        <p>Just what's needed for the current command — names, ages, traits, careers, aspirations, household members, and relationship history. Nothing personal about you, no real names beyond what your sims are named, no save file contents.</p>
+        <p>Your prompts go from your computer directly to whichever AI provider you configured — there's no middleman server. Each provider has its own data-retention policy: <a href="https://www.anthropic.com/legal/commercial-terms" target="_blank" rel="noopener">Anthropic</a>, <a href="https://openai.com/policies/api-data-usage-policies" target="_blank" rel="noopener">OpenAI</a>, <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener">Google</a>, and <a href="https://openrouter.ai/terms" target="_blank" rel="noopener">OpenRouter</a> all state that paid API traffic is not used to train models. If you really don't want any data to leave your machine, use <strong>Ollama</strong> — it runs entirely locally.</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>Is my API key safe?</summary>
+      <div class="faq-body">
+        <p>Yes. The key lives only in <code>llamafone.cfg</code> on your computer. It's never uploaded anywhere except to make the API call to whichever provider you chose. The mod doesn't have a server, doesn't phone home, and isn't open to anyone else.</p>
+        <p>That said, treat the key like a password — don't paste it in screenshots, Discord, or screen-shares. If you ever suspect it leaked, revoke it on your provider's dashboard and make a new one. (Or just switch to Ollama or LM Studio — no key, no exposure.)</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>Can I disable specific features?</summary>
+      <div class="faq-body">
+        <p>Yes. Everything is opt-in. Auto-events (random calls/texts/stories while you play) can be toggled with <code>llama.auto_events off</code> in the cheat console. You can also edit <code>llamafone.cfg</code> to disable specific auto-event types, change interval/chance, or restrict which sims can call you.</p>
+        <p>Auto-events are off until you turn them on. Birth announcements are on by default; set <code>birth_announcements = false</code> to stop them. Llamagram can be turned off, or kept with its pop-ups silenced, under Llamafone Settings (or <code>social_enabled</code>, <code>social_post_popups</code>, and <code>social_comment_popups</code> in the cfg). Set <code>social_npc_post_weight = 0</code> if you don't want friends posting on their own.</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>Does it work on Mac?</summary>
+      <div class="faq-body">
+        <p>Yes — drop the <code>.ts4script</code> into <code>~/Documents/Electronic Arts/The Sims 4/Mods/</code> and it works identically to Windows. Same commands, same behavior.</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>How much does it cost?</summary>
+      <div class="faq-body">
+        <p>You pay your AI provider directly for what the mod actually uses — there's no subscription to me or anyone else. Cost depends on which provider you pick:</p>
+        <p class="muted small"><strong>Prices and model names change.</strong> These are rough estimates from October 2026; check your provider's pricing page for current rates.</p>
+        <table class="cost-table">
+          <thead>
+            <tr><th>Provider</th><th>Model</th><th>Per call</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Anthropic Claude</td><td>claude-haiku-5-5 (recommended)</td><td>~$0.001</td></tr>
+            <tr><td>Anthropic Claude</td><td>claude-opus-5-5</td><td>~$0.05</td></tr>
+            <tr><td>OpenAI</td><td>gpt-4o-mini</td><td>~$0.003</td></tr>
+            <tr><td>OpenAI</td><td>gpt-4o</td><td>~$0.03</td></tr>
+            <tr><td>Google Gemini</td><td>a current Flash model</td><td><strong>free</strong> (rate limited)</td></tr>
+            <tr><td>Ollama / LM Studio (local)</td><td>any model</td><td><strong>free</strong> (uses your GPU)</td></tr>
+          </tbody>
+        </table>
+        <p>A typical session of ~30 calls costs a few cents on Claude Haiku 5.5 and under a dime on GPT-4o-mini. Heavier sessions on the premium models (like Claude Opus) can run a dollar or two. Gemini's free tier covers most casual play. Ollama and LM Studio are fully free if you've got the hardware.</p>
+        <p><strong>Llamagram adds a little.</strong> Each of your posts is one larger call (it writes all the comments at once), and each reply you post to a comment is one more. With auto-events on, friends posting on their own is one call per post, about one in five auto-events at the default setting. Set <code>social_npc_post_weight = 0</code> to turn friends' posts off.</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>Does this slow down the game?</summary>
+      <div class="faq-body">
+        <p>No. All API calls happen on background threads, so the game keeps running while text is generated. You'll see a notification popup when the response arrives, usually within a few seconds.</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>What if I'm offline?</summary>
+      <div class="faq-body">
+        <p>The mod needs an internet connection to call the AI provider. If you're offline, commands silently fail without interrupting your game — no crashes, no popups. Your sims still play normally; you just won't get AI-generated content during offline sessions.</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>Is this against the Sims 4 Terms of Service?</summary>
+      <div class="faq-body">
+        <p>No. The Sims 4 supports script mods officially through its Mods folder and Custom Content settings. This mod uses the documented script-mod system and doesn't modify any game files. EA's stance on script mods is that they're allowed; they just won't support issues that occur while mods are installed.</p>
+      </div>
+    </details>
+
+  </div>
+</section>
+
 <section id="install" class="install container">
   <h2>Get started</h2>
   <ol class="install-steps">
@@ -852,108 +951,132 @@ fast_model    = llama-3.2-3b-instruct</code></pre>
         </ul>
         <p>Restart the game. When the main menu loads, you'll see a notification popup confirming the mod is active.</p>
         <p>Inside any household, open the cheat console with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> and type <code>llama.status</code> to see all the commands and confirm everything's wired up.</p>
+        <p>Something not working? See <a href="#errors">Common errors</a> below.</p>
       </div>
     </li>
   </ol>
 </section>
 
-<section class="faq container">
-  <h2>Common questions</h2>
+<section id="errors" class="faq errors container">
+  <h2>Common errors</h2>
+  <p class="muted">Got an error? Find the message you saw below. Most are a quick settings fix. First step for anything: type <code>llama.status</code> and <code>llama.testconnection</code> in the cheat console.</p>
+
+  <h3 class="errors-group">Setup</h3>
   <div class="faq-list">
 
     <details class="faq-item">
-      <summary>Why use AI in The Sims 4?</summary>
+      <summary>"Not configured" / "needs an API key" &mdash; but I set up a different provider</summary>
       <div class="faq-body">
-        <p>For storytelling. The base game's phone calls and texts are limited dropdown options — useful for gameplay, repetitive for narrative. This mod replaces them with text written specifically for your household by the AI provider you configure (Claude, OpenAI, Gemini, or a local model through Ollama or LM Studio).</p>
-        <p>If you're a storytelling-focused player who's tired of the same scripted lines and wants your sims' relationships to feel alive, this is for you.</p>
+        <p>Llamafone isn't reading the settings you edited, so it's using its defaults. Type <code>llama.status</code>: it shows the provider, the <code>llamafone.cfg</code> file, and the Mods folder Llamafone is actually using.</p>
+        <ul>
+          <li><strong>"Config file: NOT FOUND"</strong> &mdash; the cfg isn't in your Mods folder. If your Documents folder is in OneDrive, update to v3.8.1 or newer, which finds it there.</li>
+          <li><strong>Provider shows the wrong one</strong> &mdash; check the <code>provider =</code> line itself. Setting the Ollama address or models isn't enough; it has to say <code>provider = ollama</code> (or <code>lmstudio</code>, <code>openai</code>, and so on).</li>
+          <li>After editing the cfg, type <code>llama.reload</code> in the cheat console (or restart the game).</li>
+        </ul>
       </div>
     </details>
 
     <details class="faq-item">
-      <summary>Does this affect my saved game?</summary>
+      <summary>"curl not found"</summary>
       <div class="faq-body">
-        <p>The mod never edits your save files. It reads game data (who lives in the household, their traits, careers, and relationships) to write its calls and texts. A few things it does change in-game, which the game then keeps when you save: messages nudge friendship and romance (turn it off under Llamafone Settings), a charged message can give a sim a moodlet, and with Get Famous a Llamagram post that truly goes viral can raise fame.</p>
-        <p>Llamafone's own data (journal, sim bios, save notes, Llamagram posts, and so on) lives in its own folder per save: <code>Documents/Electronic Arts/The Sims 4/saves/Llamafone/Slot_&hellip;</code>. Those are plain JSON files you can open and edit. To uninstall, delete <code>Llamafone.ts4script</code>, <code>Llamafone.package</code>, and <code>llamafone.cfg</code> from your Mods folder, and the <code>saves/Llamafone</code> folder if you don't want to keep the history.</p>
+        <p>Llamafone needs Windows 10 (version 1803 or newer) or Windows 11. It reaches the AI through <code>curl</code>, a small tool built into those versions of Windows. Windows 8 and older don't include it.</p>
       </div>
     </details>
 
     <details class="faq-item">
-      <summary>What does the AI know about my sims?</summary>
+      <summary>"Invalid API key" / "authentication" / "credit balance is too low"</summary>
       <div class="faq-body">
-        <p>Just what's needed for the current command — names, ages, traits, careers, aspirations, household members, and relationship history. Nothing personal about you, no real names beyond what your sims are named, no save file contents.</p>
-        <p>Your prompts go from your computer directly to whichever AI provider you configured — there's no middleman server. Each provider has its own data-retention policy: <a href="https://www.anthropic.com/legal/commercial-terms" target="_blank" rel="noopener">Anthropic</a>, <a href="https://openai.com/policies/api-data-usage-policies" target="_blank" rel="noopener">OpenAI</a>, <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener">Google</a>, and <a href="https://openrouter.ai/terms" target="_blank" rel="noopener">OpenRouter</a> all state that paid API traffic is not used to train models. If you really don't want any data to leave your machine, use <strong>Ollama</strong> — it runs entirely locally.</p>
+        <p>The key in <code>api_key</code> is wrong, or your account with the provider has no credit. Copy the key again from your provider's dashboard (keys are only shown once, so make a new one if you need to), and check that credit is loaded under the provider's billing settings. Then <code>llama.reload</code>.</p>
       </div>
     </details>
-
-    <details class="faq-item">
-      <summary>Is my API key safe?</summary>
-      <div class="faq-body">
-        <p>Yes. The key lives only in <code>llamafone.cfg</code> on your computer. It's never uploaded anywhere except to make the API call to whichever provider you chose. The mod doesn't have a server, doesn't phone home, and isn't open to anyone else.</p>
-        <p>That said, treat the key like a password — don't paste it in screenshots, Discord, or screen-shares. If you ever suspect it leaked, revoke it on your provider's dashboard and make a new one. (Or just switch to Ollama or LM Studio — no key, no exposure.)</p>
-      </div>
-    </details>
-
-    <details class="faq-item">
-      <summary>Can I disable specific features?</summary>
-      <div class="faq-body">
-        <p>Yes. Everything is opt-in. Auto-events (random calls/texts/stories while you play) can be toggled with <code>llama.auto_events off</code> in the cheat console. You can also edit <code>llamafone.cfg</code> to disable specific auto-event types, change interval/chance, or restrict which sims can call you.</p>
-        <p>Auto-events are off until you turn them on. Birth announcements are on by default; set <code>birth_announcements = false</code> to stop them. Llamagram can be turned off, or kept with its pop-ups silenced, under Llamafone Settings (or <code>social_enabled</code>, <code>social_post_popups</code>, and <code>social_comment_popups</code> in the cfg). Set <code>social_npc_post_weight = 0</code> if you don't want friends posting on their own.</p>
-      </div>
-    </details>
-
-    <details class="faq-item">
-      <summary>Does it work on Mac?</summary>
-      <div class="faq-body">
-        <p>Yes — drop the <code>.ts4script</code> into <code>~/Documents/Electronic Arts/The Sims 4/Mods/</code> and it works identically to Windows. Same commands, same behavior.</p>
-      </div>
-    </details>
-
-    <details class="faq-item">
-      <summary>How much does it cost?</summary>
-      <div class="faq-body">
-        <p>You pay your AI provider directly for what the mod actually uses — there's no subscription to me or anyone else. Cost depends on which provider you pick:</p>
-        <p class="muted small"><strong>Prices and model names change.</strong> These are rough estimates from October 2026; check your provider's pricing page for current rates.</p>
-        <table class="cost-table">
-          <thead>
-            <tr><th>Provider</th><th>Model</th><th>Per call</th></tr>
-          </thead>
-          <tbody>
-            <tr><td>Anthropic Claude</td><td>claude-haiku-5-5 (recommended)</td><td>~$0.001</td></tr>
-            <tr><td>Anthropic Claude</td><td>claude-opus-5-5</td><td>~$0.05</td></tr>
-            <tr><td>OpenAI</td><td>gpt-4o-mini</td><td>~$0.003</td></tr>
-            <tr><td>OpenAI</td><td>gpt-4o</td><td>~$0.03</td></tr>
-            <tr><td>Google Gemini</td><td>a current Flash model</td><td><strong>free</strong> (rate limited)</td></tr>
-            <tr><td>Ollama / LM Studio (local)</td><td>any model</td><td><strong>free</strong> (uses your GPU)</td></tr>
-          </tbody>
-        </table>
-        <p>A typical session of ~30 calls costs a few cents on Claude Haiku 5.5 and under a dime on GPT-4o-mini. Heavier sessions on the premium models (like Claude Opus) can run a dollar or two. Gemini's free tier covers most casual play. Ollama and LM Studio are fully free if you've got the hardware.</p>
-        <p><strong>Llamagram adds a little.</strong> Each of your posts is one larger call (it writes all the comments at once), and each reply you post to a comment is one more. With auto-events on, friends posting on their own is one call per post, about one in five auto-events at the default setting. Set <code>social_npc_post_weight = 0</code> to turn friends' posts off.</p>
-      </div>
-    </details>
-
-    <details class="faq-item">
-      <summary>Does this slow down the game?</summary>
-      <div class="faq-body">
-        <p>No. All API calls happen on background threads, so the game keeps running while text is generated. You'll see a notification popup when the response arrives, usually within a few seconds.</p>
-      </div>
-    </details>
-
-    <details class="faq-item">
-      <summary>What if I'm offline?</summary>
-      <div class="faq-body">
-        <p>The mod needs an internet connection to call the AI provider. If you're offline, commands silently fail without interrupting your game — no crashes, no popups. Your sims still play normally; you just won't get AI-generated content during offline sessions.</p>
-      </div>
-    </details>
-
-    <details class="faq-item">
-      <summary>Is this against the Sims 4 Terms of Service?</summary>
-      <div class="faq-body">
-        <p>No. The Sims 4 supports script mods officially through its Mods folder and Custom Content settings. This mod uses the documented script-mod system and doesn't modify any game files. EA's stance on script mods is that they're allowed; they just won't support issues that occur while mods are installed.</p>
-      </div>
-    </details>
-
   </div>
+
+  <h3 class="errors-group">Models</h3>
+  <div class="faq-list">
+
+    <details class="faq-item">
+      <summary>"Model not found" / "is not found for API version" / "not supported for generateContent"</summary>
+      <div class="faq-body">
+        <p>The model in <code>default_model</code> or <code>fast_model</code> has been retired by the provider. AI companies retire old models every few months. Pick a current one from your provider's model list and put it in both lines, then <code>llama.reload</code>. For Claude, <code>claude-haiku-5-5</code> is a good choice.</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>"Empty response" / replies are cut off or missing</summary>
+      <div class="faq-body">
+        <p>Usually a model that "thinks" (reasons) before answering, and spends its whole reply on thinking.</p>
+        <ul>
+          <li>Update to v3.8.2 or newer &mdash; it gives thinking models room and fixes this for Claude Haiku 5.5 and LM Studio.</li>
+          <li>Try a model that doesn't think, like <code>gpt-4o-mini</code> or, locally, Llama 3.2.</li>
+          <li>Or raise <code>max_tokens</code> in <code>llamafone.cfg</code> (for example to <code>1024</code>).</li>
+        </ul>
+      </div>
+    </details>
+  </div>
+
+  <h3 class="errors-group">Local AI (Ollama and LM Studio)</h3>
+  <div class="faq-list">
+
+    <details class="faq-item">
+      <summary>"Can't reach Ollama" / "Can't reach LM Studio"</summary>
+      <div class="faq-body">
+        <ul>
+          <li><strong>Ollama:</strong> make sure Ollama is running (the llama icon in your system tray). Open it from the Start menu if it isn't.</li>
+          <li><strong>LM Studio:</strong> the app being open isn't enough &mdash; the server has to be on. Switch to Power User mode (bottom of the window), open the Developer tab, and turn the server on. It should say <em>Running</em> at <code>http://localhost:1234</code>.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>"The conversation is longer than the model's context length" / "Context size has been exceeded"</summary>
+      <div class="faq-body">
+        <p>A call or text sends the AI about 8,000 tokens. Reload the model with a larger context length: <strong>16384</strong> (12288 at the very least). In LM Studio, set it when loading the model. In Ollama, set <em>Context length</em> to 16k in its settings.</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>"Request timed out" / it says "Checking messages&hellip;" and nothing happens</summary>
+      <div class="faq-body">
+        <p>Your PC is taking too long to write the reply. Without a supported graphics card, a local model can take minutes. Update to v3.8.2 or newer (it waits up to 5 minutes and tells you if it gives up), and try a smaller model, like a 3B one (<code>llama3.2:3b</code>).</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>Replies are confused or ignore what's going on (Ollama)</summary>
+      <div class="faq-body">
+        <p>Ollama's default context is too small, and it quietly cuts off the start of Llamafone's prompt, which holds most of the instructions. In Ollama's settings, set <em>Context length</em> to 16k.</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>"No model is loaded" / the model in llamafone.cfg isn't installed</summary>
+      <div class="faq-body">
+        <p>Run <code>llama.testconnection</code>: it lists the models your Ollama or LM Studio actually has. Copy one of those names into <code>default_model</code> and <code>fast_model</code>, or install the model you want (<code>ollama pull &lt;name&gt;</code>, or load it in LM Studio). Then <code>llama.reload</code>.</p>
+      </div>
+    </details>
+  </div>
+
+  <h3 class="errors-group">In game</h3>
+  <div class="faq-list">
+
+    <details class="faq-item">
+      <summary>I can't type in the message box</summary>
+      <div class="faq-body">
+        <p>The game has lost keyboard focus, usually after alt-tabbing to another window. If the cheat console won't take typing either, restart the game. Try to avoid alt-tabbing while a message box is open.</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>Garbled punctuation like <code>â€™</code> or <code>â€”</code></summary>
+      <div class="faq-body">
+        <p>Fixed in v3.8.2 &mdash; update to the latest version.</p>
+      </div>
+    </details>
+  </div>
+
+  <p class="muted errors-more">Still stuck? <a href="https://github.com/morganparadis/llamafone/issues/new" target="_blank" rel="noopener">Report it</a> and include the output of <code>llama.status</code> and your <code>Llamafone_Log.txt</code> (in your Documents folder).</p>
 </section>
+
 
 <section class="changelog container">
   <h2>What's new</h2>

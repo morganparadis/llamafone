@@ -309,8 +309,12 @@ kbd {
   /* Four links + Patreon overflow ~375px phones by a few px. */
   .topbar-links a { padding: 0.35rem 0.4rem; font-size: 0.82rem; }
 }
+@media (max-width: 480px) {
+  /* Phones: Help is more useful here than Features (added Help, Oct 2026). */
+  .topbar-links a[href="#features"] { display: none; }
+}
 @media (max-width: 340px) {
-  .topbar-links a[href="#features"] { display: none; }  /* 320px phones */
+  .topbar-links a { padding: 0.3rem 0.3rem; font-size: 0.78rem; }
 }
 
 .hero-inner {
@@ -1521,3 +1525,14 @@ section > p { max-width: 780px; margin-left: auto; margin-right: auto; }
   .callout { padding: 1rem 1.1rem; }
   .support-card { padding: 1.75rem 1.25rem; }
 }
+
+/* Common errors: FAQ-style list grouped under small headings. */
+.errors-group {
+  max-width: 760px;              /* line up with .faq-list */
+  margin: 2.25rem auto 0.75rem;
+  font-size: 1.05rem;
+  color: var(--accent-deep);
+}
+.errors .faq-list { margin-top: 0; }
+.errors .faq-item summary code { font-size: 0.9em; }
+.errors-more { margin-top: 1.75rem; text-align: center; }

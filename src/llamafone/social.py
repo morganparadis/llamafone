@@ -2351,8 +2351,11 @@ def _open_own_post(anchor_si, post_id):
     thread = _thread_lines(post, limit=12)
     if thread and int(r.get("comments") or 0) > len(post.get("comments") or []):
         body += "\n\nTop comments:\n" + "\n".join(thread)
-    else:
-        body += "\n\n" + ("\n".join(thread) if thread else "No comments yet.")
+    elif thread:
+        body += "\n\n" + "\n".join(thread)
+    # No thread yet: show nothing. "No comments yet." sat right under a
+    # stats line like "25 comments so far" while comments were still on
+    # their way, and read as a contradiction.
     _ok_cancel(anchor_si, f"{_first(anchor_si)}'s post", body, "OK", "Back",
                on_cancel=lambda: open_inbox(anchor_si))
 

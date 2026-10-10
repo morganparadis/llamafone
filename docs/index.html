@@ -1002,6 +1002,13 @@ fast_model    = llama-3.2-3b-instruct</code></pre>
     </details>
 
     <details class="faq-item">
+      <summary>"API error: Request contains an invalid argument" (Gemini)</summary>
+      <div class="faq-body">
+        <p>The newest Gemini models (Gemini 3) don't accept a setting Llamafone sends them. A fix is coming in v3.8.3. Until then, use a Gemini 2.5 model, which is free and works now: set <code>default_model</code> and <code>fast_model</code> to <code>gemini-2.5-flash</code> (or <code>gemini-2.5-flash-lite</code>), then <code>llama.reload</code>.</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
       <summary>"Empty response" / replies are cut off or missing</summary>
       <div class="faq-body">
         <p>Usually a model that "thinks" (reasons) before answering, and spends its whole reply on thinking.</p>

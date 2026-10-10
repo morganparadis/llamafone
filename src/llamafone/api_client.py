@@ -602,6 +602,61 @@ _LMSTUDIO_CONTEXT_HINT = (
 )
 
 
+# A model the provider has retired (or a misspelled name) comes back as a
+# raw API error like "models/gemini-2.5-flash is not found for API version
+# v1beta, or is not supported for generateContent" -- which doesn't tell a
+# player what to do. Providers retire models every few months (Gemini 2.5
+# on Oct 20, 2026), so rewrite those into one plain instruction.
+_SUGGESTED_MODEL = {
+    "claude": "claude-haiku-5-5",
+    "openai": "gpt-4o-mini",
+    "gemini": "gemini-3.5-flash-lite",
+    "openrouter": "anthropic/claude-haiku-4.5",
+}
+_PROVIDER_NAME = {"claude": "Anthropic", "openai": "OpenAI", "gemini": "Google", "openrouter": "OpenRouter"}
+_MODEL_GONE = (
+    "no longer available", "deprecated", "has been shut down", "shut down",
+    "decommissioned", "retired", "discontinued", "not a valid model",
+    "not supported for generatecontent", "model_not_found",
+)
+
+
+def _explain_model_gone(provider, model, err):
+    if provider not in _SUGGESTED_MODEL or not err or not err.startswith("API error:"):
+        return err
+    low = err.lower()
+    gone = ("model" in low and any(p in low for p in _MODEL_GONE + ("not found", "does not exist")))         or low.startswith("api error: model:")    # Claude's not_found_error
+    if not gone:
+        return err
+    return (f'{_PROVIDER_NAME[provider]} no longer offers the model "{model}" '
+            f"(it was retired, or the name is misspelled). Open llamafone.cfg, set "
+            f"default_model and fast_model to a current model, like "
+            f"{_SUGGESTED_MODEL[provider]}, then type llama.reload in the cheat console.")
+
+
+_PROVIDER_LABEL = {"claude": "Claude", "openai": "OpenAI", "gemini": "Gemini", "openrouter": "OpenRouter"}
+_BUSY = ("high demand", "overloaded", "service unavailable", "temporarily unavailable",
+         "currently unavailable")
+
+
+def _explain_busy(provider, err):
+    """Cloud provider overloaded or too slow: say it's on their side and
+    what to do, instead of the raw API text (texts, calls, Llamagram)."""
+    if provider not in _PROVIDER_LABEL or not err:
+        return err
+    low = err.lower()
+    label = _PROVIDER_LABEL[provider]
+    if err.startswith("API error:") and any(k in low for k in _BUSY):
+        return (f"{label} is too busy right now (a problem on {_PROVIDER_NAME[provider]}'s "
+                f"side, not Llamafone). Try again in a minute. If it keeps happening, "
+                f"switch to a different model in llamafone.cfg.")
+    if err.startswith("Request timed out"):
+        return (f"{label} took too long to answer and Llamafone gave up after 60 seconds. "
+                f"Try again in a minute. If it keeps happening, switch to a different "
+                f"model in llamafone.cfg.")
+    return err
+
+
 def _clean_lmstudio_error(raw):
     """A player-readable LM Studio error. The server often wraps the real
     message in engine noise -- 'Engine protocol predict stream returned an
@@ -783,6 +838,8 @@ def call_ai_async(messages, system=None, use_fast_model=False, callback=None, ma
             err = "The AI sent back an empty reply. Try again, or try a different model."
         if err:
             _log_failure(provider, model, err, time.time() - started)
+            err = _explain_model_gone(provider, model, err)
+            err = _explain_busy(provider, err)
         if callback:
             callback(text, err)
 

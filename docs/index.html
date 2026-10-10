@@ -995,9 +995,9 @@ fast_model    = llama-3.2-3b-instruct</code></pre>
   <div class="faq-list">
 
     <details class="faq-item">
-      <summary>"Model not found" / "is not found for API version" / "not supported for generateContent"</summary>
+      <summary>"Model not found" / "no longer available" / "no longer offers the model" / "is not found for API version"</summary>
       <div class="faq-body">
-        <p>The model in <code>default_model</code> or <code>fast_model</code> has been retired by the provider. AI companies retire old models every few months. Pick a current one from your provider's model list and put it in both lines, then <code>llama.reload</code>. For Claude, <code>claude-haiku-5-5</code> is a good choice.</p>
+        <p>The model in <code>default_model</code> or <code>fast_model</code> has been retired by the provider. AI companies retire old models every few months. Pick a current one from your provider's model list and put it in both lines, then <code>llama.reload</code>. For Claude, <code>claude-haiku-5-5</code> is a good choice; for Gemini, <code>gemini-3.5-flash-lite</code>. Google retires Gemini 2.5 on October 20, 2026, so if you use a <code>gemini-2.5</code> model, switch before then.</p>
       </div>
     </details>
 
@@ -1094,13 +1094,17 @@ fast_model    = llama-3.2-3b-instruct</code></pre>
     <li class="changelog-entry">
       <div class="changelog-date">October 10, 2026</div>
       <div class="changelog-body">
-        <h3>Gemini 3, newer AI models, and a New Year's fix (v3.8.3)</h3>
+        <h3>Gemini 3, newer AI models, clearer errors, and Llamagram fixes (v3.8.3)</h3>
         <p>Keeps Llamafone working with the newest AI models. Drop-in over v3.8.2.</p>
         <ul>
           <li><strong>Gemini 3 works.</strong> Gemini 3 models (like the free <code>gemini-3.5-flash-lite</code>) failed with "Request contains an invalid argument." Gemini 2.5 is being retired on October 20, so if you use Gemini, update before then.</li>
           <li><strong>Newer OpenAI models work.</strong> Llamafone uses OpenAI's current request settings and leaves room for models that think before answering.</li>
           <li><strong>New installs default to Claude Haiku 5.5.</strong> Haiku 4.5 is being retired. Already set up? Your settings don't change; if you see "model not found," switch to <code>claude-haiku-5-5</code>.</li>
           <li><strong>New Year's Eve is New Year's Eve.</strong> Sims no longer talk about the countdown as if it already happened; it's at midnight.</li>
+          <li><strong>Clearer errors.</strong> When your AI service is overloaded, too slow, or has retired your model, Llamafone says so in plain words and tells you what to do.</li>
+          <li><strong>Llamagram comments feel real.</strong> They arrive sooner on big accounts, in fewer pop-ups, and the comment count stays in step with what you can read. If the AI is busy, Llamafone tries again and lets you know.</li>
+          <li><strong>Realistic follower growth</strong> for big Llamagram accounts. A celebrity no longer gains tens of thousands of followers from an ordinary post.</li>
+          <li><strong>Pregnant again?</strong> Sims now know about a new pregnancy that starts soon after a birth.</li>
           <li><strong>Up-to-date model examples</strong> in <code>llamafone.cfg</code>, with a reminder that model names change.</li>
         </ul>
       </div>

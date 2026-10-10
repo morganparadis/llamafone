@@ -1733,12 +1733,16 @@ def format_for_prompt(sim_info, contact_id=None, mark_seen=True, known_by_defaul
         # prompt doesn't say "expecting" and "had the baby" side by side.
         # If the birth is NOT yet heard, keep "expecting": that is exactly
         # what this contact still believes.
-        _birth_known = any(
-            e.get("type") == "pregnancy_end" and (_known_outright(e) or _has_heard(e, now_ticks, knowledge))
-            for e in events
-        )
-        if _birth_known:
-            events = [e for e in events if e.get("type") != "pregnancy_start"]
+        # Only starts OLDER than that birth are stale: a new pregnancy after
+        # the baby ("had a baby" last week, pregnant again now) stays.
+        # `events` is newest-first, so those are the starts listed after it.
+        _known_birth_at = next(
+            (i for i, e in enumerate(events)
+             if e.get("type") == "pregnancy_end" and (_known_outright(e) or _has_heard(e, now_ticks, knowledge))),
+            None)
+        if _known_birth_at is not None:
+            events = [e for i, e in enumerate(events)
+                      if not (e.get("type") == "pregnancy_start" and i > _known_birth_at)]
         lines = ["Recent in their life:"]
         surfaced = []
         # Pregnancy + birth milestones get a soft "you may not know unless

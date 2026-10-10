@@ -53,7 +53,6 @@ _FRIENDS_MIN_FRIENDSHIP = 10     # network threshold for who sees a post
 _MAX_FRIEND_CANDIDATES = 8
 _MAX_STRANGER_CANDIDATES = 4
 _FIRST_BATCH_DELAY = (60, 180)   # seconds after posting before comments start
-_NEXT_BATCH_GAP = (120, 360)     # seconds between comment batches
 _THREAD_REPLY_DELAY = (30, 120)  # seconds for a reply to your comment
 _MAX_POST_CHARS = 400
 _MAX_COMMENT_CHARS = 280
@@ -756,6 +755,7 @@ _NEGATIVE_MOODS = {"angry", "uncomfortable", "tense", "embarrassed", "bored"}
 # post is ~3.5-9%, a good one ~0.5-2%.
 _TIER_RATES = {"viral": (0.02, 0.05), "good": (0.003, 0.012), "flat": (0.0, 0.002), "backlash": (-0.03, -0.01)}
 _TIER_FLOOR = {"viral": (15, 60), "good": (2, 12), "flat": (0, 3), "backlash": (-6, -1)}
+_GAIN_DAMPING_FOLLOWERS = 100_000   # gain rate halves at 100K, ~1/18 at 1.7M
 # Fame is HARD to earn: only a viral post on an account that already has an
 # audience, or crossing a big follower milestone. A few happy friends on a
 # 9-follower account is a good day, not fame. Values are shares of the fame
@@ -1063,6 +1063,17 @@ def _growth(post):
         return 1.0
 
 
+# Share of likers who also comment. A post that asks its audience something
+# ("what should we name the baby?") gets answered far more.
+_COMMENT_RATE = (0.02, 0.05)
+_COMMENT_RATE_QUESTION = (0.08, 0.15)
+_MIN_COMMENT_SHARE = 0.01
+
+
+def _comment_rate(post):
+    return _COMMENT_RATE_QUESTION if "?" in (post.get("text") or "") else _COMMENT_RATE
+
+
 def _current_stats(post):
     """(views, likes, comments, settled_fraction) as of now."""
     import math
@@ -1076,6 +1087,14 @@ def _current_stats(post):
     views = max(int(pr.get("floor_views") or 0), int(round(int(base.get("views") or 0) * g)))
     likes = max(int(pr.get("floor_likes") or 0), int(round(int(base.get("likes") or 0) * g)))
     comments = max(real, int(pr.get("floor_comments") or 0), int(round(total_c * g)))
+    # Until the first comments actually arrive (or if none ever do), the
+    # count stays at 0: a stats line of "47 comments" with none to read
+    # looked broken.
+    if not real:
+        comments = 0
+    else:
+        # Never hundreds of likes next to a dozen comments while it grows.
+        comments = max(comments, int(likes * _MIN_COMMENT_SHARE))
     # Keep the three consistent: commenters usually like it too, plus people
     # who only like; and far more people see a post than react to it.
     if comments:
@@ -1101,6 +1120,10 @@ def _stats_line(post):
     tail = " so far" if g < 0.95 else ""
     if not (post.get("reception") or post.get("projection")):
         return _n(comments, "comment") + " so far"
+    # No comments to read yet: leave the count out rather than show
+    # "0 comments" under hundreds of likes.
+    if not comments:
+        return f"{_n(views, 'view')}, {_n(likes, 'like')}{tail}"
     return f"{_n(views, 'view')}, {_n(likes, 'like')}, {_n(comments, 'comment')}{tail}"
 
 
@@ -1173,6 +1196,10 @@ def _settle_reception(post_id, poster_si, picked):
             rate = random.uniform(lo, hi)
             if rate > 0:
                 rate *= 1 + 0.25 * fame_rank(poster_si)
+                # Gains shrink as the account grows: a flat share of followers
+                # made every ordinary post on a 1.7M account worth 10K-40K
+                # (+12% in one in-game day). Losses are not damped.
+                rate /= 1 + before / _GAIN_DAMPING_FOLLOWERS
             if audience != "public":
                 rate *= 0.15          # friends-only: only a few shares
             delta = int(round(before * rate))
@@ -1399,7 +1426,48 @@ def player_post(poster_si, text, audience="friends", output=None):
     return post
 
 
-def _generate_comments(post_id):
+_PROVIDER_LABEL = {"claude": "Claude", "openai": "OpenAI", "gemini": "Gemini",
+                   "openrouter": "OpenRouter", "ollama": "Ollama", "lmstudio": "LM Studio"}
+
+
+def _failure_reason(err):
+    try:
+        from . import config
+        prov = _PROVIDER_LABEL.get(config.get_provider(), "The AI")
+    except Exception:
+        prov = "The AI"
+    low = (err or "").lower()
+    if any(k in low for k in ("too busy", "high demand", "overloaded")):
+        return f"{prov} says it's too busy right now"
+    if "timed out" in low or "took too long" in low:
+        return f"{prov} took too long to answer"
+    if not err:
+        return f"{prov} sent back an empty reply"
+    return f"{prov} returned an error: {_clip(err, 160)}"
+
+
+def _notify_comments_failed(poster_si, err, retrying):
+    try:
+        from . import notifications
+        who = _first(poster_si)
+        reason = _failure_reason(err)
+        if retrying:
+            msg = (f"Comments on {who}'s post are delayed. {reason}. "
+                   f"Trying again in a couple of minutes.")
+        else:
+            msg = (f"Couldn't load comments on {who}'s post ({reason}). They'll come in next "
+                   f"time you load this save. If this keeps happening, try a different model "
+                   f"in llamafone.cfg.")
+        notifications.show("Llamagram", msg)
+    except Exception as e:
+        _log(f"comment failure notice failed: {type(e).__name__}: {e}")
+
+
+_COMMENT_RETRIES = 2            # extra tries in-session (busy/overloaded provider)
+_COMMENT_RETRY_DELAY = (60, 120)
+
+
+def _generate_comments(post_id, attempt=0):
     try:
         post = get_post(post_id)
         poster_si = _resolve(post.get("author_id")) if post else None
@@ -1444,7 +1512,18 @@ def _generate_comments(post_id):
 
         def _on_result(text, err):
             if err or not text:
-                _log(f"comment pass for {post_id} failed: {err}")
+                retry = attempt < _COMMENT_RETRIES
+                if retry:
+                    delay = random.uniform(*_COMMENT_RETRY_DELAY)
+                    _log(f"comment pass for {post_id} failed: {err} -- retrying in {delay:.0f}s")
+                    _timer(delay, lambda: _generate_comments(post_id, attempt + 1))
+                else:
+                    _log(f"comment pass for {post_id} failed: {err} -- will retry on next load")
+                # The player made this post and is waiting on comments: say
+                # why they're late -- once on the first failure, once if every
+                # try failed (not on each retry). Friends' posts stay quiet.
+                if post.get("is_player") and (attempt == 0 or not retry):
+                    _notify_comments_failed(poster_si, err, retry)
                 return
             items = _parse_json_array(text)
             if items is None:
@@ -1518,8 +1597,9 @@ def _project(post_id, poster_si, picked, verdict=None, ai_breakout=None):
         followers = followers_of(poster_si)
         views, likes = _estimate_reach(None, followers, audience, tier, len(picked), poster_si)
         total = len(picked)
+        c_rate = _comment_rate(post)
         if audience == "public" and followers >= 100:
-            total = max(total, int(round(likes * random.uniform(0.005, 0.02))))
+            total = max(total, int(round(likes * random.uniform(*c_rate))))
         breakout, scandal = False, False
         if audience == "public" and tier in ("viral", "backlash"):
             prof = (data.get("profiles") or {}).get(str(poster_si.sim_id)) or {}
@@ -1537,7 +1617,8 @@ def _project(post_id, poster_si, picked, verdict=None, ai_breakout=None):
                             int(followers * random.uniform(3.0, 10.0)))
                 like_rate = (0.01, 0.03) if scandal else (0.03, 0.08)
                 likes = int(round(views * random.uniform(*like_rate)))
-                c_rate = (0.02, 0.06) if scandal else (0.005, 0.02)   # scandals get argued about
+                if scandal:
+                    c_rate = (0.05, 0.12)   # scandals get argued about
                 total = max(len(picked), int(round(likes * random.uniform(*c_rate))))
                 _log(f"post {post_id}: BREAKOUT{' (scandal)' if scandal else ''} -- "
                      f"{views:,} views on a {followers:,}-follower account")
@@ -1579,7 +1660,7 @@ def _provisional_projection(post_id, poster_si):
         if audience == "public":
             views += 20   # discovery, as in _estimate_reach
         likes = int(round(views * 0.06))
-        total = int(round(likes * 0.01)) if audience == "public" and followers >= 100 else 0
+        total = int(round(likes * _comment_rate(post)[0])) if audience == "public" and followers >= 100 else 0
         post["author_rank"] = fame_rank(poster_si)
         post["projection"] = {"tier": None, "views": views, "likes": likes, "comments_total": total,
                               "batches": 0, "delivered": 0, "provisional": True, "audience_size": base}
@@ -1596,8 +1677,49 @@ def _likes_so_far(post, delivered, n_batches):
     return int(round(likes * frac))
 
 
+# Comment pacing by audience size: (first batch delay range in seconds,
+# window the rest are spread over, most pop-ups). Real big accounts get
+# comments within seconds; a small account trickles.
+_PACING = (
+    (1_000_000, (15, 30), 150, 3),
+    (100_000,   (30, 45), 270, 4),
+    (1_000,     (45, 75), 540, 5),
+    (0,         (60, 120), 1050, 6),
+)
+
+
+def _comment_pacing(post, poster_si):
+    """(first_delay_range, window_seconds, max_batches) for this post.
+    Friends-only posts are paced like a mid-size account: the comments
+    come from the poster's own people however big the following."""
+    if post.get("audience") != "public":
+        return (45, 75), 540, 5
+    n = followers_of(poster_si)
+    for floor, first, window, max_batches in _PACING:
+        if n >= floor:
+            return first, window, max_batches
+    return _PACING[-1][1:]
+
+
+def _split_batches(picked, max_batches):
+    """Split comments into at most `max_batches` batches of near-equal
+    size (fully random cuts once gave a 1-comment first pop-up followed
+    by 9). The leftover comments land on random batches."""
+    if not picked:
+        return []
+    k = max(1, min(max_batches, len(picked)))
+    sizes = [len(picked) // k] * k
+    for i in random.sample(range(k), len(picked) % k):
+        sizes[i] += 1
+    out, prev = [], 0
+    for n in sizes:
+        out.append(picked[prev:prev + n])
+        prev += n
+    return out
+
+
 def _schedule_batches(post_id, poster_si, picked):
-    """Split comments into batches of 1-3 and deliver each batch as ONE
+    """Split comments into batches (see _comment_pacing) and deliver each batch as ONE
     notification, spaced out like comments trickling in. The batches are
     SAVED to the post first ("pending"), so quitting the game mid-trickle
     doesn't lose them -- resume_pending() delivers what's left on the next
@@ -1610,15 +1732,15 @@ def _schedule_batches(post_id, poster_si, picked):
         # in later.
         known = _network_ids(poster_si)
         picked = sorted(picked, key=lambda t: 0 if _is_stranger(poster_si, t[0], known) else 1)
-    batches, i = [], 0
-    while i < len(picked):
-        n = random.randint(1, 3)
-        batches.append(picked[i:i + n])
-        i += n
+    first, window, max_batches = _comment_pacing(post0, poster_si)
+    batches = _split_batches(picked, max_batches)
     now = time.time()
-    # The first comment pop-up shouldn't land the instant the pass returns
-    # (likes and views already climb from the moment of posting).
-    delay = random.uniform(120, 240) if big_public else random.uniform(60, 150)
+    # Bigger accounts get their comments sooner and closer together, in
+    # fewer, bigger batches (fewer pop-ups); a small account's trickle
+    # stays slow. The comment COUNT stays at 0 until the first batch lands
+    # (see _current_stats), so "47 comments" never shows with none to read.
+    delay = random.uniform(*first)
+    gap = window / max(1, len(batches))
     pending = []
     for b in batches:
         pending.append({"due": now + delay, "done": False,
@@ -1626,7 +1748,7 @@ def _schedule_batches(post_id, poster_si, picked):
                                   for si, body, mood in b]})
         for it, (_si, body, mood) in zip(pending[-1]["items"], b):
             it["text"], it["mood"] = body, mood
-        delay += random.uniform(180, 480) if big_public else random.uniform(*_NEXT_BATCH_GAP)
+        delay += gap * random.uniform(0.7, 1.3)
     with _lock:
         data = _load()
         post = get_post(post_id) if data else None

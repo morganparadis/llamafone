@@ -690,6 +690,7 @@
       <div class="step-body">
         <h3>Pick an AI provider and get a key</h3>
         <p>Llamafone works with six different AI providers — pick whichever fits your budget, preferences, or paranoia. You only need credentials for the one you pick. Ollama and LM Studio are free because they run entirely on your computer.</p>
+        <p class="muted small"><strong>Model names change.</strong> AI companies retire old models and release new ones every few months, and prices change too. The names below were current as of October 2026; check your provider's model list for the latest. A "model not found" error usually means a model was retired. If you get empty, cut-off, or very slow replies, try a model that doesn't "think" (reason) before answering, like <code>gpt-4o-mini</code> or, locally, Llama 3.2.</p>
 
         <div class="provider-grid">
           <div class="provider-card">
@@ -698,16 +699,16 @@
             <ol class="api-substeps">
               <li>Go to <a href="https://console.anthropic.com/" target="_blank" rel="noopener">console.anthropic.com</a> and sign up</li>
               <li>Verify email/phone if asked</li>
-              <li>Add a credit card under <em>Settings → Billing</em> and load <strong>$5</strong> minimum (~1,000 in-game calls)</li>
+              <li>Add a credit card under <em>Settings → Billing</em> and load <strong>$5</strong> minimum (thousands of in-game calls on <code>claude-haiku-5-5</code>)</li>
               <li>Go to <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">API Keys</a>, click <em>Create Key</em>, name it "Sims 4 mod"</li>
               <li>Copy the <code>sk-ant-api03-…</code> key immediately — you only see it once</li>
             </ol>
-            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = claude</code></p>
+            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = claude</code>. Recommended model: <code>claude-haiku-5-5</code>; for richer writing try <code>claude-sonnet-5-5</code> or <code>claude-opus-5-5</code>.</p>
           </div>
 
           <div class="provider-card">
             <h4>💚 OpenAI (GPT)</h4>
-            <p>Works with any GPT model — <code>gpt-4o</code>, <code>gpt-4o-mini</code>, <code>gpt-4-turbo</code>.</p>
+            <p>Works with GPT models like <code>gpt-4o-mini</code> and <code>gpt-4o</code>.</p>
             <ol class="api-substeps">
               <li>Go to <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com/api-keys</a> and sign in (or sign up)</li>
               <li>Add billing under <em>Settings → Billing</em>; load credit ($5 minimum)</li>
@@ -737,7 +738,7 @@
               <li>Go to <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a> and click <em>Create Key</em></li>
               <li>Copy the <code>sk-or-…</code> key</li>
             </ol>
-            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = openrouter</code> + <code>default_model = anthropic/claude-haiku-4-5</code> (browse the full catalog at <a href="https://openrouter.ai/models" target="_blank" rel="noopener">openrouter.ai/models</a>)</p>
+            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = openrouter</code> + <code>default_model = anthropic/claude-haiku-4.5</code> (browse the full catalog at <a href="https://openrouter.ai/models" target="_blank" rel="noopener">openrouter.ai/models</a>)</p>
           </div>
 
           <div class="provider-card">
@@ -820,8 +821,8 @@ api_key  = AIza…
 
 provider      = openrouter
 api_key       = sk-or-…
-default_model = anthropic/claude-haiku-4-5   # vendor/model form -- see openrouter.ai/models
-fast_model    = anthropic/claude-haiku-4-5
+default_model = anthropic/claude-haiku-4.5   # vendor/model form -- see openrouter.ai/models
+fast_model    = anthropic/claude-haiku-4.5
 
 # or (no key needed)
 
@@ -911,20 +912,21 @@ fast_model    = llama-3.2-3b-instruct</code></pre>
       <summary>How much does it cost?</summary>
       <div class="faq-body">
         <p>You pay your AI provider directly for what the mod actually uses — there's no subscription to me or anyone else. Cost depends on which provider you pick:</p>
+        <p class="muted small"><strong>Prices and model names change.</strong> These are rough estimates from October 2026; check your provider's pricing page for current rates.</p>
         <table class="cost-table">
           <thead>
             <tr><th>Provider</th><th>Model</th><th>Per call</th></tr>
           </thead>
           <tbody>
-            <tr><td>Anthropic Claude</td><td>claude-haiku-4-5</td><td>~$0.005</td></tr>
-            <tr><td>Anthropic Claude</td><td>claude-opus-4-8</td><td>~$0.05–0.15</td></tr>
+            <tr><td>Anthropic Claude</td><td>claude-haiku-5-5 (recommended)</td><td>~$0.001</td></tr>
+            <tr><td>Anthropic Claude</td><td>claude-opus-5-5</td><td>~$0.05</td></tr>
             <tr><td>OpenAI</td><td>gpt-4o-mini</td><td>~$0.003</td></tr>
             <tr><td>OpenAI</td><td>gpt-4o</td><td>~$0.03</td></tr>
             <tr><td>Google Gemini</td><td>a current Flash model</td><td><strong>free</strong> (rate limited)</td></tr>
             <tr><td>Ollama / LM Studio (local)</td><td>any model</td><td><strong>free</strong> (uses your GPU)</td></tr>
           </tbody>
         </table>
-        <p>A typical session of ~30 calls on Claude Haiku or GPT-4o-mini lands around 15-25 cents. Heavier sessions with long-form storyline generation run a dollar or two on the premium models. Gemini's free tier covers most casual play. Ollama and LM Studio are fully free if you've got the hardware.</p>
+        <p>A typical session of ~30 calls costs a few cents on Claude Haiku 5.5 and under a dime on GPT-4o-mini. Heavier sessions on the premium models (like Claude Opus) can run a dollar or two. Gemini's free tier covers most casual play. Ollama and LM Studio are fully free if you've got the hardware.</p>
         <p><strong>Llamagram adds a little.</strong> Each of your posts is one larger call (it writes all the comments at once), and each reply you post to a comment is one more. With auto-events on, friends posting on their own is one call per post, about one in five auto-events at the default setting. Set <code>social_npc_post_weight = 0</code> to turn friends' posts off.</p>
       </div>
     </details>

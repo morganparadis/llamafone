@@ -297,7 +297,13 @@ def _call_openai(api_key, model, max_tokens, system, messages):
     if system:
         full.append({"role": "system", "content": system})
     full.extend(messages)
-    body = {"model": model, "messages": full, "max_tokens": max_tokens}
+    # max_completion_tokens: OpenAI deprecated max_tokens in favor of it, and
+    # reasoning models (the GPT-6 line) count their thinking against it --
+    # so give the same headroom as Claude, or the reply can come back empty.
+    # Older models (gpt-4o, gpt-4o-mini) accept it too. Only tokens actually
+    # generated are billed.
+    body = {"model": model, "messages": full,
+            "max_completion_tokens": int(max_tokens) + _CLAUDE_THINKING_HEADROOM}
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
@@ -314,9 +320,19 @@ def _call_openai(api_key, model, max_tokens, system, messages):
         msg = e.get("message", str(e)) if isinstance(e, dict) else str(e)
         return "", f"API error: {msg}"
     try:
-        return data["choices"][0]["message"]["content"], None
-    except (KeyError, IndexError, TypeError):
+        choice = data["choices"][0]
+        text = (choice.get("message", {}).get("content") or "").strip()
+    except (KeyError, IndexError, TypeError, AttributeError):
         return "", "Empty response from OpenAI."
+    if text:
+        return text, None
+    if choice.get("finish_reason") == "length":
+        return "", ("OpenAI ran out of room before writing the message (likely spent it "
+                    "thinking). Raise max_tokens in llamafone.cfg (e.g. 1024), or use a "
+                    "model that doesn't reason, like gpt-4o-mini.")
+    if choice.get("finish_reason") == "content_filter":
+        return "", "OpenAI declined to write this reply."
+    return "", "Empty response from OpenAI."
 
 
 def _call_openrouter(api_key, model, max_tokens, system, messages):
@@ -324,7 +340,7 @@ def _call_openrouter(api_key, model, max_tokens, system, messages):
     # Mistral, etc.) behind an OpenAI-compatible Chat Completions API.
     # Same request/response shape as _call_openai; only the base URL and
     # optional attribution headers differ. Model names use the
-    # "vendor/model" form -- e.g. "anthropic/claude-haiku-4-5",
+    # "vendor/model" form -- e.g. "anthropic/claude-haiku-4.5",
     # "openai/gpt-4o-mini", "meta-llama/llama-3.1-8b-instruct".
     #
     # HTTP-Referer / X-Title are optional and used purely for OpenRouter's
@@ -358,6 +374,13 @@ def _call_openrouter(api_key, model, max_tokens, system, messages):
         return "", "Empty response from OpenRouter."
 
 
+def _gemini_takes_thinking_budget(model):
+    """True for Gemini 2.x and older, where thinkingBudget=0 turns thinking
+    off. Gemini 3+ reject it ("Request contains an invalid argument")."""
+    m = re.search(r"gemini-(\d+)", str(model or "").lower())
+    return bool(m) and int(m.group(1)) <= 2
+
+
 def _call_gemini(api_key, model, max_tokens, system, messages):
     # Gemini uses "contents" with parts. System prompt goes in a separate
     # systemInstruction field. Roles: "user" and "model" (assistant->model).
@@ -370,10 +393,19 @@ def _call_gemini(api_key, model, max_tokens, system, messages):
     # visible reply comes back empty or truncated mid-sentence. Disable
     # thinking (flash/flash-lite honor thinkingBudget=0; pro ignores it,
     # which is fine) and give the visible reply enough headroom.
-    generation_config = {
-        "maxOutputTokens": max(max_tokens, 1024),
-        "thinkingConfig": {"thinkingBudget": 0},
-    }
+    #
+    # Gemini 3 models changed thinking control (thinking levels, not a
+    # budget) and can't all turn it off; sending thinkingBudget=0 to
+    # gemini-3.5-flash-lite came back "Request contains an invalid
+    # argument". So: only Gemini 2.x and older get the budget; newer models
+    # get no thinking setting and extra room instead (only tokens actually
+    # used are billed). And if Google rejects the request as an invalid
+    # argument while a thinking setting was sent, retry once without it.
+    generation_config = {"maxOutputTokens": max(int(max_tokens), 1024)}
+    if _gemini_takes_thinking_budget(model):
+        generation_config["thinkingConfig"] = {"thinkingBudget": 0}
+    else:
+        generation_config["maxOutputTokens"] = int(max_tokens) + _CLAUDE_THINKING_HEADROOM
     body = {
         "contents": contents,
         "generationConfig": generation_config,
@@ -392,6 +424,17 @@ def _call_gemini(api_key, model, max_tokens, system, messages):
         data = json.loads(stdout)
     except json.JSONDecodeError:
         return "", f"Invalid response from API: {stdout[:200]}"
+    if "error" in data and "thinkingConfig" in generation_config and \
+            "invalid argument" in str(data["error"]).lower():
+        generation_config.pop("thinkingConfig", None)
+        generation_config["maxOutputTokens"] = int(max_tokens) + _CLAUDE_THINKING_HEADROOM
+        stdout, err, _rc = _curl(url, headers, json.dumps(body))
+        if err:
+            return "", err
+        try:
+            data = json.loads(stdout)
+        except json.JSONDecodeError:
+            return "", f"Invalid response from API: {stdout[:200]}"
     if "error" in data:
         e = data["error"]
         msg = e.get("message", str(e)) if isinstance(e, dict) else str(e)

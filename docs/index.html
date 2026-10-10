@@ -1004,7 +1004,7 @@ fast_model    = llama-3.2-3b-instruct</code></pre>
     <details class="faq-item">
       <summary>"API error: Request contains an invalid argument" (Gemini)</summary>
       <div class="faq-body">
-        <p>The newest Gemini models (Gemini 3) don't accept a setting Llamafone sends them. A fix is coming in v3.8.3. Until then, use a Gemini 2.5 model, which is free and works now: set <code>default_model</code> and <code>fast_model</code> to <code>gemini-2.5-flash</code> (or <code>gemini-2.5-flash-lite</code>), then <code>llama.reload</code>.</p>
+        <p>Fixed in v3.8.3 &mdash; update to the latest version. Gemini 3 models (like the free <code>gemini-3.5-flash-lite</code>) then work. Gemini 2.5 is being retired on October 20, 2026, so move off it before then.</p>
       </div>
     </details>
 
@@ -1092,6 +1092,21 @@ fast_model    = llama-3.2-3b-instruct</code></pre>
   <ol class="changelog-list">
 
     <li class="changelog-entry">
+      <div class="changelog-date">October 10, 2026</div>
+      <div class="changelog-body">
+        <h3>Gemini 3, newer AI models, and a New Year's fix (v3.8.3)</h3>
+        <p>Keeps Llamafone working with the newest AI models. Drop-in over v3.8.2.</p>
+        <ul>
+          <li><strong>Gemini 3 works.</strong> Gemini 3 models (like the free <code>gemini-3.5-flash-lite</code>) failed with "Request contains an invalid argument." Gemini 2.5 is being retired on October 20, so if you use Gemini, update before then.</li>
+          <li><strong>Newer OpenAI models work.</strong> Llamafone uses OpenAI's current request settings and leaves room for models that think before answering.</li>
+          <li><strong>New installs default to Claude Haiku 5.5.</strong> Haiku 4.5 is being retired. Already set up? Your settings don't change; if you see "model not found," switch to <code>claude-haiku-5-5</code>.</li>
+          <li><strong>New Year's Eve is New Year's Eve.</strong> Sims no longer talk about the countdown as if it already happened; it's at midnight.</li>
+          <li><strong>Up-to-date model examples</strong> in <code>llamafone.cfg</code>, with a reminder that model names change.</li>
+        </ul>
+      </div>
+    </li>
+
+    <li class="changelog-entry">
       <div class="changelog-date">October 9, 2026</div>
       <div class="changelog-body">
         <h3>Trip memory, LM Studio, and squashed bugs (v3.8.2)</h3>
@@ -1174,23 +1189,6 @@ fast_model    = llama-3.2-3b-instruct</code></pre>
       </div>
     </li>
 
-    <li class="changelog-entry">
-      <div class="changelog-date">September 28, 2026</div>
-      <div class="changelog-body">
-        <h3>Birth announcements, pregnancy privacy, news that spreads (v3.7)</h3>
-        <p>The first event-driven feature, a proper model of who knows what about a pregnancy, and a pile of fixes to things the AI was getting wrong. Drop-in over v3.6.</p>
-        <p><strong>New:</strong></p>
-        <ul>
-          <li><strong>Birth announcements.</strong> When a sim who is family or a close friend of someone in your household has a baby, the new parent (or their partner) texts your sim within seconds — with the baby's name, tone shaped by the circumstances, once. One text per birth, to the single closest person in your household. Works for births the game completes on its own and for ones finished through MCCC. Off switch: <code>birth_announcements = false</code> in <code>llamafone.cfg</code>.
-            <figure class="changelog-figure">
-              <img src="img/babyannouncement2.PNG" alt="Text from a brother announcing that his wife just had their baby, naming the newborn">
-              <figcaption>Real in-game example — "MANUEL IS HERE." Sent on its own, seconds after the birth; nobody triggered it.</figcaption>
-            </figure>
-            <figure class="changelog-figure">
-              <img src="img/unhappybirthannouncement.PNG" alt="Text from a new mother to the baby's father: the baby is here, she knows he didn't expect to hear from her, but he's the dad and should know">
-              <figcaption>Same feature, different circumstances. Ingrid is texting Ben, the baby's father. They aren't married, don't live together, and he hates children, so instead of a celebration it's guarded and a little awkward: "you're his dad and you should know."</figcaption>
-            </figure>
-          </li>
           <li><strong>Pregnancy and birth news spreads the way it actually does.</strong> Contacts "hear" about a pregnancy or birth after a delay set by how close they are: parents within hours, siblings and spouses in half a day, grandparents a day, aunts/uncles/in-laws a day and a half, close friends two days, casual friends four, acquaintances only if told. Until they've heard, a sim who reaches out on their own gets no trace of it — not the milestone, not the newborn in the household or mutuals lists — so they can't lead with it. Being told directly always counts, and a visibly showing pregnancy is public. If you reply to someone who hasn't heard, the facts are still there so the AI can react when you bring it up.</li>
           <li><strong>Sims announce their own household's news — once, plainly, in character.</strong> A sim whose spouse is pregnant (or just had the baby) breaks the news the next time they contact you, and never re-announces once it's in your history. Tone comes from a circumstances line — whether the other parent is their spouse, an unusual origin, teen or elder, relevant traits, existing kids, money trouble — so a planned baby reads as joy and a surprise reads as a surprise.</li>
           <li><strong>Pregnancies have a visibility ladder.</strong> Sims 4 flips <code>is_pregnant</code> at conception — before the test, before anyone knows — and the mod used to tell every contact immediately. Now a pregnancy is <em>hidden</em> (pre-test: nobody knows, not even her), <em>confirmed</em> (test taken), or <em>visible</em> (Trimester 2/3: showing, public). Read from buffs for sims on the lot and from the pregnancy commodity's own state for off-lot sims, so NPC pregnancies across the world resolve correctly. Stale entries already in your save are handled.</li>

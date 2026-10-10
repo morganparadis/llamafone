@@ -2,6 +2,8 @@
 
 A phone-first AI mod for The Sims 4. Random sims call and text you in character — voices shaped by their traits, mood, relationships, and what's actually happening in your save. Bring your own AI — Claude, OpenAI, Gemini, or a local model through Ollama or LM Studio — and pick up calls and texts that read like they were written for the people in front of you.
 
+**v3.8.3:** Gemini 3 and newer OpenAI models work, new installs default to Claude Haiku 5.5, and New Year's Eve is treated as the eve.
+
 **v3.8.2:** trip memory (sims remember vacations and who went, and everyone else hears about it the way news travels), LM Studio support (free, local, no key), and bug fixes, including Claude Haiku 5.5 support.
 
 **v3.8 highlights:** **Llamagram**, social media for your sims. Post to friends or the whole world, and real sims from your save comment, like, and follow. Your friends post about their own lives, big accounts draw fans, posts carry into calls and texts ("I saw your post..."), and with Get Famous, posts that truly go viral raise your fame. Plus a round of birth-announcement fixes.
@@ -35,12 +37,14 @@ No Python install required for end users — the release ships compiled `.pyc` b
 
 `provider` in `llamafone.cfg` picks where the messages come from:
 
+> **Model names change.** AI companies retire old models and release new ones every few months, and prices change too. The names below were current as of October 2026; check your provider's model list for the latest. A "model not found" error usually means a model was retired. If you get empty, cut-off, or very slow replies, try a model that doesn't "think" (reason) before answering, like `gpt-4o-mini` or, locally, Llama 3.2.
+
 | Provider | API key needed | Model examples | Where to get a key |
 |---|---|---|---|
-| `claude` | Yes | `claude-haiku-4-5`, `claude-sonnet-4-6`, `claude-opus-4-8` | [console.anthropic.com](https://console.anthropic.com/) |
-| `openai` | Yes | `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo` | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| `claude` | Yes | `claude-haiku-5-5` (default), `claude-sonnet-5-5`, `claude-opus-5-5` | [console.anthropic.com](https://console.anthropic.com/) |
+| `openai` | Yes | `gpt-4o-mini`, `gpt-4o` | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
 | `gemini` | Yes | a current Flash model from [Google's model list](https://ai.google.dev/gemini-api/docs/models) (free tier) | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
-| `openrouter` | Yes | `anthropic/claude-haiku-4-5`, `openai/gpt-4o-mini`, `meta-llama/llama-3.1-8b-instruct`, `deepseek/deepseek-chat` — [full catalog](https://openrouter.ai/models) | [openrouter.ai/keys](https://openrouter.ai/keys) |
+| `openrouter` | Yes | `anthropic/claude-haiku-4.5`, `openai/gpt-4o-mini`, `meta-llama/llama-3.1-8b-instruct`, `deepseek/deepseek-chat` — [full catalog](https://openrouter.ai/models) | [openrouter.ai/keys](https://openrouter.ai/keys) |
 | `ollama` (techy) | **No** — runs locally | whatever you've `ollama pull`-ed (`llama3.2:3b` recommended for most hardware) | [ollama.com](https://ollama.com) |
 | `lmstudio` (techy) | **No** — runs locally | whatever model you've loaded in LM Studio (e.g. `llama-3.2-3b-instruct`) | [lmstudio.ai](https://lmstudio.ai) |
 
@@ -54,7 +58,7 @@ Local models get up to 5 minutes per reply (cloud providers: 60 seconds). Withou
 
 **A note on local models:** they're free, but slower and less capable than the cloud options. Each reply takes anywhere from about 15 seconds with a decent graphics card to a minute or more without one, where cloud models answer in a few seconds. Small models also sometimes mix up details, like when an event is or what to call a family member. The cloud models follow the mod's instructions much more closely.
 
-For OpenRouter, model names use the `vendor/model` form so `default_model = anthropic/claude-haiku-4-5` gets you Claude via OpenRouter's proxy, `default_model = openai/gpt-4o-mini` gets you GPT, etc. One key covers everything — useful if you want to try several models without juggling separate accounts.
+For OpenRouter, model names use the `vendor/model` form so `default_model = anthropic/claude-haiku-4.5` gets you Claude via OpenRouter's proxy, `default_model = openai/gpt-4o-mini` gets you GPT, etc. One key covers everything — useful if you want to try several models without juggling separate accounts.
 
 ---
 
@@ -324,8 +328,8 @@ Two paths to change settings:
 |---|---|---|---|
 | `provider` | `claude` | ❌ | `claude`, `openai`, `gemini`, `openrouter`, `ollama`, or `lmstudio` |
 | `api_key` | *(required for cloud providers)* | ❌ | Blank for Ollama and LM Studio |
-| `default_model` | `claude-haiku-4-5` | ❌ | Used for briefings and storyline generation |
-| `fast_model` | `claude-haiku-4-5` | ❌ | Used for calls, texts, and reply generation |
+| `default_model` | `claude-haiku-5-5` | ❌ | Used for briefings and storyline generation |
+| `fast_model` | `claude-haiku-5-5` | ❌ | Used for calls, texts, and reply generation |
 | `ollama_endpoint` | `http://localhost:11434` | ❌ | Only used when provider = `ollama` |
 | `lmstudio_endpoint` | `http://localhost:1234` | ❌ | Only used when provider = `lmstudio` |
 | `max_tokens` | `512` | ❌ | Max length of responses |
@@ -352,18 +356,18 @@ Per-save data (journal, milestones, group threads, contact preferences, past eve
 
 ## Cost
 
-You pay your AI provider directly for what the mod uses — no subscription to the mod itself.
+You pay your AI provider directly for what the mod uses — no subscription to the mod itself. Prices and model names change; these are rough estimates from October 2026.
 
 | Provider | Model | Typical call cost |
 |---|---|---|
-| Claude | Haiku 4.5 | ~$0.005 |
-| Claude | Sonnet / Opus | ~$0.05 – $0.15 |
+| Claude | Haiku 5.5 (default) | ~$0.001 |
+| Claude | Sonnet 5.5 / Opus 5.5 | ~$0.02 – $0.05 |
 | OpenAI | gpt-4o-mini | ~$0.005 |
 | OpenAI | gpt-4o | ~$0.03 |
 | Gemini | Flash | free tier covers most casual play |
 | Ollama / LM Studio | any local model | **free** (uses your GPU) |
 
-A typical session with ~30 Haiku or gpt-4o-mini commands lands around **$0.15**. Heavy sessions with long-form storyline generation run **$0.50 – $1.50** on premium models. Gemini's free tier covers most casual play. Ollama is fully free if you have the hardware.
+A typical session of ~30 calls costs a few cents on Claude Haiku 5.5 and under a dime on gpt-4o-mini. Heavy sessions on premium models (Sonnet / Opus) can run **$0.50 – $1.50**. Gemini's free tier covers most casual play. Ollama is fully free if you have the hardware.
 
 **Llamagram adds a little:** each of your posts is one larger call (it writes all the comments at once), each reply to a comment is one more, and with auto-events on, friends' posts are about one in five auto-events at the default weight.
 

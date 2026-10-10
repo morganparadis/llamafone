@@ -597,7 +597,13 @@ _EVENT_TONE_HINTS = {
     "love day":          "(romantic tone -- it's Love Day)",
     "winterfest":        "(warm, family-and-gifts tone -- it's Winterfest)",
     "harvestfest":       "(cozy, family-and-food tone -- it's Harvestfest)",
-    "new year":          "(hopeful, looking-forward tone -- it's New Year's)",
+    # The Sims' New Year's holiday is New Year's EVE: the countdown happens
+    # at midnight at the END of the holiday day. Without saying so, the AI
+    # wrote a morning call as if the countdown had happened last night.
+    "new year":          ("(hopeful, looking-forward tone -- in The Sims, New Year's is New "
+                          "Year's EVE: the countdown happens at MIDNIGHT at the end of the "
+                          "holiday, so until then the new year hasn't started and nobody has "
+                          "counted down yet)"),
     "spooky day":        "(playful, spooky-fun tone -- it's Spooky Day)",
     "father's day":      "(sentimental, family tone)",
     "mother's day":      "(sentimental, family tone)",

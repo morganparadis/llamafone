@@ -63,19 +63,24 @@ lmstudio_endpoint = http://localhost:1234
 
 ; ── Models ─────────────────────────────────────────────────────────────────
 ; Model for detailed tasks (stories, storylines, drama)
+; Model names change: AI companies retire old models and release new ones
+; every few months. These were current as of October 2026 -- check your
+; provider's model list for the latest. "Model not found" usually means a
+; model was retired. Empty, cut-off, or very slow replies? Try a model that
+; doesn't "think" (reason) first, like gpt-4o-mini or, locally, llama3.2.
 ; Examples per provider:
-;   claude      -> claude-opus-4-8, claude-sonnet-4-6, claude-haiku-4-5
-;   openai      -> gpt-4o, gpt-4o-mini, gpt-4-turbo
+;   claude      -> claude-haiku-5-5 (default), claude-sonnet-5-5, claude-opus-5-5
+;   openai      -> gpt-4o-mini, gpt-4o
 ;   gemini      -> a current Flash model: see ai.google.dev/gemini-api/docs/models
-;   openrouter  -> anthropic/claude-haiku-4-5, openai/gpt-4o-mini,
+;   openrouter  -> anthropic/claude-haiku-4.5, openai/gpt-4o-mini,
 ;                  meta-llama/llama-3.1-8b-instruct, deepseek/deepseek-chat
 ;                  (browse full catalog at https://openrouter.ai/models)
 ;   ollama      -> llama3.1, mistral, qwen2.5 (whatever you've `ollama pull`-ed)
 ;   lmstudio    -> the model's name in LM Studio, e.g. llama-3.2-3b-instruct
-default_model = claude-haiku-4-5
+default_model = claude-haiku-5-5
 
 ; Model for quick tasks (dialogue, events, calls, texts). Cheaper/faster.
-fast_model = claude-haiku-4-5
+fast_model = claude-haiku-5-5
 
 ; Maximum tokens per response (higher = longer text, more API cost)
 ; 512 is good for dialogue, bump to 1024+ for stories
@@ -585,11 +590,11 @@ def get_lmstudio_endpoint():
 
 
 def get_default_model():
-    return get_config().get(_SECTION, "default_model", fallback="claude-haiku-4-5")
+    return get_config().get(_SECTION, "default_model", fallback="claude-haiku-5-5")
 
 
 def get_fast_model():
-    return get_config().get(_SECTION, "fast_model", fallback="claude-haiku-4-5")
+    return get_config().get(_SECTION, "fast_model", fallback="claude-haiku-5-5")
 
 
 def get_max_tokens():

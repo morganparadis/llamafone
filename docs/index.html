@@ -790,6 +790,7 @@
         <h3>Pick an AI provider and get a key</h3>
         <p>Llamafone works with six different AI providers — pick whichever fits your budget, preferences, or paranoia. You only need credentials for the one you pick. Ollama and LM Studio are free because they run entirely on your computer.</p>
         <p class="muted small"><strong>Model names change.</strong> AI companies retire old models and release new ones every few months, and prices change too. The names below were current as of October 2026; check your provider's model list for the latest. A "model not found" error usually means a model was retired. If you get empty, cut-off, or very slow replies, try a model that doesn't "think" (reason) before answering, like <code>gpt-4o-mini</code> or, locally, Llama 3.2.</p>
+        <p class="muted small"><strong>Replies seem confused?</strong> Try a different model. A Claude setting that helps with this is coming soon.</p>
 
         <div class="provider-grid">
           <div class="provider-card">
@@ -803,7 +804,6 @@
               <li>Copy the <code>sk-ant-api03-…</code> key immediately — you only see it once</li>
             </ol>
             <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = claude</code>. Recommended model: <code>claude-haiku-5-5</code>; for richer writing try <code>claude-sonnet-5-5</code> or <code>claude-opus-5-5</code>.</p>
-            <p class="muted small"><strong>Haiku 4.5 might be more reliable.</strong> In our testing, <code>claude-haiku-4-5</code> kept better track of who's saying what in a conversation than Haiku 5.5. It's reaching end of support, but it still works and has no retirement date, so it's a good choice if replies from 5.5 seem confused. Put it in both <code>default_model</code> and <code>fast_model</code>.</p>
           </div>
 
           <div class="provider-card">
@@ -1191,28 +1191,6 @@ fast_model    = llama-3.2-3b-instruct</code></pre>
           <li><strong>No romance across the teen/adult line.</strong> A flirty message or comment between a teen and an adult never changes their romance bar, and Llamagram commenters are told not to flirt with a teen's post.</li>
         </ul>
         <p><strong>Cheat console:</strong> <code>llama.post [public] text</code>, <code>llama.npcpost [First Last]</code>, <code>llama.feed</code>, <code>llama.inbox</code>.</p>
-      </div>
-    </li>
-
-          <li><strong>Pregnancy and birth news spreads the way it actually does.</strong> Contacts "hear" about a pregnancy or birth after a delay set by how close they are: parents within hours, siblings and spouses in half a day, grandparents a day, aunts/uncles/in-laws a day and a half, close friends two days, casual friends four, acquaintances only if told. Until they've heard, a sim who reaches out on their own gets no trace of it — not the milestone, not the newborn in the household or mutuals lists — so they can't lead with it. Being told directly always counts, and a visibly showing pregnancy is public. If you reply to someone who hasn't heard, the facts are still there so the AI can react when you bring it up.</li>
-          <li><strong>Sims announce their own household's news — once, plainly, in character.</strong> A sim whose spouse is pregnant (or just had the baby) breaks the news the next time they contact you, and never re-announces once it's in your history. Tone comes from a circumstances line — whether the other parent is their spouse, an unusual origin, teen or elder, relevant traits, existing kids, money trouble — so a planned baby reads as joy and a surprise reads as a surprise.</li>
-          <li><strong>Pregnancies have a visibility ladder.</strong> Sims 4 flips <code>is_pregnant</code> at conception — before the test, before anyone knows — and the mod used to tell every contact immediately. Now a pregnancy is <em>hidden</em> (pre-test: nobody knows, not even her), <em>confirmed</em> (test taken), or <em>visible</em> (Trimester 2/3: showing, public). Read from buffs for sims on the lot and from the pregnancy commodity's own state for off-lot sims, so NPC pregnancies across the world resolve correctly. Stale entries already in your save are handled.</li>
-          <li><strong>Both parents get the milestone.</strong> "Aksel and Francesca had a baby" / "Aksel is expecting a baby with Francesca" show up in the father's recent life as well as the mother's — so his side of the family has something to hear about.</li>
-          <li><strong>Autosave and in-game loads work.</strong> Loading the Autosave, or switching saves from the in-game Load menu, now picks up the right save's texts, journal, and memory. The game records inside every save which save slot it belongs to, and Llamafone reads that. Copies made with Save As get their own slot, so they stay separate. A save last written before that game patch doesn't have the record yet, so Llamafone stays off for it and tells you. Save it once and it works from then on.</li>
-          <li><strong>Incoming messages from a specific sim:</strong> <code>llama.textfrom First Last</code> and <code>llama.callfrom First Last</code>. (<code>llama.text</code> / <code>llama.call</code> pick a random contact and take no name.)</li>
-        </ul>
-        <p><strong>Fixes:</strong></p>
-        <ul>
-          <li><strong>Switching saves from the in-game menu no longer mixes them up.</strong> Since v3.5, if you loaded one save and then switched to another through the in-game Load menu (without going back to the main menu), texts, journal entries, and memory from the second save could be written into the first save's folder. Loading from the main menu was never affected. Now each save always uses its own folder. If you switched saves this way in v3.5 or v3.6, a save's folder may hold some entries from another save. Most of them are about sims who don't exist in that save, so they're ignored.</li>
-          <li><strong>Family voice.</strong> A grandmother texting her grandson about her husband says "your grandpa," not "Richard." Parents don't ask their kids for advice on running their own house. A sim the game happened to assign an NPC nanny career is no longer described to their own daughter as "a professional nanny, not a friend or family."</li>
-          <li><strong>The AI knows when a wedding is happening right now.</strong> Events that just started were dropped from the prompt, so mid-ceremony the AI would fabricate "what a day that was." Live events are now listed as happening right now, with a guard against wrap-up framing.</li>
-          <li><strong>No more "congrats, just heard!" about things they attended.</strong> Milestones are labeled established facts, a marriage milestone next to an attended wedding says so, facts a contact has already been shown are marked "already known" instead of silently dropped, and the fact blocks now outrank the AI's own earlier messages — so one bad line can't become canon.</li>
-          <li><strong>Events you weren't invited to are listed as exactly that.</strong> Upcoming and recent events on the recipient's calendar that the caller isn't attending are shown as forbidden knowledge — so a cousin who heard about the baby shower knows it's tomorrow and that he isn't going, instead of asking how it went or what to bring.</li>
-          <li><strong>Calendar noise.</strong> Holidays are background, not a topic (no more three Winterfest headcount calls in a row). Engine situations — NPC visit greetings, secret-society visits, civic inspector, walkbys, random gifts, restaurant outings, dance sessions, newborn caregivers — no longer show up as "events you both attended." A wedding you edited and re-saved under the other spouse no longer leaves a ghost wedding that reads as "today" days later. Mod-namespaced situation names render properly ("Ultrasound Hospital", "Romantic Date").</li>
-          <li><strong>Milestones use in-game time.</strong> "yesterday," "a few hours ago," "earlier this week" — not "[Sep 25]."</li>
-          <li><strong>Conversation memory doubled.</strong> Prompts carry the last 12 exchanges with a contact instead of 6.</li>
-        </ul>
-        <p><strong>Diagnostics (cheat console):</strong> <code>llama.saveinfo</code>, <code>llama.pregdebug First Last</code>, <code>llama.roledebug First Last</code>, <code>llama.birthwatch</code>, <code>llama.testbirth First Last</code> (test mode — never journaled), <code>llama.pastevents</code> / <code>llama.pastevents_drop id</code>, <code>llama.journal_undo First Last [count]</code>.</p>
       </div>
     </li>
 

@@ -79,6 +79,25 @@ def get_event_types():
     raw = config.get_config().get(config._SECTION, "auto_event_types", fallback="call,text")
     return [t.strip().lower() for t in raw.split(",") if t.strip()]
 
+def is_type_enabled(kind):
+    return kind in get_event_types()
+
+
+def set_type_enabled(kind, enabled):
+    """Turn one type (call / text) on or off in auto_event_types, keeping
+    any others the player has (goals, story...). Turning one on also gives
+    it a weight when weights are set, or it would never be picked."""
+    types = [t for t in get_event_types() if t != kind]
+    if enabled:
+        types.append(kind)
+    config.set_setting("auto_event_types", ", ".join(types))
+    if enabled:
+        weights = get_event_weights()
+        if weights and weights.get(kind, 0) <= 0:
+            weights[kind] = 50
+            config.set_setting("auto_event_weights", ", ".join(f"{k}:{v}" for k, v in weights.items()))
+
+
 def get_event_weights():
     """
     Read per-type weights from config. Format: event:30, call:40, text:20, goals:10
@@ -175,6 +194,10 @@ def _pick_and_fire():
         weights_map = dict(weights_map) if weights_map else {t: 50 for t in types}
         types = list(types) + ["post"]
         weights_map["post"] = post_weight
+
+    if not types:
+        _log("No auto-event types are on (calls and texts are off); nothing to fire.")
+        return
 
     if weights_map:
         # Use configured weights (types not in weights_map get weight 0 and are skipped)

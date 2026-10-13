@@ -56,45 +56,6 @@ def _contact_prefs_block(household_sim, contact_sim_info, contact_name):
         return ""
 
 
-def _maybe_auto_prefs_from_message(household_sim_id, other_sim_id, other_name, text, source_label=""):
-    """Reactively set contact prefs based on distance signals in a
-    message. Scoped to a specific (household_sim, other_sim) pair --
-    Alice muting her ex must NOT bleed into Bob's phone activity with
-    that same ex.
-
-    Wrapped in a try because auto-prefs is convenience -- it should
-    never break the message flow if it errors."""
-    try:
-        if not household_sim_id or not other_sim_id or not text:
-            return
-        applied = contact_prefs.maybe_auto_apply(
-            household_sim_id, other_sim_id, other_name or "them",
-            text, source_label=source_label,
-        )
-        if not applied:
-            return
-        if applied == "muted":
-            body = (
-                f"Auto-muted {other_name} based on that message. "
-                f"They won't send you unprompted calls or texts. "
-                f"Phone > Social > Llamafone Settings > Manage contacts "
-                f"to review or undo."
-            )
-        else:  # paused
-            body = (
-                f"Auto-paused {other_name} based on that message. "
-                f"They'll contact you much less, and the AI knows you "
-                f"asked for space. Phone > Social > Llamafone Settings "
-                f"> Manage contacts to review or undo."
-            )
-        try:
-            notifications.show("Llamafone", body)
-        except Exception:
-            pass
-    except Exception as _e:
-        _log_error(f"_maybe_auto_prefs_from_message failed: {type(_e).__name__}: {_e}")
-
-
 # Conversations keyed by a (anchor_sim_id, contact_sim_id) TUPLE so:
 #   - Concurrent chats between different household members and different
 #     contacts don't overwrite each other.
@@ -1245,30 +1206,42 @@ def _calculate_reply_delay(contact):
     return max(5, delay)
 
 
-# Non-human species names to reject. We check by suffix so this works with
-# enum representations like SpeciesType.LARGE_DOG, Species.LARGE_DOG, etc.
-_NON_HUMAN_SPECIES_SUFFIXES = (
-    "LARGE_DOG", "SMALL_DOG", "DOG", "CAT", "HORSE", "FOX",
-)
+# Non-human species names to reject, matched anywhere in the species text
+# (Species.CAT, SpeciesExtended.LARGE_DOG, "<Species.CAT: 3>"...).
+_NON_HUMAN_SPECIES_RE = None
 
 
 def _is_human_sim(sim_info):
     """Return True if this is a human sim (not a dog, cat, horse, fox).
-    Sims 4 species enum repr varies across versions (SpeciesType.HUMAN vs
-    Species.HUMAN vs SpeciesExtended.HUMAN), so we check by SUFFIX instead
-    of an exact match. We blocklist known pet suffixes rather than
-    allowlisting HUMAN, so anything unrecognized defaults to allowed
-    (safer for old saves and edge cases)."""
+
+    The game's own is_pet / is_cat / is_dog / is_horse / is_human flags
+    come first; the species name is the fallback. Matching only the END
+    of the species text let a cat through when the game wrote it as
+    "<Species.CAT: 3>" -- a player's cat got a phone call, and a cat
+    showed up as a Llamagram fan. Anything unrecognized still counts as
+    human (safer for odd saves)."""
+    global _NON_HUMAN_SPECIES_RE
+    for attr in ("is_pet", "is_dog", "is_cat", "is_horse"):
+        try:
+            val = getattr(sim_info, attr, None)
+            if val is not None and bool(val() if callable(val) else val):
+                return False
+        except Exception:
+            continue
+    try:
+        val = getattr(sim_info, "is_human", None)
+        if val is not None and not bool(val() if callable(val) else val):
+            return False
+    except Exception:
+        pass
     try:
         species = getattr(sim_info, "species", None)
         if species is None:
             return True
-        species_str = str(species).upper().replace(" ", "")
-        # If we recognize this as a non-human species, reject.
-        for suffix in _NON_HUMAN_SPECIES_SUFFIXES:
-            if species_str.endswith(suffix):
-                return False
-        return True
+        if _NON_HUMAN_SPECIES_RE is None:
+            import re
+            _NON_HUMAN_SPECIES_RE = re.compile(r"(?<![A-Z])(SMALL_?DOG|LARGE_?DOG|DOG|CAT|HORSE|FOX)(?![A-Z])")
+        return not _NON_HUMAN_SPECIES_RE.search(str(species).upper().replace(" ", ""))
     except Exception:
         return True
 
@@ -1345,11 +1318,15 @@ def _pick_recipient_sim():
         return None
 
 
-def _eligible_recipients():
+def _eligible_recipients(on_lot_only=False):
     """Return the full list of teen+ human sims in the active household,
     shuffled so iteration order is unbiased. Used by
     _pick_recipient_and_contact when one recipient has no eligible contacts
-    and we want to try a different household member."""
+    and we want to try a different household member.
+
+    on_lot_only: just the ones on the lot you're playing. Incoming calls
+    and texts use it -- Aksel got a call while he was at work and the
+    player, at home with Francesca, never saw it."""
     try:
         import services, random as _random
         hh = services.active_household()
@@ -1357,6 +1334,9 @@ def _eligible_recipients():
             main = sim_context.get_main_sim_info()
             return [main] if (main and _is_phone_eligible(main)) else []
         eligible = [si for si in hh.sim_info_gen() if _is_phone_eligible(si)]
+        if on_lot_only:
+            here = _get_sims_on_active_lot()
+            eligible = [si for si in eligible if si.sim_id in here]
         _random.shuffle(eligible)
         return eligible
     except Exception:
@@ -1370,9 +1350,9 @@ def _pick_recipient_and_contact():
     a higher bar on plausibility (no cross-gen acquaintances surfacing as
     text senders) without the mod going silent when one recipient happens
     to have only awkward contacts."""
-    recipients = _eligible_recipients()
+    recipients = _eligible_recipients(on_lot_only=True)
     if not recipients:
-        _log_household_inspection()
+        _log_error("incoming call/text: nobody teen+ from the household is on the lot right now; skipping")
         return None, None
     for recipient in recipients:
         contact = _pick_random_relationship_sim(recipient=recipient)
@@ -1832,6 +1812,29 @@ def _contact_has_heard_birth(recipient_sim, contact):
         return True
 
 
+_SPOUSE_OR_CHILD = ("husband", "wife", "spouse", "partner", "fiance", "fiancé", "son", "daughter", "child")
+
+
+def _is_spouse_or_child(rel_label):
+    # Whole words only ("Grandson" isn't a son); step-kids count.
+    words = str(rel_label or "").lower().replace("step", "").split()
+    return any(w in words for w in _SPOUSE_OR_CHILD)
+
+
+def _close_to_recipient(contact, contact_si, recipient_sim):
+    """Close friend (friendship 50+) or family of the recipient."""
+    try:
+        f = (contact or {}).get("friendship")
+        if f is not None and float(f) >= 50:
+            return True
+    except Exception:
+        pass
+    try:
+        return bool(contact_si is not None and _get_family_relationship(contact_si, {}, recipient=recipient_sim))
+    except Exception:
+        return False
+
+
 def _describe_recipient(recipient_sim, contact=None, cold=False):
     """Build a short recipient block — just enough so the caller knows who they're addressing.
     Includes the recipient's household members with both their relationship to the recipient
@@ -1981,7 +1984,8 @@ def _describe_recipient(recipient_sim, contact=None, cold=False):
                         pieces.append(f"lives with {recipient_sim.first_name}")
                     if rel_to_contact:
                         pieces.append(f"your {rel_to_contact}")
-                    pieces.append(mage)
+                    # "had a baby 6 days ago" + INFANT read as a newborn.
+                    pieces.append("INFANT, past the newborn stage" if mage == "INFANT" else mage)
                     # Does the caller know this person? Any relationship in
                     # the caller's tracker counts -- family, friends, or a
                     # baby they were introduced to. Only people with no
@@ -1993,6 +1997,14 @@ def _describe_recipient(recipient_sim, contact=None, cold=False):
                             known = bool(contact_si.relationship_tracker.has_relationship(si.sim_id))
                         except Exception:
                             known = True   # unknown -> don't add a warning we can't back up
+                        # A close friend or relative knows your spouse and
+                        # kids EXIST even with no in-game relationship to
+                        # them: Olivia, maid of honor at the wedding, was
+                        # told she "may not know" the husband. Met-in-person
+                        # (below) stays separate.
+                        if not known and _close_to_recipient(contact, contact_si, recipient_sim) \
+                                and _is_spouse_or_child(rel_to_recipient):
+                            known = True
                         if not known:
                             pieces.append("you may not know them")
                             unknown_members += 1
@@ -2474,6 +2486,8 @@ def _get_mutual_contacts(contact, recipient=None, hide_newborns=False):
                 age = ""
                 try:
                     age_str = str(getattr(si, "age", "")).replace("Age.", "")
+                    if age_str == "INFANT":
+                        age_str = "INFANT, past the newborn stage"
                     if age_str:
                         age = f", {age_str}"
                 except Exception:
@@ -3526,7 +3540,7 @@ def _describe_relationship(contact, recipient=None):
     to prevent attribute bleed in the AI's response.
     recipient is the household sim being contacted (for family relationship lookup)."""
     name = contact['name']
-    parts = [f"=== Character: {name} (THE CALLER/SENDER, NOT the player) ==="]
+    parts = [f"=== Character: {name} (NOT the player) ==="]
 
     si = contact.get("sim_info")
     if si:
@@ -4144,7 +4158,8 @@ def get_active_conversation():
 
 
 def generate_call(callback=None, output=None):
-    """Generate an incoming phone call to a random teen+ household member."""
+    """Generate an incoming phone call to a random teen+ household member
+    on the lot."""
     recipient, contact = _pick_recipient_and_contact()
     if not recipient:
         msg = "No eligible household members (teen or older) found to receive a call."
@@ -4226,10 +4241,6 @@ def generate_call_for(recipient, contact, callback=None, output=None):
                 recipient_name=recipient_name,
                 sim_id=contact_id,
                 recipient_id=recipient_sim_id,
-            )
-            _maybe_auto_prefs_from_message(
-                recipient_sim_id, contact_id, contact["name"], text,
-                source_label="they called",
             )
             caller_si = contact.get("sim_info")
             shown = False
@@ -4375,10 +4386,6 @@ def generate_text_for(recipient, contact, callback=None, output=None,
                     sim_id=contact_id,
                     recipient_id=recipient_sim_id,
                 )
-            _maybe_auto_prefs_from_message(
-                recipient_sim_id, contact_id, contact["name"], text,
-                source_label="they texted",
-            )
             sender_si = contact.get("sim_info")
             shown = False
             if sender_si:
@@ -4435,18 +4442,6 @@ def generate_reply(player_message, callback=None, output=None):
     # Add the player's message to history
     history.append({"role": "you", "text": player_message})
 
-    # Auto-detect distance signals in what the PLAYER just typed.
-    # Scoped to (household_sim, contact_sim): the "recipient" on the
-    # conversation dict is the household side; fall back to main sim
-    # if the conversation didn't stash one.
-    _contact_id_for_auto = getattr(contact.get("sim_info"), "sim_id", None) if contact else None
-    _household_for_auto = recipient or sim_context.get_main_sim_info()
-    _household_id_for_auto = getattr(_household_for_auto, "sim_id", None) if _household_for_auto else None
-    _maybe_auto_prefs_from_message(
-        _household_id_for_auto, _contact_id_for_auto,
-        contact.get("name", "them"), player_message,
-        source_label="you replied",
-    )
 
     # The "main_name" here is the household member who received the original message
     if recipient:
@@ -4503,8 +4498,18 @@ def generate_reply(player_message, callback=None, output=None):
         f"{interaction_tag}"
     )
 
+    # The recipient's household and recent news (kids, a new baby...) --
+    # first messages always had this; replies never did, so a best friend
+    # coming over to meet the new baby didn't know there was one.
+    try:
+        recipient_block = _describe_recipient(recipient, contact=contact) if recipient else ""
+    except Exception as e:
+        _log_error(f"generate_reply: recipient block failed: {type(e).__name__}: {e}")
+        recipient_block = ""
+    recipient_block = f"\n\n{recipient_block}" if recipient_block else ""
+
     prompt = (
-        f"Relationship info:\n{rel_desc}{history_block}{mutual_block}{events_block}{past_events_block}\n\n"
+        f"Relationship info:\n{rel_desc}{history_block}{mutual_block}{recipient_block}{events_block}{past_events_block}\n\n"
         f"Conversation so far:\n{convo_text}"
         f"{context_tags}"
         f"{_contact_prefs_block(recipient, contact.get('sim_info'), other_name)}\n\n"
@@ -4549,13 +4554,6 @@ def generate_reply(player_message, callback=None, output=None):
                     recipient_name=main_name,
                     sim_id=contact_id,
                     recipient_id=main_sim_id,
-                )
-                # Auto-detect distance signals in this reply. Scoped
-                # to (household_sim, contact_sim). main_sim_id is the
-                # household side computed earlier in this function.
-                _maybe_auto_prefs_from_message(
-                    main_sim_id, contact_id, other_name, text_clean,
-                    source_label=f"they {kind}ed",
                 )
                 title = f"Reply from {other_name}"
                 sender_si = contact.get("sim_info")
@@ -4619,15 +4617,6 @@ def send_text(contact, player_message, callback=None, output=None,
     main_name = main_si.first_name if main_si else "your Sim"
     other_name = contact["name"]
 
-    # Auto-detect distance signals in the player's outgoing message.
-    # Scoped to (main_si, contact_sim) so Alice's prefs don't affect
-    # Bob's phone activity.
-    _contact_id_auto = getattr(contact.get("sim_info"), "sim_id", None) if contact else None
-    _main_id_auto = getattr(main_si, "sim_id", None) if main_si else None
-    _maybe_auto_prefs_from_message(
-        _main_id_auto, _contact_id_auto, other_name, player_message,
-        source_label="you texted",
-    )
 
     # v3.6 dating: establishment on outbound send was firing before the
     # AI's reply came back -- a relationship would form the moment the
@@ -4753,10 +4742,6 @@ def send_text(contact, player_message, callback=None, output=None,
                 sim_id=contact_id,
                 recipient_id=main_sim_id,
             )
-            _maybe_auto_prefs_from_message(
-                main_sim_id, contact_id, other_name, text_clean,
-                source_label="they replied",
-            )
             title = f"Reply from {other_name}"
             sender_si = contact.get("sim_info")
             shown = False
@@ -4792,14 +4777,6 @@ def send_call(contact, player_topic, callback=None, output=None):
     main_name = main_si.first_name if main_si else "your Sim"
     other_name = contact["name"]
 
-    # Auto-detect: if the player's topic contains a distance signal,
-    # apply the state before spending an API call. Scoped per-pair.
-    _contact_id_auto = getattr(contact.get("sim_info"), "sim_id", None) if contact else None
-    _main_id_auto = getattr(main_si, "sim_id", None) if main_si else None
-    _maybe_auto_prefs_from_message(
-        _main_id_auto, _contact_id_auto, other_name, player_topic,
-        source_label="you called",
-    )
 
     _start_conversation(contact, "", recipient_sim=main_si, kind="call")
     ckey = _conv_key(main_si, contact)
@@ -4857,7 +4834,7 @@ def send_call(contact, player_topic, callback=None, output=None):
         f"{main_name} is calling {other_name}. {main_name} says: \"{player_topic}\""
         f"{context_tags}"
         f"{_contact_prefs_block(main_si, contact.get('sim_info'), other_name)}\n\n"
-        f"Write what {other_name} says in response (3-5 lines of dialogue). "
+        f"Write what {other_name} says in response. "
         f"They should react naturally to what {main_name} said."
     )
 
@@ -4875,10 +4852,6 @@ def send_call(contact, player_topic, callback=None, output=None):
                 recipient_name=main_name,
                 sim_id=contact_id,
                 recipient_id=main_sim_id,
-            )
-            _maybe_auto_prefs_from_message(
-                main_sim_id, contact_id, other_name, text,
-                source_label="they said on call",
             )
             title = f"Call with {other_name}"
             caller_si = contact.get("sim_info")

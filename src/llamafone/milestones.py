@@ -1587,6 +1587,34 @@ def _has_heard(e, now_ticks, knowledge):
     return (now_ticks - st) / _TICKS_PER_DAY >= days
 
 
+def _humanize_career_text(desc, sim_info=None):
+    """Saved milestones keep the raw career name ("now careers_Adult_Law
+    level 5"); clean it when shown. Stored data is left as-is (the
+    snapshot compares raw names, and players' files aren't rewritten)."""
+    import re as _re
+    try:
+        from .sim_context import clean_career_name
+    except Exception:
+        return desc
+    text = str(desc or "")
+    def _promo(m):
+        career, level = clean_career_name(m.group(1)), int(m.group(2))
+        # The job title the game shows, when the sim is still at that level.
+        try:
+            from . import sim_context as _sc
+            if sim_info is not None and _sc.get_sim_career_level(sim_info) == level:
+                title = _sc.get_sim_career_title(sim_info)
+                if title:
+                    return f"(now {title} in the {career} career)"
+        except Exception:
+            pass
+        # No title: leave the number out -- it's the game's internal level
+        # (counts from 0 and restarts in each branch), not what players see.
+        return f"(in the {career} career)"
+    text = _re.sub(r"\(now ([Cc]areers?_\w+) level (\d+)\)", _promo, text)
+    return _re.sub(r"\b[Cc]areers?_\w+", lambda m: clean_career_name(m.group(0)), text)
+
+
 def format_for_prompt(sim_info, contact_id=None, mark_seen=True, known_by_default=False,
                       knowledge=None, addressee_id=None):
     """Build the 'Recent in their life' block for a sim, or empty string if none.
@@ -1798,7 +1826,8 @@ def format_for_prompt(sim_info, contact_id=None, mark_seen=True, known_by_defaul
                     heard = _has_heard(e, now_ticks, knowledge)
                 if not heard and knowledge and knowledge.get("cold"):
                     continue
-            lines.append(f"  - [{when}] {desc}{annotation}")
+            _subject = sim_info if str(e.get("sim_id")) == str(_safe(sim_info, "sim_id", None)) else None
+            lines.append(f"  - [{when}] {_humanize_career_text(desc, _subject)}{annotation}")
             if is_private and heard:
                 # Fresh + huge = the reason you're calling. The older
                 # wording ("if it comes up, react") read as "don't raise

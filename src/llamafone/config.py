@@ -53,16 +53,17 @@ ollama_endpoint = http://localhost:11434
 ;   1. In LM Studio, load a model with Context Length 16384 (12288 at the
 ;      very least). Llamafone's prompts run about 8,000 tokens.
 ;   2. Developer tab -> switch the server on.
-;   3. Put the model's name (as LM Studio shows it) in default_model and
-;      fast_model below. llama.testconnection lists the names.
+;   3. Put the model's name (as LM Studio shows it) in model
+;      below. llama.testconnection lists the names.
 ; Local models (Ollama, LM Studio) are free, but slower and less capable than
 ; the cloud options: each reply takes ~15 seconds with a decent graphics card
 ; to a minute or more without one, and small models sometimes mix up details
 ; (when an event is, what to call a family member).
 lmstudio_endpoint = http://localhost:1234
 
-; ── Models ─────────────────────────────────────────────────────────────────
-; Model for detailed tasks (stories, storylines, drama)
+; ── Model ──────────────────────────────────────────────────────────────────
+; The AI model that writes everything: texts, calls, replies, Llamagram.
+; You can also change it in game: Llamafone Settings > AI settings.
 ; Model names change: AI companies retire old models and release new ones
 ; every few months. These were current as of October 2026 -- check your
 ; provider's model list for the latest. "Model not found" usually means a
@@ -77,14 +78,26 @@ lmstudio_endpoint = http://localhost:1234
 ;                  (browse full catalog at https://openrouter.ai/models)
 ;   ollama      -> llama3.1, mistral, qwen2.5 (whatever you've `ollama pull`-ed)
 ;   lmstudio    -> the model's name in LM Studio, e.g. llama-3.2-3b-instruct
-default_model = claude-haiku-5-5
 
-; Model for quick tasks (dialogue, events, calls, texts). Cheaper/faster.
-fast_model = claude-haiku-5-5
+model = claude-haiku-5-5
 
-; Maximum tokens per response (higher = longer text, more API cost)
-; 512 is good for dialogue, bump to 1024+ for stories
-max_tokens = 512
+; Max tokens: the longest a reply can be (a token is about 3/4 of a word).
+; It doesn't make sims write more. Raise it if messages get cut off or come
+; back empty, which happens most with local models and OpenRouter.
+max_tokens = 1024
+
+; How hard Claude thinks before it replies (Claude only). More thinking =
+; fewer mix-ups, but slower replies and a bit more cost.
+;   auto   = recommended. Haiku 5.5 uses xhigh; other models use their default.
+;   low    = fastest and cheapest, but more mix-ups (like who's new in town)
+;   medium = quick, occasional mix-ups
+;   high   = a little slower, a little better
+;   xhigh  = most careful. On Haiku 5.5: texts ~8 seconds, calls ~18 seconds,
+;            about 1.5x the cost (still a fraction of a cent per message)
+; (max isn't offered: it thinks so long the reply comes back empty. A cfg
+; that says max uses xhigh.) Models that don't support this (Haiku 4.5)
+; ignore it. You can also change it in game: Llamafone Settings > AI settings.
+thinking_effort = auto
 
 ; Language for all generated content
 language = English
@@ -137,11 +150,10 @@ auto_event_interval_minutes = 20
 ; 40 = fires roughly every 50 real minutes on average
 auto_event_chance = 40
 
-; Which types of content can fire automatically
-; Options: event, goals, story, drama, call, text  (comma-separated)
-; Default is phone-only -- the mod is built around the phone, so auto-events
-; default to incoming calls/texts. Add event/goals/story/drama if you want
-; the full mix.
+; What can arrive on its own: call, text (comma-separated). Calls and texts
+; can also be switched on/off in game (Llamafone Settings).
+; Older extras, still supported but no longer developed: event, goals,
+; story, drama -- they pop up as notifications instead of phone messages.
 auto_event_types = call, text
 
 ; Weight per event type -- higher = more likely to be picked.
@@ -406,8 +418,29 @@ def get_setting(key, fallback=None):
     installs that wrote there; the in-game Settings UI now writes
     changes back to llamafone.cfg directly so the JSON file ends up
     drained over time. Callers should still go through here because the
-    JSON might hold values from older versions of the mod."""
-    return _load_settings().get(key, fallback)
+    JSON might hold values from older versions of the mod.
+
+    Not in the JSON, with a typed `fallback` -> the .cfg value, read as
+    that type (the Settings UI writes to the .cfg, so a JSON-only lookup
+    showed stale values and ignored in-game changes). With no fallback
+    it stays JSON-only: the *_with_config_fallback helpers do their own
+    typed .cfg read, and would turn a raw "false" string into True."""
+    data = _load_settings()
+    if key in data:
+        return data[key]
+    if fallback is None:
+        return None
+    try:
+        cfg = get_config()
+        if cfg.has_option(_SECTION, key):
+            if isinstance(fallback, bool):
+                return cfg.getboolean(_SECTION, key)
+            if isinstance(fallback, int):
+                return cfg.getint(_SECTION, key)
+            return cfg.get(_SECTION, key)
+    except Exception:
+        pass
+    return fallback
 
 
 def set_setting(key, value):
@@ -590,15 +623,43 @@ def get_lmstudio_endpoint():
 
 
 def get_default_model():
-    return get_config().get(_SECTION, "default_model", fallback="claude-haiku-5-5")
+    """Deprecated (3.8.4): the one model is get_model()."""
+    return get_model()
 
 
-def get_fast_model():
-    return get_config().get(_SECTION, "fast_model", fallback="claude-haiku-5-5")
+def get_model():
+    """The one model Llamafone uses for everything (3.8.4+): `model`. Older
+    cfgs don't have it, so fall back to fast_model (what texts and calls
+    always used), then the deprecated default_model, then Claude Haiku 5.5.
+    A player who set only default_model keeps getting it."""
+    cfg = get_config()
+    for key in ("model", "fast_model", "default_model"):
+        v = (cfg.get(_SECTION, key, fallback="") or "").strip()
+        if v:
+            return v
+    return "claude-haiku-5-5"
+
+
+# Older name, still used around the code.
+get_fast_model = get_model
 
 
 def get_max_tokens():
-    return get_config().getint(_SECTION, "max_tokens", fallback=512)
+    return get_config().getint(_SECTION, "max_tokens", fallback=1024)
+
+
+_EFFORT_LEVELS = ("low", "medium", "high", "xhigh")
+
+
+def get_thinking_effort():
+    """'auto' or one of _EFFORT_LEVELS. Missing or unrecognized -> 'auto'
+    (players who installed before this setting existed get auto).
+    'max' -> 'xhigh': on Haiku 5.5, max used all 4,608 tokens of room
+    thinking and returned an empty reply 10 times out of 10."""
+    v = (get_config().get(_SECTION, "thinking_effort", fallback="auto") or "auto").strip().lower()
+    if v == "max":
+        return "xhigh"
+    return v if v in _EFFORT_LEVELS else "auto"
 
 
 def get_language():

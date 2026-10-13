@@ -15,7 +15,7 @@ Commands (open cheat console with Ctrl+Shift+C):
 """
 
 MOD_NAME = "Llamafone"
-MOD_VERSION = "3.8.3"
+MOD_VERSION = "3.8.4"
 
 # Captured at module-load time -- the moment Sims 4 imported this build.
 # Used in prompts so a llama.dumpprompt definitively shows which load
@@ -225,9 +225,12 @@ try:
                 latest = _check_for_update()
 
                 if config.is_configured():
+                    # The model that writes texts and calls (fast_model;
+                    # it falls back to default_model when unset).
+                    models = f"Model: {config.get_fast_model()}\n"
                     body = (
                         f"v{MOD_VERSION} ready!\n"
-                        f"Model: {config.get_default_model()}\n"
+                        f"{models}"
                         f"Type 'llama.status' in the cheat console for all commands."
                     )
                     notifications.show(MOD_NAME, body)

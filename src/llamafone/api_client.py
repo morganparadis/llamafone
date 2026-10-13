@@ -254,10 +254,38 @@ def _friendly_ollama_error(err, returncode, endpoint):
 _CLAUDE_THINKING_HEADROOM = 2048
 
 
+# Claude gets more room than the other providers: at xhigh effort Haiku 5.5
+# used up to ~4,150 tokens (thinking + reply) on a phone call -- 85% of
+# the old 4,096 + 512. Unused room costs nothing (only tokens actually
+# written are billed).
+_CLAUDE_REPLY_HEADROOM = 8192
+
+
+# Models that rejected the thinking setting this session: don't send it again
+# (each rejection costs a second request).
+_NO_EFFORT_MODELS = set()
+
+
+def _claude_effort(model):
+    """The effort level to send, or None for the model's own default.
+    auto: xhigh for Haiku 5.x -- at its default it got who's-who backwards
+    (thanking the player for a welcome, then welcoming him back) in ~1 of 4
+    replies on a tested prompt; at xhigh ~0 of 20, at about twice the time."""
+    if model in _NO_EFFORT_MODELS:
+        return None
+    effort = config.get_thinking_effort()
+    if effort == "auto":
+        return "xhigh" if str(model).startswith("claude-haiku-5") else None
+    return effort
+
+
 def _call_claude(api_key, model, max_tokens, system, messages):
-    body = {"model": model, "max_tokens": int(max_tokens) + _CLAUDE_THINKING_HEADROOM, "messages": messages}
+    body = {"model": model, "max_tokens": int(max_tokens) + _CLAUDE_REPLY_HEADROOM, "messages": messages}
     if system:
         body["system"] = system
+    effort = _claude_effort(model)
+    if effort:
+        body["output_config"] = {"effort": effort}
     headers = {
         "Content-Type": "application/json",
         "x-api-key": api_key,
@@ -270,6 +298,21 @@ def _call_claude(api_key, model, max_tokens, system, messages):
         data = json.loads(stdout)
     except json.JSONDecodeError:
         return "", f"Invalid response from API: {stdout[:200]}"
+    # A model that doesn't take effort (Haiku 4.5: "This model does not
+    # support the effort parameter.") -- send it again without, so a
+    # thinking_effort setting can never break texts.
+    if effort and "error" in data and any(w in str(data["error"]).lower() for w in ("effort", "output_config")):
+        _log_failure("claude", model, f"thinking_effort={effort} not supported; retrying without it "
+                                      "(won't send it to this model again this session)", 0.0)
+        _NO_EFFORT_MODELS.add(model)
+        body.pop("output_config", None)
+        stdout, err, _rc = _curl("https://api.anthropic.com/v1/messages", headers, json.dumps(body))
+        if err:
+            return "", err
+        try:
+            data = json.loads(stdout)
+        except json.JSONDecodeError:
+            return "", f"Invalid response from API: {stdout[:200]}"
     if "error" in data:
         msg = data["error"].get("message", str(data["error"])) if isinstance(data.get("error"), dict) else str(data["error"])
         return "", f"API error: {msg}"
@@ -285,8 +328,8 @@ def _call_claude(api_key, model, max_tokens, system, messages):
     if stop == "refusal":
         return "", "Claude declined to write this reply."
     if stop == "max_tokens":
-        return "", ("Claude ran out of room before writing the message. Raise max_tokens in "
-                    "llamafone.cfg (e.g. 1024).")
+        return "", ("Claude ran out of room before writing the message. Raise Max tokens in "
+                    "Llamafone Settings > AI settings (e.g. 2048).")
     return "", f"Empty response from Claude (stop reason: {stop or 'unknown'})."
 
 
@@ -328,7 +371,7 @@ def _call_openai(api_key, model, max_tokens, system, messages):
         return text, None
     if choice.get("finish_reason") == "length":
         return "", ("OpenAI ran out of room before writing the message (likely spent it "
-                    "thinking). Raise max_tokens in llamafone.cfg (e.g. 1024), or use a "
+                    "thinking). Raise Max tokens in Llamafone Settings > AI settings (e.g. 2048), or use a "
                     "model that doesn't reason, like gpt-4o-mini.")
     if choice.get("finish_reason") == "content_filter":
         return "", "OpenAI declined to write this reply."
@@ -459,8 +502,8 @@ def _call_gemini(api_key, model, max_tokens, system, messages):
         if finish == "MAX_TOKENS":
             return "", ("Gemini hit maxOutputTokens before producing any "
                        "visible text (likely spent the whole budget on "
-                       "internal reasoning). Try a larger max_tokens in "
-                       "llamafone.cfg or a different Gemini model.")
+                       "internal reasoning). Raise Max tokens in "
+                       "Llamafone Settings > AI settings (e.g. 2048), or use a different Gemini model.")
         if finish == "SAFETY":
             return "", "Gemini blocked the response for safety."
         return "", "Empty response from Gemini."
@@ -629,9 +672,9 @@ def _explain_model_gone(provider, model, err):
     if not gone:
         return err
     return (f'{_PROVIDER_NAME[provider]} no longer offers the model "{model}" '
-            f"(it was retired, or the name is misspelled). Open llamafone.cfg, set "
-            f"default_model and fast_model to a current model, like "
-            f"{_SUGGESTED_MODEL[provider]}, then type llama.reload in the cheat console.")
+            f"(it was retired, or the name is misspelled). Change Model to a current one, "
+            f"like {_SUGGESTED_MODEL[provider]}: Llamafone Settings > AI settings, or model "
+            f"in llamafone.cfg and then llama.reload in the cheat console.")
 
 
 _PROVIDER_LABEL = {"claude": "Claude", "openai": "OpenAI", "gemini": "Gemini", "openrouter": "OpenRouter"}
@@ -671,8 +714,8 @@ def _clean_lmstudio_error(raw):
     if "context" in low or "n_ctx" in low or "too long" in low:
         return _LMSTUDIO_CONTEXT_HINT
     if "no models loaded" in low or "model not found" in low or "not loaded" in low:
-        return ("No model is loaded. Load one in LM Studio, or set default_model / fast_model "
-                "in llamafone.cfg to a loaded model's name (llama.testconnection lists them).")
+        return ("No model is loaded. Load one in LM Studio, or set Model (Llamafone Settings > "
+                "AI settings) to a loaded model's name (llama.testconnection lists them).")
     return msg or "the server returned an error with no message."
 
 
@@ -755,7 +798,8 @@ def call_ai_async(messages, system=None, use_fast_model=False, callback=None, ma
     Args:
         messages: list of {"role": "user"|"assistant", "content": str}
         system:   optional system prompt string
-        use_fast_model: if True, uses fast_model from config instead of default
+        use_fast_model: ignored (kept for callers); every request uses the one
+                        model, config.get_model()
         callback: function(text: str | None, error: str | None) called when done
 
     Returns the background Thread object.
@@ -767,7 +811,9 @@ def call_ai_async(messages, system=None, use_fast_model=False, callback=None, ma
             return
 
         provider = config.get_provider()
-        model = config.get_fast_model() if use_fast_model else config.get_default_model()
+        # One model for everything (3.8.4): fast_model if a cfg sets it,
+        # otherwise default_model -- what texts and calls already used.
+        model = config.get_model()
         max_tokens = max_tokens_override or config.get_max_tokens()
 
         # Save-level notes prepended to the system prompt so world context

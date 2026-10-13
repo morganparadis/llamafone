@@ -56,7 +56,6 @@ mirrors past_events / interactions / group_texts.
 import datetime
 import json
 import os
-import re
 import threading
 
 from . import save_id as _save_id
@@ -697,89 +696,3 @@ def reset_cache():
         global _cache, _cached_for_save_id
         _cache = None
         _cached_for_save_id = None
-
-
-# ---------------------------------------------------------------------------
-# Auto-detection: parse messages for distance signals and auto-apply.
-# ---------------------------------------------------------------------------
-
-_MUTE_PATTERN = re.compile(
-    r"(?i)\b("
-    r"leave me alone|"
-    r"don'?t (ever )?(call|text|contact|message) me( again)?|"
-    r"never (call|text|contact|message) me( again)?|"
-    r"stop (calling|texting|contacting|messaging) me|"
-    r"we'?re (done|through|over)|"
-    r"it'?s over between us|"
-    r"lose my number|"
-    r"we'?re not (together|dating) anymore|"
-    r"i'?m breaking up with you|"
-    r"i'?m done with you"
-    r")\b"
-)
-
-_PAUSED_PATTERN = re.compile(
-    r"(?i)\b("
-    r"need (some )?space|"
-    r"need (some )?time (alone|apart|to myself)|"
-    r"need a break|"
-    r"give me (some )?space|"
-    r"back off|"
-    r"time apart|"
-    r"asked you for space|"
-    r"asking for space"
-    r")\b"
-)
-
-
-def detect_state_from_text(text):
-    """Scan a message for distance signals. Returns 'muted' | 'paused'
-    | None. Muted-tier wins if both match."""
-    if not text:
-        return None
-    if _MUTE_PATTERN.search(text):
-        return STATE_MUTED
-    if _PAUSED_PATTERN.search(text):
-        return STATE_PAUSED
-    return None
-
-
-def maybe_auto_apply(household_id, other_id, other_name, text, source_label=""):
-    """Scan text; if a distance signal is detected, auto-apply the
-    matching state for this (household, other) pair. Returns the
-    applied state string, or None if nothing changed.
-
-    Rules:
-      - Priority-tier is never auto-changed (player favorited them).
-      - Never downgrade muted -> paused.
-      - Never rewrite an already-matching state (idempotent)."""
-    if not household_id or not other_id or not text:
-        return None
-    detected = detect_state_from_text(text)
-    if detected is None:
-        return None
-    current = get_state(household_id, other_id)
-    if current == STATE_PRIORITY:
-        return None
-    if current == detected:
-        return None
-    if current == STATE_MUTED and detected == STATE_PAUSED:
-        return None
-
-    set_state(household_id, other_id, detected)
-
-    try:
-        existing = get_note(household_id, other_id) or ""
-        tag_bits = ["auto"]
-        if source_label:
-            tag_bits.append(source_label)
-        tag_bits.append(detected)
-        auto_tag = "[" + " / ".join(tag_bits) + "]"
-        if auto_tag not in existing:
-            combined = (existing + " " + auto_tag).strip() if existing else auto_tag
-            set_note(household_id, other_id, combined[:250])
-    except Exception:
-        pass
-
-    _log(f"maybe_auto_apply: ({household_id}, {other_id}, {other_name!r}) -> {detected} (source: {source_label!r})")
-    return detected

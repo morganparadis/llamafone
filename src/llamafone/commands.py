@@ -57,9 +57,13 @@ try:
         output = sims4.commands.CheatOutput(_connection)
         if config.is_configured():
             output(f"[Llamafone] ✓ Configured")
-            output(f"[Llamafone]   Default model : {config.get_default_model()}")
-            output(f"[Llamafone]   Fast model    : {config.get_fast_model()}")
+            output(f"[Llamafone]   Model         : {config.get_model()}")
             output(f"[Llamafone]   Max tokens    : {config.get_max_tokens()}")
+            if config.get_provider() == "claude":
+                from . import api_client
+                _eff = api_client._claude_effort(config.get_fast_model())
+                output(f"[Llamafone]   Thinking      : {config.get_thinking_effort()}"
+                       f" ({_eff or 'model default'} for {config.get_fast_model()})")
             output(f"[Llamafone]   Language      : {config.get_language()}")
         else:
             output("[Llamafone] ✗ NOT configured — edit llamafone.cfg and add your API key")
@@ -181,7 +185,7 @@ try:
         def _done(text, error):
             if error:
                 output(f"[Llamafone] FAILED: {error}")
-                output("[Llamafone] Check provider, api_key, and default_model/fast_model in llamafone.cfg.")
+                output("[Llamafone] Check the provider, api_key, and model in llamafone.cfg.")
             else:
                 preview = (text or "").strip().replace("\n", " ")[:120]
                 output(f"[Llamafone] OK -- response: {preview!r}")
@@ -201,12 +205,10 @@ try:
         specific next steps."""
         output = sims4.commands.CheatOutput(_connection)
         provider = config.get_provider()
-        default_model = config.get_default_model()
-        fast_model = config.get_fast_model()
+        model = config.get_model()
 
         output(f"[Llamafone] Provider: {provider}")
-        output(f"[Llamafone] Default model: {default_model}")
-        output(f"[Llamafone] Fast model:    {fast_model}")
+        output(f"[Llamafone] Model: {model}")
         output("")
 
         if provider == "ollama":
@@ -230,18 +232,18 @@ try:
                 output("[Llamafone] That downloads a small model (~2GB) suitable for the mod.")
                 return
             # Verify the configured models are among the installed set.
-            missing = [m for m in {default_model, fast_model} if m and m not in models]
+            missing = [m for m in {model} if m and m not in models]
             if missing:
-                output("[Llamafone] X Models in llamafone.cfg are not installed:")
+                output("[Llamafone] X The model in llamafone.cfg is not installed:")
                 for m in missing:
                     output(f"[Llamafone]      {m}")
-                output("[Llamafone] Either change default_model / fast_model in llamafone.cfg to a")
+                output("[Llamafone] Either change the model (Llamafone Settings > AI settings) to a")
                 output("[Llamafone] model from the installed list above, or run:")
                 for m in missing:
                     output(f"[Llamafone]      ollama pull {m}")
                 output("[Llamafone] Then run llama.reload.")
                 return
-            output(f"[Llamafone] OK Both configured models ({fast_model}, {default_model}) are installed.")
+            output(f"[Llamafone] OK The model ({model}) is installed.")
             output("[Llamafone] Running a tiny generation to confirm end-to-end...")
         elif provider == "lmstudio":
             endpoint = config.get_lmstudio_endpoint()
@@ -263,15 +265,15 @@ try:
                 output("[Llamafone] (a small one like Llama 3.2 3B Instruct works well), with")
                 output("[Llamafone] Context Length set to 16384 (12288 at the very least).")
                 return
-            missing = [m for m in {default_model, fast_model} if m and m not in models]
+            missing = [m for m in {model} if m and m not in models]
             if missing:
-                output("[Llamafone] X Models in llamafone.cfg aren't offered by LM Studio:")
+                output("[Llamafone] X The model in llamafone.cfg isn't offered by LM Studio:")
                 for m in missing:
                     output(f"[Llamafone]      {m}")
-                output("[Llamafone] Copy a name from the list above into default_model and")
-                output("[Llamafone] fast_model in llamafone.cfg, then run llama.reload.")
+                output("[Llamafone] Set Model to a name from the list above (Llamafone Settings >")
+                output("[Llamafone] AI settings, or model in llamafone.cfg + llama.reload).")
                 return
-            output(f"[Llamafone] OK Both configured models ({fast_model}, {default_model}) are available.")
+            output(f"[Llamafone] OK The model ({model}) is available.")
             output("[Llamafone] Reminder: load the model with Context Length 16384 -- the")
             output("[Llamafone] tiny test below passes either way, but real texts need it.")
             output("[Llamafone] Running a tiny generation to confirm end-to-end...")
@@ -295,7 +297,7 @@ try:
                     output("[Llamafone] LM Studio was reachable earlier, so this is likely a model")
                     output("[Llamafone] issue: make sure the model is loaded, or try a smaller one.")
                 else:
-                    output("[Llamafone] Check provider, api_key, default_model, and fast_model in llamafone.cfg.")
+                    output("[Llamafone] Check the provider, api_key, and model in llamafone.cfg.")
                 return
             preview = (text or "").strip().replace("\n", " ")[:120]
             output(f"[Llamafone] OK End-to-end works. Response: {preview!r}")

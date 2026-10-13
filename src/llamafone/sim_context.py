@@ -285,6 +285,11 @@ def _read_relationship_for_target(rt, target_sim_id, sim_manager):
         "firstkiss", "havedonewoohoo",
         "lifemilestone",
     )
+    # Real tags that only confuse the AI: "Rivalry Default" is the neutral
+    # start of the rivalry meter (no rivalry at all); "Healed Negative
+    # Sentiment" marks a grudge that has worn off. Hidden from the prompt
+    # but still count as a relationship for contact lists.
+    _HIDDEN_FROM_PROMPT = ("rivalrydefault", "healednegativesentiment")
     # Standalone tokens to strip from the readable label (Sims 4
     # internal directional markers, not user-facing words).
     _NOISE_TOKENS = frozenset({
@@ -361,11 +366,21 @@ def _read_relationship_for_target(rt, target_sim_id, sim_manager):
 
     # Filter out romantic bits if platonic-now is set OR romance score is 0
     bit_labels = []
+    # Whether this relationship had any tag before the cleanup below hid
+    # some from the prompt. Contact lists go by this, not by the cleaned
+    # status: hiding "Rivalry Default" (which nearly every pair has) took
+    # Francesca's call list from 66 contacts to 30.
+    listed = False
     for bn in raw_bits:
         is_romantic = any(kw in bn for kw in _ROMANTIC_BITS)
         if is_romantic and (is_platonic_now or romance == 0):
             continue
+        if any(p in bn.lower().replace("_", "") for p in _HIDDEN_FROM_PROMPT):
+            listed = True
+            continue
         label = _clean_status_label(bn)
+        if label:
+            listed = True
         if label and label not in bit_labels:
             bit_labels.append(label)
 
@@ -374,14 +389,71 @@ def _read_relationship_for_target(rt, target_sim_id, sim_manager):
     # keyword filter catches them, and _clean_status_label preserves
     # their direction via the Actor/Target logic. So a separate pass
     # against `sim_info.sentiment_tracker` would just duplicate.
+    bit_labels = _tidy_status_labels(bit_labels, friendship)
     return {
         "sim_info": other_si,
         "sim_id": target_sim_id,
         "name": f"{other_si.first_name} {other_si.last_name}".strip(),
         "status": ", ".join(bit_labels[:6]),
+        "listed": listed,
         "friendship": friendship,
         "romance": romance,
     }
+
+
+def _tidy_status_labels(labels, friendship):
+    """Final pass over readable relationship labels:
+      - "Adoring To Generic" -> "Adoring" (internal suffix on sentiments)
+      - "Bff" -> "Best Friends", replacing "Good Friends" / "Friends"
+      - close now (friendship 50+): drop "No Longer Friends" and "Has Been
+        Friends" -- history tags the game leaves behind. Olivia (best
+        friends, never fell out) read "Good Friends, Bff, No Longer Friends,
+        Has Been Friends". Below 50 they stay: a lapsed friendship is what
+        they're there to say.
+    """
+    import re as _re
+    out = []
+    for lbl in labels or ():
+        # Sentiments carry their cause in the name: "You feel Adoring To
+        # Wedding Tradition Maid Of Honor toward them", "...Close To Quality
+        # Time...". Keep the feeling, drop the cause, so Olivia doesn't read
+        # "Adoring" twice and "Close" twice.
+        lbl = _re.sub(r"^((?:You|They) feel \S+) To .*? (toward (?:them|you))$", r"\1 \2", lbl.strip())
+        lbl = lbl.replace(" To Generic", "").strip()
+        if lbl and lbl not in out:
+            out.append(lbl)
+    compact = [l.lower().replace(" ", "").replace("_", "") for l in out]
+    if any(c in ("bff", "bestfriend", "bestfriends") for c in compact):
+        keep = []
+        for l, c in zip(out, compact):
+            if c in ("goodfriends", "goodfriend", "friendgood", "friends", "friend"):
+                continue
+            keep.append("Best Friends" if c in ("bff", "bestfriend", "bestfriends") else l)
+        out = []
+        for l in keep:
+            if l not in out:
+                out.append(l)
+    try:
+        close_now = friendship is not None and float(friendship) >= 50
+    except Exception:
+        close_now = False
+    if close_now:
+        out = [l for l in out if l.lower().replace(" ", "") not in ("nolongerfriends", "hasbeenfriends")]
+    return out
+
+
+_network_logged = {}
+
+
+def _log(message):
+    """Best-effort line in Llamafone_Log.txt."""
+    try:
+        import os, datetime
+        path = os.path.join(os.path.expanduser("~"), "Documents", "Llamafone_Log.txt")
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] [sim_context] {message}\n")
+    except Exception:
+        pass
 
 
 def get_sim_network(main_si, min_friendship=25):
@@ -424,10 +496,14 @@ def get_sim_network(main_si, min_friendship=25):
         sm = services.sim_info_manager()
         rt = main_si.relationship_tracker
 
+        stats = {"targets": 0, "unreadable": 0, "errors": 0, "low": 0, "kept": 0}
+        first_error = None
         for target_sim_id in rt.target_sim_gen():
+            stats["targets"] += 1
             try:
                 entry = _read_relationship_for_target(rt, target_sim_id, sm)
                 if not entry:
+                    stats["unreadable"] += 1
                     continue
 
                 sid = entry["sim_id"]
@@ -447,15 +523,27 @@ def get_sim_network(main_si, min_friendship=25):
                 seen_ids.add(sid)
 
                 # Filter non-household by significance
-                if not entry["status"] and abs(entry.get("friendship") or 0) < min_friendship:
+                if not entry["status"] and not entry.get("listed") and abs(entry.get("friendship") or 0) < min_friendship:
+                    stats["low"] += 1
                     continue
 
                 entry["in_household"] = False
                 relationships.append(entry)
-            except Exception:
+                stats["kept"] += 1
+            except Exception as e:
+                stats["errors"] += 1
+                if first_error is None:
+                    first_error = f"{type(e).__name__}: {e}"
                 continue
-    except Exception:
-        pass
+        # One line per distinct result (prompts call this constantly): why
+        # someone is or isn't in the contact list.
+        key = (getattr(main_si, "sim_id", None), tuple(sorted(stats.items())), first_error)
+        if key != _network_logged.get(key[0]):
+            _network_logged[key[0]] = key
+            _log(f"network for {getattr(main_si, 'first_name', '?')}: {stats}"
+                 + (f"; first error: {first_error}" if first_error else ""))
+    except Exception as e:
+        _log(f"network build failed: {type(e).__name__}: {e}")
 
     household_members.sort(key=lambda x: x["name"])
     relationships.sort(key=lambda x: -(abs(x.get("friendship") or 0)))
@@ -463,17 +551,67 @@ def get_sim_network(main_si, min_friendship=25):
     return household_members, relationships
 
 
+_TICKS_PER_DAY = 1500 * 60 * 24
+
+
 def has_met_in_person(si, target_sim_id):
     """Has `si` actually spent time with the target? A relationship alone
     isn't proof -- the game auto-creates family relationships with a
     newborn for relatives who've never seen the baby -- but a non-zero
-    friendship score only comes from interacting."""
+    friendship score only comes from interacting.
+
+    A newborn can't build friendship, though ("Show off" is a social with
+    the parent), so for a baby / infant / toddler a visit also counts:
+    meeting someone from its household AT ITS HOME since it reached its
+    current life stage (for a newborn: since the birth). Grandpa came
+    over the day after Maddox was born and still "couldn't wait to meet
+    him"."""
     try:
         import services
-        entry = _read_relationship_for_target(si.relationship_tracker, int(target_sim_id),
-                                              services.sim_info_manager())
+        mgr = services.sim_info_manager()
+        entry = _read_relationship_for_target(si.relationship_tracker, int(target_sim_id), mgr)
         f = (entry or {}).get("friendship")
-        return f is not None and abs(float(f)) >= 1
+        if f is not None and abs(float(f)) >= 1:
+            return True
+        return _visited_little_one_at_home(si, mgr.get(int(target_sim_id)) if mgr else None)
+    except Exception:
+        return False
+
+
+def _visited_little_one_at_home(si, target):
+    try:
+        if target is None or str(getattr(target, "age", "")).replace("Age.", "") not in ("BABY", "INFANT", "TODDLER"):
+            return False
+        hh = getattr(target, "household", None)
+        home = getattr(hh, "home_zone_id", None) if hh else None
+        if not home:
+            return False
+        ap = getattr(target, "age_progress", None)
+        ap = float(ap() if callable(ap) else ap)
+        from . import interactions
+        now = interactions._now_ingame_ticks()
+        if now is None:
+            return False
+        stage_start = now - int(ap * _TICKS_PER_DAY)
+        people = [m.sim_id for m in hh.sim_info_gen()]
+        # Count visits since the BIRTH, not since the current life stage
+        # began: Maddox aged from newborn to infant and grandma's visit two
+        # days after he was born stopped counting ("can't wait to finally
+        # meet him"). The birth is the household's latest recorded birth at
+        # or before this stage began; none recorded -> the stage start.
+        since = stage_start
+        try:
+            from . import milestones
+            ids = {str(p) for p in people}
+            births = [int(e["sim_ticks"]) for e in milestones._load_milestones()
+                      if e.get("type") == "pregnancy_end" and e.get("sim_ticks")
+                      and str(e.get("sim_id")) in ids
+                      and int(e["sim_ticks"]) <= stage_start + _TICKS_PER_DAY // 24]
+            if births:
+                since = max(births)
+        except Exception:
+            pass
+        return interactions.met_at_lot_since(si.sim_id, people, home, since)
     except Exception:
         return False
 
@@ -518,11 +656,39 @@ _NOISE_TRAIT_KEYWORDS = (
                         # showed up as "Relexpectations Physicalexclusivity Yes" on a baby
     "handedness",       # Left/Right-handed
     "hometurf",         # Snowy Escape lifestyle marker
+    "genderoptions",    # CAS gender settings ("Genderoptions Frame Masculine")
     "lifestyle",        # Snowy Escape lifestyles (Energetic, Workaholic, etc.)
     "sentiment",        # Growing Together sentiment bits
     "relationship_track",
     "relbit",
 )
+
+
+def _trait_display_name(trait, sim_info):
+    """'Music Lover' -- the trait name the game shows -- from trait_names.py
+    (built from the game's tuning and English string files by
+    tools/gen_trait_names.py). Trait.display_name._string_id is the hash
+    (the game's own tuning check reads it). None when not in the table."""
+    try:
+        from . import trait_names
+        h = int(getattr(trait.display_name, "_string_id", 0) or 0)
+        text = trait_names.NAMES.get(h) if h else None
+        return _resolve_gender_tokens(text, sim_info) if text else None
+    except Exception:
+        return None
+
+
+def _clean_mod_trait_name(name):
+    """Readable name for a trait the table doesn't have (mods):
+    'thatssojordy_WorldTour_IndustryDarling_TRAIT_CAS' -> 'Industry Darling'.
+    Drops 'trait' / 'cas' parts, keeps only the last part when there's a
+    creator prefix (3+ parts), and splits CamelCase."""
+    import re as _re
+    parts = [p for p in (name or "").split("_") if p and p.lower() not in ("trait", "cas")]
+    if len(parts) >= 3:
+        parts = parts[-1:]
+    words = " ".join(_re.sub(r"(?<=[a-z])(?=[A-Z])", " ", p) for p in parts).split()
+    return " ".join(w[:1].upper() + w[1:] for w in words)
 
 
 def get_sim_traits(sim_info, limit=6):
@@ -555,12 +721,15 @@ def get_sim_traits(sim_info, limit=6):
             # Skip non-personality bits like "gender" markers
             if "gender" in low and "trait_" not in low:
                 continue
-            cleaned = (name
-                .replace("trait_", "").replace("Trait_", "")
-                .replace("_", " ").strip().title())
-            # Drop anything left that still looks like a system bit
-            if ":" in cleaned or any(kw in cleaned.lower() for kw in _NOISE_TRAIT_KEYWORDS):
-                continue
+            # The name the game shows ("Music Lover"), from the table shipped
+            # with the mod; mod traits aren't in it and get a cleaned-up
+            # internal name.
+            cleaned = _trait_display_name(t, sim_info)
+            if not cleaned:
+                cleaned = _clean_mod_trait_name(name)
+                # Drop anything left that still looks like a system bit
+                if ":" in cleaned or any(kw in cleaned.lower() for kw in _NOISE_TRAIT_KEYWORDS):
+                    continue
             if cleaned and cleaned not in names:
                 names.append(cleaned)
                 if len(names) >= limit:
@@ -722,6 +891,7 @@ def get_sim_relationships(sim_info, limit=8):
                 # sim_info.sentiment_tracker separately just duplicates.
 
                 entry = {"name": name}
+                bit_labels = _tidy_status_labels(bit_labels, friendship)
                 if bit_labels:
                     entry["status"] = ", ".join(bit_labels[:4])
                 if friendship is not None:
@@ -739,6 +909,84 @@ def get_sim_relationships(sim_info, limit=8):
     except Exception:
         pass
     return relationships
+
+
+def clean_career_name(raw):
+    """Internal career tuning name -> plain words: "careers_Adult_Law" ->
+    "Law", "Career_Adult_Entertainer" -> "Entertainer". The old cleanup
+    only knew "Career_" (singular, capitalized), so "careers_Adult_Law"
+    reached prompts raw and the AI said "Law level five"."""
+    import re as _re
+    s = str(raw or "")
+    s = _re.sub(r"^careers?_", "", s, flags=_re.I)
+    s = _re.sub(r"^(?:adult|teen|child|youngadult)_?", "", s, flags=_re.I)
+    s = _re.sub(r"^(?:active|parttime|part_time)_", "", s, flags=_re.I)
+    s = s.replace("_", " ").strip()
+    return " ".join(w[:1].upper() + w[1:] if w else w for w in s.split())
+
+
+def _careers_of(sim_info):
+    try:
+        careers = getattr(sim_info.career_tracker, "careers", None) or {}
+        return list(careers.values() if hasattr(careers, "values") else careers)
+    except Exception:
+        return []
+
+
+def _title_hash(career, sim_info):
+    """The game's LocalizedString hash for the career's current level title
+    (CareerLevel.get_title(sim) -> cls.title(sim); verified in
+    careers/career_tuning.pyc)."""
+    try:
+        return int(career.current_level_tuning.get_title(sim_info).hash) or None
+    except Exception:
+        return None
+
+
+def get_sim_career_title(sim_info):
+    """'Adept Attorney' -- the job title the game shows -- from the table
+    shipped with the mod (career_titles.py, built from the game's own
+    tuning and English string files by tools/gen_career_titles.py). The
+    game's Python can't turn a title into words (only its UI can), so the
+    words come with the mod; a plain dict lookup, no file reading. None for
+    careers not in the table (CC careers) or when Llamafone writes in a
+    language other than English."""
+    try:
+        from . import career_titles, config
+        if (config.get_language() or "English").strip().lower() not in ("english", "en", ""):
+            return None
+        for career in _careers_of(sim_info):
+            h = _title_hash(career, sim_info)
+            text = career_titles.TITLES.get(h) if h else None
+            if text:
+                return _resolve_gender_tokens(text, sim_info)
+    except Exception:
+        pass
+    return None
+
+
+def _resolve_gender_tokens(text, sim_info):
+    """Strings like "{M0.Waiter}{F0.Waitress}" carry both versions; pick by
+    the sim's gender."""
+    import re as _re
+    female = "FEMALE" in str(getattr(sim_info, "gender", "")).upper()
+    def _pick(m):
+        return m.group(2) if female else m.group(1)
+    text = _re.sub(r"\{M\d+\.([^}]*)\}\{F\d+\.([^}]*)\}", _pick, text)
+    text = _re.sub(r"\{F\d+\.([^}]*)\}\{M\d+\.([^}]*)\}", lambda m: m.group(1) if female else m.group(2), text)
+    return text.strip()
+
+
+def get_sim_career_level(sim_info):
+    for career in _careers_of(sim_info):
+        for attr in ("level", "_level", "user_level"):
+            try:
+                v = getattr(career, attr, None)
+                if v is not None:
+                    return int(v() if callable(v) else v)
+            except Exception:
+                continue
+    return None
 
 
 def get_sim_career(sim_info):
@@ -761,19 +1009,10 @@ def get_sim_career(sim_info):
                 raw = career.__class__.__name__
             except Exception:
                 continue
-            import re as _re
-            # Strip "Career_" + optional age tier (Adult/Teen/Child) +
-            # optional Active/Standard/Part_Time/etc. so we get a clean
-            # human-readable career name.
-            cleaned = _re.sub(
-                r'^Career_(?:(?:Adult|Teen|Child)_?)?(?:Active_|PartTime_|Part_Time_)?',
-                '',
-                raw,
-            ).replace("_", " ").strip()
-            # Preserve internal capitalization on words like "DJ"
-            cleaned = " ".join(w[:1].upper() + w[1:] if w else w for w in cleaned.split())
+            cleaned = clean_career_name(raw)
             if cleaned:
-                return cleaned
+                title = get_sim_career_title(sim_info)
+                return f"{title} ({cleaned} career)" if title else cleaned
     except Exception:
         pass
     return None

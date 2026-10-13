@@ -273,6 +273,18 @@ def _now_ingame_ticks():
     return None
 
 
+_MAX_ZONES_PER_PAIR = 6
+
+
+def _current_zone_id():
+    try:
+        import services
+        zone = services.current_zone()
+        return getattr(zone, "id", None) if zone else None
+    except Exception:
+        return None
+
+
 def record(sim_a_id, sim_b_id, kind):
     """Record (or overwrite) the most-recent interaction between two
     sims. Keyed by sorted pair, so direction doesn't matter.
@@ -280,17 +292,61 @@ def record(sim_a_id, sim_b_id, kind):
     Logs both real-time ISO (for admin/debug + same-clock comparisons
     like the last_conv_iso suppression check) AND in-game ticks (so
     cleanup / rendering can reason in sim-world time, not the player's
-    wall clock). Ticks are None when no save is loaded."""
+    wall clock). Ticks are None when no save is loaded.
+
+    Also keeps the last time the pair met on each lot ("zones": lot id
+    -> ticks, the few most recent), so "did they meet at the baby's
+    home since the birth?" survives a later meeting somewhere else.
+    A meeting recorded before lots were tracked is kept under
+    "unknown"."""
     if sim_a_id is None or sim_b_id is None or sim_a_id == sim_b_id:
         return
     with _lock:
         data = _load()
-        data[_pair_key(sim_a_id, sim_b_id)] = {
+        key = _pair_key(sim_a_id, sim_b_id)
+        prev = data.get(key) if isinstance(data.get(key), dict) else {}
+        ticks = _now_ingame_ticks()
+        zones = dict(prev.get("zones") or {})
+        if "zones" not in prev and prev.get("ticks") is not None:
+            zones["unknown"] = prev["ticks"]
+        zone_id = _current_zone_id()
+        if zone_id is not None and ticks is not None:
+            zones[str(zone_id)] = ticks
+        if len(zones) > _MAX_ZONES_PER_PAIR:
+            zones = dict(sorted(zones.items(), key=lambda kv: kv[1] or 0)[-_MAX_ZONES_PER_PAIR:])
+        data[key] = {
             "timestamp": datetime.datetime.now().isoformat(),
-            "ticks": _now_ingame_ticks(),
+            "ticks": ticks,
             "kind": str(kind) if kind else "",
+            "zone": zone_id,
+            "zones": zones,
         }
         _save(data)
+
+
+def met_at_lot_since(sim_id, other_ids, zone_id, since_ticks):
+    """True if `sim_id` met any of `other_ids` in person on lot `zone_id`
+    at or after `since_ticks`. Meetings recorded before lots were tracked
+    count wherever they happened (we can't tell)."""
+    if sim_id is None or zone_id is None or since_ticks is None:
+        return False
+    data = _load()
+    for oid in other_ids:
+        e = data.get(_pair_key(sim_id, oid))
+        if not isinstance(e, dict):
+            continue
+        zones = e.get("zones")
+        if zones is None:
+            candidates = [e.get("ticks")]
+        else:
+            candidates = [zones.get(str(zone_id)), zones.get("unknown")]
+        for t in candidates:
+            try:
+                if t is not None and int(t) >= int(since_ticks):
+                    return True
+            except Exception:
+                continue
+    return False
 
 
 def most_recent_for_pair(sim_a_id, sim_b_id):

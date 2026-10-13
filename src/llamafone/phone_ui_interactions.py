@@ -585,12 +585,9 @@ class LlamafoneTextInteraction(_LlamafonePhoneInteractionBase):
 # their current values. Tapping a row toggles a bool / opens a text-input
 # dialog for a numeric value, then the picker re-opens to show the update.
 #
-# All values write to Llamafone_Settings.json via config.set_setting(), which
-# the existing get_*() helpers in config.py and auto_events.py prefer over
-# the static .cfg file. Static values (API key, model names, language) are
-# intentionally left out -- those still live in llamafone.cfg because
-# editing them in-game adds little value and increases the surface area for
-# bad input.
+# Values write back to llamafone.cfg via config.set_setting(). Model,
+# thinking level, reply length, and language live in the "AI settings..."
+# submenu; provider, API key, and server addresses stay cfg-only.
 # ---------------------------------------------------------------------------
 
 
@@ -607,14 +604,62 @@ def _setting_definitions():
     from . import auto_events
     return [
         {
+            "key":    "ai_submenu",
+            "label":  "AI settings...",
+            "kind":   "action",
+            "getter": lambda: "",
+            "hint":   "Provider, model, thinking level, max tokens, language, and a connection test.",
+        },
+        {
+            "key":    "incoming_submenu",
+            "label":  "Incoming calls & texts...",
+            "kind":   "action",
+            "getter": lambda: "",
+            "hint":   "Whether sims call and text your sims on their own, how often, and birth announcements.",
+        },
+        {
+            "key":    "texting_submenu",
+            "label":  "Texts & replies...",
+            "kind":   "action",
+            "getter": lambda: "",
+            "hint":   "Reply delay, group texts, how messages affect relationships, and ghost sims.",
+        },
+        {
+            "key":    "llamagram_submenu",
+            "label":  "Llamagram...",
+            "kind":   "action",
+            "getter": lambda: "",
+            "hint":   "Turn Llamagram on or off, its pop-ups, and how often friends post.",
+        },
+        {
             "key":    "auto_events_enabled",
+            "home":   "incoming",
             "label":  "Auto events: {value}",
             "kind":   "bool",
             "getter": auto_events.is_enabled,
             "hint":   "When on, the mod will spontaneously fire calls/texts/events while you play.",
         },
         {
+            "key":    "auto_call",
+            "home":   "incoming",
+            "label":  "Incoming calls: {value}",
+            "kind":   "event_type",
+            "event":  "call",
+            "getter": lambda: auto_events.is_type_enabled("call"),
+            "hint":   "Whether sims call your sims on their own.",
+        },
+        {
+            "key":    "auto_text",
+            "home":   "incoming",
+            "label":  "Incoming texts: {value}",
+            "kind":   "event_type",
+            "event":  "text",
+            "getter": lambda: auto_events.is_type_enabled("text"),
+            "hint":   "Whether sims text your sims on their own.",
+        },
+        {
             "key":    "auto_event_chance",
+            "home":   "incoming",
             "label":  "Auto-event chance: {value}%",
             "kind":   "int",
             "getter": auto_events.get_chance,
@@ -623,6 +668,7 @@ def _setting_definitions():
         },
         {
             "key":    "auto_event_interval_minutes",
+            "home":   "incoming",
             "label":  "Auto-event interval: {value} min",
             "kind":   "int",
             "getter": lambda: int(auto_events.get_interval_seconds() / 60),
@@ -631,6 +677,7 @@ def _setting_definitions():
         },
         {
             "key":    "social_enabled",
+            "home":   "llamagram",
             "label":  "Llamagram: {value}",
             "kind":   "bool",
             "getter": config.get_social_enabled,
@@ -638,6 +685,7 @@ def _setting_definitions():
         },
         {
             "key":    "social_post_popups",
+            "home":   "llamagram",
             "label":  "Friends' posts pop up: {value}",
             "kind":   "bool",
             "getter": config.get_social_post_popups,
@@ -645,13 +693,32 @@ def _setting_definitions():
         },
         {
             "key":    "social_comment_popups",
+            "home":   "llamagram",
             "label":  "Comment / like pop-ups: {value}",
             "kind":   "bool",
             "getter": config.get_social_comment_popups,
             "hint":   "Off = comments, likes, and follower updates on your posts go quietly to Llamagram Notifications.",
         },
         {
+            "key":    "social_npc_post_weight",
+            "home":   "llamagram",
+            "label":  "How often friends post: {value}",
+            "kind":   "preset_int",
+            "getter": config.get_social_npc_post_weight,
+            "presets": _FRIEND_POST_PRESETS,
+            "hint":   "How often friends post on Llamagram on their own.",
+        },
+        {
+            "key":    "birth_announcements",
+            "home":   "incoming",
+            "label":  "Birth announcements: {value}",
+            "kind":   "bool",
+            "getter": config.get_birth_announcements_enabled,
+            "hint":   "When a family member or friend has a baby, the new parent texts your sim about it. Off = births still come up naturally later.",
+        },
+        {
             "key":    "phone_allow_ghosts",
+            "home":   "texting",
             "label":  "Ghost sims on phone: {value}",
             "kind":   "bool",
             "getter": config.get_phone_allow_ghosts,
@@ -659,6 +726,7 @@ def _setting_definitions():
         },
         {
             "key":    "reply_delay_enabled",
+            "home":   "texting",
             "label":  "Reply delay: {value}",
             "kind":   "bool",
             "getter": config.get_reply_delay_enabled,
@@ -666,6 +734,7 @@ def _setting_definitions():
         },
         {
             "key":    "reply_delay_min_seconds",
+            "home":   "texting",
             "label":  "Reply delay min: {value}s",
             "kind":   "int",
             "getter": config.get_reply_delay_min_seconds,
@@ -674,6 +743,7 @@ def _setting_definitions():
         },
         {
             "key":    "reply_delay_max_seconds",
+            "home":   "texting",
             "label":  "Reply delay max: {value}s",
             "kind":   "int",
             "getter": config.get_reply_delay_max_seconds,
@@ -682,6 +752,7 @@ def _setting_definitions():
         },
         {
             "key":    "group_text_enabled",
+            "home":   "texting",
             "label":  "Group texts: {value}",
             "kind":   "bool",
             "getter": lambda: bool(config.get_setting("group_text_enabled", True)),
@@ -689,6 +760,7 @@ def _setting_definitions():
         },
         {
             "key":    "group_text_max_participants",
+            "home":   "texting",
             "label":  "Group text max size: {value}",
             "kind":   "int",
             "getter": lambda: int(config.get_setting("group_text_max_participants", 4)),
@@ -697,6 +769,7 @@ def _setting_definitions():
         },
         {
             "key":    "group_text_dropoff_enabled",
+            "home":   "texting",
             "label":  "Group text dropoff: {value}",
             "kind":   "bool",
             "getter": lambda: bool(config.get_setting("group_text_dropoff_enabled", True)),
@@ -704,18 +777,20 @@ def _setting_definitions():
         },
         {
             "key":    "message_relationship_impact_enabled",
+            "home":   "texting",
             "label":  "Messages affect relationships: {value}",
             "kind":   "bool",
-            "getter": lambda: bool(config.get_setting("message_relationship_impact_enabled", True)),
+            "getter": config.get_message_relationship_impact_enabled,
             "hint":   "When on, phone messages nudge the actual friendship / romance scores. Warm exchange = small +friendship, hostile = -friendship, flirty = +romance, etc. Both directions of the pair get the same nudge. Hard-capped per message so no single text reshapes a relationship.",
         },
         {
             "key":    "message_relationship_max_delta",
+            "home":   "texting",
             "label":  "Relationship impact cap: {value}",
             "kind":   "int",
-            "getter": lambda: int(config.get_setting("message_relationship_max_delta", 3)),
+            "getter": config.get_message_relationship_max_delta,
             "bounds": (0, 15),
-            "hint":   "Hard cap on friendship / romance change per message. Default 3 keeps a single message well below the game's own social-action deltas (3-8). 0 disables the effect without touching the toggle above.",
+            "hint":   "Hard cap on friendship / romance change per message. Default 5 keeps a single message well below the game's own social-action deltas (3-8). 0 disables the effect without touching the toggle above.",
         },
         {
             "key":    "manage_contacts",
@@ -755,7 +830,7 @@ def _format_value(setting):
     except Exception:
         val = "?"
     kind = setting["kind"]
-    if kind == "bool":
+    if kind in ("bool", "event_type"):
         val = "ON" if val else "OFF"
     elif kind == "enum":
         # Show value as-is; the enum-cycle handler stringifies before
@@ -788,7 +863,7 @@ def _show_settings_picker(anchor_sim):
         from sims4.localization import LocalizationHelperTuning
         from ui.ui_dialog_picker import UiItemPicker, BasePickerRow
 
-        settings = _setting_definitions()
+        settings = [d for d in _setting_definitions() if not d.get("home")]
         try:
             from . import MOD_VERSION as version
         except Exception:
@@ -798,8 +873,8 @@ def _show_settings_picker(anchor_sim):
         loc_text = LocalizationHelperTuning.get_raw_text(
             "Pick a setting to change. Toggles flip on/off; numeric "
             "settings open a text box. Changes save instantly and apply "
-            "without reloading. Static settings (API key, model, language) "
-            "still live in llamafone.cfg."
+            "without reloading. Only the API key "
+            "lives in llamafone.cfg."
         )
         loc_ok = LocalizationHelperTuning.get_raw_text("Change")
         loc_cancel = LocalizationHelperTuning.get_raw_text("Done")
@@ -860,6 +935,13 @@ def _show_settings_picker(anchor_sim):
 # Frequency presets shared between the sub-picker row and the setting
 # writer. Duplicated in the format helper so the display label matches
 # _on_setting_picked's cycle logic. Keep in sync.
+_FRIEND_POST_PRESETS = (
+    ("Off",       0),
+    ("Rarely",    10),
+    ("Sometimes", 25),
+    ("Often",     50),
+)
+
 _DATING_FREQUENCY_PRESETS = (
     ("Off",       0),
     ("Rarely",    10),
@@ -1296,6 +1378,355 @@ def _show_sim_bio_edit_dialog(anchor_sim, sim_id, sim_name):
         return False
 
 
+# ---------------------------------------------------------------------------
+# AI settings submenu -- model (typed in: no built-in list to go stale, and
+# a new model can need new handling, like Haiku 5.5's thinking), thinking
+# level, reply length, language, and a connection test. Provider, API key, and local-server addresses stay in
+# llamafone.cfg: switching provider in-game would leave the wrong key and
+# model names behind, and nobody wants to type an API key in a Sims text box.
+# ---------------------------------------------------------------------------
+
+_PROVIDER_LABELS = {"claude": "Claude", "openai": "OpenAI", "gemini": "Gemini",
+                    "openrouter": "OpenRouter", "ollama": "Ollama", "lmstudio": "LM Studio"}
+
+
+def _local_endpoint(provider):
+    try:
+        return config.get_ollama_endpoint() if provider == "ollama" else config.get_lmstudio_endpoint()
+    except Exception:
+        return "?"
+
+
+_EFFORT_CYCLE = ("auto", "low", "medium", "high", "xhigh")   # no max: empty replies
+
+# What each level means for the player (measured on Haiku 5.5).
+_EFFORT_HINTS = {
+    "auto":   "Recommended. Haiku 5.5 uses xhigh; other models use their default.",
+    "low":    "Fastest and cheapest, but more mix-ups (like who's new in town).",
+    "medium": "Quick, with occasional mix-ups.",
+    "high":   "A little slower, a little better.",
+    "xhigh":  "Most careful. On Haiku 5.5: texts ~8 sec, calls ~18 sec, about 1.5x the cost.",
+}
+
+# Max tokens typed in game: below this, a typo would cut every reply short.
+_MIN_MAX_TOKENS = 256
+
+
+def _max_tokens_now():
+    try:
+        return int(config.get_max_tokens())
+    except Exception:
+        return 1024
+
+
+def _set_model(name):
+    """The in-game Model setting: writes `model` (which wins), plus any older
+    fast_model / default_model lines the cfg already has, so they all agree
+    -- otherwise a later hand edit of fast_model would silently do nothing."""
+    name = (name or "").strip()
+    if not name:
+        return False
+    ok = config.set_setting("model", name)
+    for old in ("fast_model", "default_model"):
+        try:
+            if config.get_config().has_option(config._SECTION, old):
+                ok = config.set_setting(old, name) and ok
+        except Exception:
+            pass
+    _log(f"AI settings: model set to {name!r} (ok={ok})")
+    return ok
+
+
+def _show_ai_settings_picker(anchor_sim):
+    try:
+        from sims4.localization import LocalizationHelperTuning
+        from ui.ui_dialog_picker import UiItemPicker, BasePickerRow
+
+        provider = config.get_provider()
+        loc_title = LocalizationHelperTuning.get_raw_text("AI settings")
+        loc_text = LocalizationHelperTuning.get_raw_text(
+            "To change the API key, edit llamafone.cfg, then type llama.reload in the "
+            "cheat console."
+        )
+        loc_ok = LocalizationHelperTuning.get_raw_text("Change")
+        loc_cancel = LocalizationHelperTuning.get_raw_text("Back")
+        dialog = UiItemPicker.TunableFactory().default(
+            anchor_sim,
+            title=lambda *_a, **_kw: loc_title,
+            text=lambda *_a, **_kw: loc_text,
+            text_ok=lambda *_a, **_kw: loc_ok,
+            text_cancel=lambda *_a, **_kw: loc_cancel,
+        )
+        try:
+            dialog.max_selectable = 1
+        except Exception:
+            pass
+        try:
+            dialog.min_selectable = 1
+        except Exception:
+            pass
+
+        row_actions = []
+
+        def _row(action, name, hint):
+            row_actions.append(action)
+            dialog.add_row(BasePickerRow(
+                option_id=len(row_actions) - 1,
+                name=LocalizationHelperTuning.get_raw_text(name),
+                row_description=LocalizationHelperTuning.get_raw_text(hint),
+                is_enable=True,
+            ))
+
+        plabel = _PROVIDER_LABELS.get(provider, provider)
+        if provider in ("ollama", "lmstudio"):
+            needs = f"Needs {plabel} running on your PC (no API key)."
+        else:
+            needs = (f"Needs {'an' if plabel[0] in 'AEIOU' else 'a'} {plabel} API key in "
+                     "llamafone.cfg.")
+        _row("provider", f"Provider: {plabel}",
+             f"Which AI service writes the messages. Tap to choose from the list. {needs} "
+             f"After switching, set Model to a {plabel} model.")
+        if provider in ("ollama", "lmstudio"):
+            _row("server", f"Server address: {_local_endpoint(provider)}",
+                 f"Where {_PROVIDER_LABELS.get(provider, provider)} is running on your PC. Only change "
+                 "this if you set up a different address. Tap to change.")
+        fast_model = config.get_fast_model()
+        _row("model", f"Model: {fast_model}",
+             "The AI model that writes your sims' messages. Tap to type a different one.")
+        if provider == "claude":
+            from . import api_client
+            eff = config.get_thinking_effort()
+            used = api_client._claude_effort(fast_model)
+            _row("effort", f"Thinking: {eff.upper()}",
+                 f"How hard Claude thinks before replying. {_EFFORT_HINTS.get(eff, '')} "
+                 f"(Now using: {used or 'model default'}.) Tap to change.")
+        _row("max_tokens", f"Max tokens: {_max_tokens_now():,}",
+             "The longest a reply can be (default 1024; a token is about 3/4 of a word). It "
+             "doesn't make sims write more. Raise it if messages get cut off or come back "
+             "empty, which happens most with local models and OpenRouter. Tap to change.")
+        _row("language", f"Language: {config.get_language()}",
+             "The language sims write in.")
+        _row("test", "Test connection",
+             "Sends a tiny test message with your current settings and tells you if it worked.")
+
+        def _on_response(response_dialog):
+            try:
+                if not response_dialog.accepted:
+                    _show_settings_picker(anchor_sim)
+                    return
+                picked = list(getattr(response_dialog, "picked_results", None) or ())
+                if not picked or picked[0] is None or not (0 <= picked[0] < len(row_actions)):
+                    _show_ai_settings_picker(anchor_sim)
+                    return
+                action = row_actions[picked[0]]
+                if action == "model":
+                    _show_ai_text_input(anchor_sim, "model", "Model",
+                                        "Type the model name exactly as your provider lists it, then use "
+                                        "Test connection to check it works.",
+                                        config.get_fast_model())
+                    return
+                if action == "provider":
+                    _show_provider_picker(anchor_sim)
+                    return
+                if action == "server":
+                    _show_ai_text_input(anchor_sim, "server", "Server address",
+                                        f"Where {_PROVIDER_LABELS.get(provider, provider)} is running, like "
+                                        "http://localhost:11434 (Ollama) or http://localhost:1234 (LM Studio).",
+                                        _local_endpoint(provider))
+                    return
+                if action == "max_tokens":
+                    _show_ai_text_input(anchor_sim, "max_tokens", "Max tokens",
+                                        "A number. 1024 is plenty for most models; try 2048 or more "
+                                        "if messages get cut off or come back empty.",
+                                        str(_max_tokens_now()))
+                    return
+                if action == "language":
+                    _show_ai_text_input(anchor_sim, "language", "Language",
+                                        "The language sims write in, like English, Spanish, or French.",
+                                        config.get_language())
+                    return
+                if action == "test":
+                    _run_connection_test()
+                elif action == "effort":
+                    cur = config.get_thinking_effort()
+                    i = _EFFORT_CYCLE.index(cur) if cur in _EFFORT_CYCLE else -1
+                    config.set_setting("thinking_effort", _EFFORT_CYCLE[(i + 1) % len(_EFFORT_CYCLE)])
+                _show_ai_settings_picker(anchor_sim)
+            except Exception:
+                _log_exc("AI settings: on_response failed")
+
+        dialog.add_listener(_on_response)
+        dialog.show_dialog()
+        return True
+    except Exception:
+        _log_exc("_show_ai_settings_picker outer failure")
+        return False
+
+
+_PROVIDER_HINTS = {
+    "claude": "Anthropic's Claude. Needs a Claude API key.",
+    "openai": "OpenAI (GPT). Needs an OpenAI API key.",
+    "gemini": "Google Gemini. Needs a Gemini API key; has a free tier.",
+    "openrouter": "Many AI services through one OpenRouter key.",
+    "ollama": "Free, runs on your PC. Needs Ollama running.",
+    "lmstudio": "Free, runs on your PC. Needs LM Studio's server on.",
+}
+
+
+def _show_provider_picker(anchor_sim):
+    """Pick a provider from a list (current one marked). A different pick
+    switches and goes back to AI settings -- no model prompt; the player
+    sets Model when ready. Back or the current one changes nothing. (A tap
+    on the row used to switch on the spot, so exploring the menu could
+    break a working setup.)"""
+    try:
+        from sims4.localization import LocalizationHelperTuning
+        from ui.ui_dialog_picker import UiItemPicker, BasePickerRow
+
+        current = config.get_provider()
+        loc_title = LocalizationHelperTuning.get_raw_text("Choose a provider")
+        loc_text = LocalizationHelperTuning.get_raw_text(
+            "The AI service that writes the messages. After switching, set Model to one of "
+            "its models. The API key in llamafone.cfg has to match (Ollama and LM Studio need none)."
+        )
+        loc_ok = LocalizationHelperTuning.get_raw_text("Choose")
+        loc_cancel = LocalizationHelperTuning.get_raw_text("Back")
+        dialog = UiItemPicker.TunableFactory().default(
+            anchor_sim,
+            title=lambda *_a, **_kw: loc_title,
+            text=lambda *_a, **_kw: loc_text,
+            text_ok=lambda *_a, **_kw: loc_ok,
+            text_cancel=lambda *_a, **_kw: loc_cancel,
+        )
+        try:
+            dialog.max_selectable = 1
+        except Exception:
+            pass
+        try:
+            dialog.min_selectable = 1
+        except Exception:
+            pass
+        keys = list(_PROVIDER_LABELS)
+        for i, k in enumerate(keys):
+            dialog.add_row(BasePickerRow(
+                option_id=i,
+                name=LocalizationHelperTuning.get_raw_text(
+                    _PROVIDER_LABELS[k] + ("  (current)" if k == current else "")),
+                row_description=LocalizationHelperTuning.get_raw_text(_PROVIDER_HINTS.get(k, "")),
+                is_enable=True,
+            ))
+
+        def _on_response(response_dialog):
+            try:
+                picked = list(getattr(response_dialog, "picked_results", None) or ()) if response_dialog.accepted else []
+                if picked and picked[0] is not None and 0 <= picked[0] < len(keys) and keys[picked[0]] != current:
+                    nxt = keys[picked[0]]
+                    config.set_setting("provider", nxt)
+                    _log(f"AI settings: provider set to {nxt!r}")
+                    label = _PROVIDER_LABELS[nxt]
+                    article = "an" if label[0] in "AEIOU" else "a"
+                    notifications.show("Llamafone", f"Provider set to {label}. Now set Model to {article} "
+                                       f"{label} model, then use Test connection.")
+                _show_ai_settings_picker(anchor_sim)
+            except Exception:
+                _log_exc("provider picker: on_response failed")
+
+        dialog.add_listener(_on_response)
+        dialog.show_dialog()
+        return True
+    except Exception:
+        _log_exc("_show_provider_picker outer failure")
+        return False
+
+
+def _show_ai_text_input(anchor_sim, what, title, prompt, existing):
+    """One-line text box for the model name, max tokens, the language, or
+    the server address."""
+    try:
+        from sims4.localization import LocalizationHelperTuning
+        from ui.ui_dialog_generic import UiDialogTextInputOkCancel
+
+        _FIELD = "value"
+
+        class _AiInputDialog(UiDialogTextInputOkCancel):
+            def on_text_input(self, text_input_name='', text_input=''):
+                self.text_input_responses[text_input_name] = text_input
+                return True
+
+            def build_msg(self, text_input_overrides=None, additional_tokens=(), **kwargs):
+                msg = super().build_msg(additional_tokens=additional_tokens, **kwargs)
+                ti = msg.text_input.add()
+                ti.text_input_name = _FIELD
+                if existing:
+                    try:
+                        ti.initial_value = LocalizationHelperTuning.get_raw_text(existing)
+                    except Exception:
+                        pass
+                return msg
+
+        loc_title = LocalizationHelperTuning.get_raw_text(title)
+        loc_text = LocalizationHelperTuning.get_raw_text(prompt)
+        loc_ok = LocalizationHelperTuning.get_raw_text("Save")
+        loc_cancel = LocalizationHelperTuning.get_raw_text("Cancel")
+        dialog = _AiInputDialog.TunableFactory().default(
+            anchor_sim,
+            text=lambda *_a, **_kw: loc_text,
+            title=lambda *_a, **_kw: loc_title,
+            text_ok=lambda *_a, **_kw: loc_ok,
+            text_cancel=lambda *_a, **_kw: loc_cancel,
+        )
+
+        def _on_response(response_dialog):
+            try:
+                if response_dialog.accepted:
+                    value = ((response_dialog.text_input_responses or {}).get(_FIELD, "") or "").strip()
+                    if value and what == "model":
+                        if _set_model(value):
+                            notifications.show("Llamafone", f"Model set to {value}. Use Test connection to check it works.")
+                    elif value and what == "language":
+                        config.set_setting("language", value)
+                    elif value and what == "max_tokens":
+                        digits = "".join(ch for ch in value if ch.isdigit())
+                        if digits:
+                            n = max(int(digits), _MIN_MAX_TOKENS)
+                            config.set_setting("max_tokens", n)
+                            _log(f"AI settings: max_tokens set to {n} (typed {value!r})")
+                    elif value and what == "server":
+                        key = "ollama_endpoint" if config.get_provider() == "ollama" else "lmstudio_endpoint"
+                        config.set_setting(key, value)
+            except Exception:
+                _log_exc(f"AI text input ({what}) on_response failed")
+            _show_ai_settings_picker(anchor_sim)
+
+        dialog.add_listener(_on_response)
+        dialog.show_dialog()
+        return True
+    except Exception:
+        _log_exc("_show_ai_text_input outer failure")
+        _show_ai_settings_picker(anchor_sim)
+        return False
+
+
+def _run_connection_test():
+    """Tiny round trip with the current settings; the result arrives as a
+    notification (the call runs on a background thread like every other)."""
+    from . import api_client
+    provider, model = config.get_provider(), config.get_model()
+    notifications.show("Llamafone", f"Testing {provider} / {model}...")
+
+    def _done(text, error):
+        if error:
+            notifications.show("Llamafone", f"Connection test failed ({provider} / {model}): {error}")
+        else:
+            notifications.show("Llamafone", f"Connection OK. {model} replied: {(text or '').strip()[:60]}")
+
+    api_client.call_ai_async(
+        messages=[{"role": "user", "content": "Reply with the single word: pong"}],
+        system="You are a test ping. Reply with exactly one word.",
+        callback=_done,
+    )
+
+
 def _show_dating_settings_picker(anchor_sim):
     """Llamadate settings for the sim whose phone this is. Per-sim,
     not per-household: opening Llamadate on Ingrid's phone shows
@@ -1496,6 +1927,15 @@ def _on_setting_picked(anchor_sim, setting):
         # Re-open whichever picker this setting belongs to.
         _reopen_home_for(anchor_sim, setting)
         return
+    if kind == "event_type":
+        from . import auto_events
+        try:
+            current = bool(setting["getter"]())
+        except Exception:
+            current = False
+        auto_events.set_type_enabled(setting["event"], not current)
+        _reopen_home_for(anchor_sim, setting)
+        return
     if kind == "int":
         _show_int_input(anchor_sim, setting)
         return
@@ -1554,6 +1994,12 @@ def _on_setting_picked(anchor_sim, setting):
         if key == "manage_contacts":
             _show_contact_manager_picker(anchor_sim)
             return
+        if key == "ai_submenu":
+            _show_ai_settings_picker(anchor_sim)
+            return
+        if key.endswith("_submenu") and key[:-len("_submenu")] in _SETTING_GROUPS:
+            _show_group_settings_picker(anchor_sim, key[:-len("_submenu")])
+            return
         if key == "dating_submenu":
             _show_dating_settings_picker(anchor_sim)
             return
@@ -1570,11 +2016,75 @@ def _on_setting_picked(anchor_sim, setting):
 
 
 def _reopen_home_for(anchor_sim, setting):
-    """After editing a setting row, re-open the picker it lives in.
-    Dating rows are all handled by _show_dating_settings_picker
-    directly (they don't go through _on_setting_picked), so every
-    remaining setting belongs to the main picker."""
+    """After editing a setting row, re-open the picker it lives in: its
+    folder (Llamagram, Incoming calls & texts, ...) or the main picker.
+    (Dating rows are handled by _show_dating_settings_picker directly.)"""
+    if setting.get("home") in _SETTING_GROUPS:
+        _show_group_settings_picker(anchor_sim, setting["home"])
+        return
     _show_settings_picker(anchor_sim)
+
+
+# Settings folders: rows tagged "home": <group> show in that folder instead
+# of the main screen.
+_SETTING_GROUPS = {
+    "incoming":  "Incoming calls & texts",
+    "texting":   "Texts & replies",
+    "llamagram": "Llamagram",
+}
+
+
+def _show_group_settings_picker(anchor_sim, group):
+    """One settings folder. Same rows and handlers as the main screen, just
+    grouped; Back returns to the main screen."""
+    try:
+        from sims4.localization import LocalizationHelperTuning
+        from ui.ui_dialog_picker import UiItemPicker, BasePickerRow
+
+        rows = [d for d in _setting_definitions() if d.get("home") == group]
+        loc_title = LocalizationHelperTuning.get_raw_text(_SETTING_GROUPS.get(group, "Settings"))
+        loc_text = LocalizationHelperTuning.get_raw_text("Tap a setting to change it.")
+        loc_ok = LocalizationHelperTuning.get_raw_text("Change")
+        loc_cancel = LocalizationHelperTuning.get_raw_text("Back")
+        dialog = UiItemPicker.TunableFactory().default(
+            anchor_sim,
+            title=lambda *_a, **_kw: loc_title,
+            text=lambda *_a, **_kw: loc_text,
+            text_ok=lambda *_a, **_kw: loc_ok,
+            text_cancel=lambda *_a, **_kw: loc_cancel,
+        )
+        try:
+            dialog.max_selectable = 1
+        except Exception:
+            pass
+        try:
+            dialog.min_selectable = 1
+        except Exception:
+            pass
+        for idx, setting in enumerate(rows):
+            dialog.add_row(BasePickerRow(
+                option_id=idx,
+                name=LocalizationHelperTuning.get_raw_text(_format_value(setting)),
+                row_description=LocalizationHelperTuning.get_raw_text(setting.get("hint", "")),
+                is_enable=True,
+            ))
+
+        def _on_response(response_dialog):
+            try:
+                picked = list(getattr(response_dialog, "picked_results", None) or ()) if response_dialog.accepted else []
+                if not picked or picked[0] is None or not (0 <= picked[0] < len(rows)):
+                    _show_settings_picker(anchor_sim)
+                    return
+                _on_setting_picked(anchor_sim, rows[picked[0]])
+            except Exception:
+                _log_exc(f"{group} settings: on_response failed")
+
+        dialog.add_listener(_on_response)
+        dialog.show_dialog()
+        return True
+    except Exception:
+        _log_exc("_show_group_settings_picker outer failure")
+        return False
 
 
 def _show_int_input(anchor_sim, setting):
@@ -1626,7 +2136,7 @@ def _show_int_input(anchor_sim, setting):
             try:
                 if not response_dialog.accepted:
                     # Re-open the picker so the player isn't stranded.
-                    _show_settings_picker(anchor_sim)
+                    _reopen_home_for(anchor_sim, setting)
                     return
                 raw = (response_dialog.text_input_responses or {}).get(_FIELD, "").strip()
                 try:
@@ -1635,14 +2145,14 @@ def _show_int_input(anchor_sim, setting):
                     notifications.show_error(
                         f"'{raw}' isn't a number. {setting['label']} unchanged."
                     )
-                    _show_settings_picker(anchor_sim)
+                    _reopen_home_for(anchor_sim, setting)
                     return
                 if lo is not None and new_val < lo:
                     new_val = lo
                 if hi is not None and new_val > hi:
                     new_val = hi
                 config.set_setting(setting["key"], new_val)
-                _show_settings_picker(anchor_sim)
+                _reopen_home_for(anchor_sim, setting)
             except Exception:
                 _log_exc(f"settings: int input handler for {setting['key']} failed")
 

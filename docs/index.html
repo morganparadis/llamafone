@@ -435,7 +435,7 @@
       </figure>
 
     </div>
-    <p class="muted small" style="margin-top:16px;">The <em>paused</em> ("asked for space") state is the interesting one. Instead of blocking the contact, it drops their auto-event rate to 20% <em>and</em> tells the AI you asked for space &#8212; so their response is driven by who they are. Also: the mod auto-detects distance signals in messages ("leave me alone," "we're done," "need space") and sets the state for you.</p>
+    <p class="muted small" style="margin-top:16px;">The <em>paused</em> ("asked for space") state is the interesting one. Instead of blocking the contact, it drops their auto-event rate to 20% <em>and</em> tells the AI you asked for space &#8212; so their response is driven by who they are.</p>
   </div>
 </section>
 
@@ -502,8 +502,13 @@
       </figure>
 
       <figure class="screenshot">
-        <img src="img/uiexample.PNG" alt="Llamafone Settings panel showing toggles for auto events, reply delay, ghost contacts, and numeric inputs for chance and interval">
-        <figcaption><strong>Settings, in-game</strong><br><span class="muted small">Toggle auto-events, reply delays, ghost contacts; adjust chance and interval. Writes back to <code>llamafone.cfg</code>, preserving your comments.</span></figcaption>
+        <img src="img/settingsorganization.PNG" alt="Llamafone Settings grouped into folders: AI settings, Incoming calls and texts, Texts and replies, Llamagram, Manage contacts, and Dating">
+        <figcaption><strong>Settings, in-game</strong><br><span class="muted small">Everything in folders: AI settings, incoming calls and texts, texts and replies, Llamagram, contacts, and dating. Changes save instantly and write back to <code>llamafone.cfg</code>, keeping your comments.</span></figcaption>
+      </figure>
+
+      <figure class="screenshot">
+        <img src="img/aisettings.PNG" alt="Llamafone AI settings in game: Provider, Model, Thinking, Max tokens, Language, and Test connection">
+        <figcaption><strong>AI settings, in-game</strong><br><span class="muted small">Switch provider and model, set how hard the AI thinks, and test the connection without leaving the game. Only the API key lives in <code>llamafone.cfg</code>.</span></figcaption>
       </figure>
 
     </div>
@@ -600,7 +605,7 @@
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
       </div>
       <h3>Boundaries carry through</h3>
-      <p>Tell a sim "leave me alone" or "we're done" and the mod auto-detects it — flips them to muted or paused for that household member. Or set it manually in the Contacts UI. Every subsequent AI prompt for that pair leads with the boundary, not with warmth. A love-heavy ex ignores it and keeps calling; a decent friend apologizes; a mean one guilt-trips. The drama plays out based on who they are.</p>
+      <p>Mute a sim or ask them for space in the Contacts UI, separately for each household member. Every subsequent AI prompt for that pair leads with the boundary, not with warmth. A love-heavy ex ignores it and keeps calling; a decent friend apologizes; a mean one guilt-trips. The drama plays out based on who they are.</p>
     </article>
 
     <article class="feature-card">
@@ -715,7 +720,7 @@
       <summary>Can I disable specific features?</summary>
       <div class="faq-body">
         <p>Yes. Everything is opt-in. Auto-events (random calls/texts/stories while you play) can be toggled with <code>llama.auto_events off</code> in the cheat console. You can also edit <code>llamafone.cfg</code> to disable specific auto-event types, change interval/chance, or restrict which sims can call you.</p>
-        <p>Auto-events are off until you turn them on. Birth announcements are on by default; set <code>birth_announcements = false</code> to stop them. Llamagram can be turned off, or kept with its pop-ups silenced, under Llamafone Settings (or <code>social_enabled</code>, <code>social_post_popups</code>, and <code>social_comment_popups</code> in the cfg). Set <code>social_npc_post_weight = 0</code> if you don't want friends posting on their own.</p>
+        <p>Auto-events are off until you turn them on. Birth announcements are on by default; turn them off under Llamafone Settings (or <code>birth_announcements = false</code> in the cfg). Llamagram can be turned off, kept with its pop-ups silenced, or have friends post less (or never) under <em>Llamafone Settings &gt; Llamagram</em>.</p>
       </div>
     </details>
 
@@ -790,6 +795,7 @@
         <h3>Pick an AI provider and get a key</h3>
         <p>Llamafone works with six different AI providers — pick whichever fits your budget, preferences, or paranoia. You only need credentials for the one you pick. Ollama and LM Studio are free because they run entirely on your computer.</p>
         <p class="muted small"><strong>Model names change.</strong> AI companies retire old models and release new ones every few months, and prices change too. The names below were current as of October 2026; check your provider's model list for the latest. A "model not found" error usually means a model was retired. If you get empty, cut-off, or very slow replies, try a model that doesn't "think" (reason) before answering, like <code>gpt-4o-mini</code> or, locally, Llama 3.2.</p>
+        <p class="muted small"><strong>Replies seem confused?</strong> Try a different model. On Claude, turn up <strong>Thinking</strong> to <code>xhigh</code> (it's already the default on Haiku 5.5).</p>
 
         <div class="provider-grid">
           <div class="provider-card">
@@ -803,7 +809,6 @@
               <li>Copy the <code>sk-ant-api03-…</code> key immediately — you only see it once</li>
             </ol>
             <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = claude</code>. Recommended model: <code>claude-haiku-5-5</code>; for richer writing try <code>claude-sonnet-5-5</code> or <code>claude-opus-5-5</code>.</p>
-            <p class="muted small"><strong>Haiku 4.5 might be more reliable.</strong> In our testing, <code>claude-haiku-4-5</code> kept better track of who's saying what in a conversation than Haiku 5.5. It's reaching end of support, but it still works and has no retirement date, so it's a good choice if replies from 5.5 seem confused. Put it in both <code>default_model</code> and <code>fast_model</code>.</p>
           </div>
 
           <div class="provider-card">
@@ -815,7 +820,7 @@
               <li>On the API Keys page, click <em>Create new secret key</em></li>
               <li>Copy the <code>sk-…</code> key — only shown once</li>
             </ol>
-            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = openai</code> + set <code>default_model = gpt-4o-mini</code></p>
+            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = openai</code> + set <code>model</code> to <code>gpt-4o-mini</code></p>
           </div>
 
           <div class="provider-card">
@@ -826,7 +831,7 @@
               <li>Click <em>Create API key</em> (free tier requires no billing setup)</li>
               <li>Copy the <code>AIza…</code> key</li>
             </ol>
-            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = gemini</code> + <code>default_model</code> set to a current Flash model from <a href="https://ai.google.dev/gemini-api/docs/models" target="_blank" rel="noopener">Google's model list</a> (Flash models are on the free tier).</p>
+            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = gemini</code> + <code>model</code> set to a current Flash model from <a href="https://ai.google.dev/gemini-api/docs/models" target="_blank" rel="noopener">Google's model list</a> (Flash models are on the free tier).</p>
           </div>
 
           <div class="provider-card">
@@ -838,7 +843,7 @@
               <li>Go to <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a> and click <em>Create Key</em></li>
               <li>Copy the <code>sk-or-…</code> key</li>
             </ol>
-            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = openrouter</code> + <code>default_model = anthropic/claude-haiku-4.5</code> (browse the full catalog at <a href="https://openrouter.ai/models" target="_blank" rel="noopener">openrouter.ai/models</a>)</p>
+            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = openrouter</code> + <code>model</code> set to <code>anthropic/claude-haiku-4.5</code> (browse the full catalog at <a href="https://openrouter.ai/models" target="_blank" rel="noopener">openrouter.ai/models</a>)</p>
           </div>
 
           <div class="provider-card">
@@ -850,7 +855,7 @@
               <li>In Ollama's settings, set <strong>Context length to 16k</strong>. Ollama's default is too small for Llamafone's prompts and it quietly cuts them short.</li>
               <li>Leave <code>api_key</code> blank.</li>
             </ol>
-            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = ollama</code> + <code>default_model = llama3.2:3b</code> (must match <code>ollama list</code>). Run <code>llama.testconnection</code> in the cheat console to verify setup.</p>
+            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = ollama</code> + <code>model</code> set to <code>llama3.2:3b</code> (must match <code>ollama list</code>). Run <code>llama.testconnection</code> in the cheat console to verify setup.</p>
           </div>
 
           <div class="provider-card">
@@ -862,7 +867,7 @@
               <li>Switch to Power User mode, open the Developer tab, and turn the server on.</li>
               <li>Leave <code>api_key</code> blank.</li>
             </ol>
-            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = lmstudio</code> + <code>default_model</code> set to the model's name in LM Studio. Run <code>llama.testconnection</code> to verify setup &#8212; it lists the names LM Studio offers.</p>
+            <p class="muted small">In <code>llamafone.cfg</code>: <code>provider = lmstudio</code> + <code>model</code> set to the model's name in LM Studio. Run <code>llama.testconnection</code> to verify setup &#8212; it lists the names LM Studio offers.</p>
           </div>
         </div>
 
@@ -921,22 +926,19 @@ api_key  = AIza…
 
 provider      = openrouter
 api_key       = sk-or-…
-default_model = anthropic/claude-haiku-4.5   # vendor/model form -- see openrouter.ai/models
-fast_model    = anthropic/claude-haiku-4.5
+model = anthropic/claude-haiku-4.5   # vendor/model form -- see openrouter.ai/models
 
 # or (no key needed)
 
 provider      = ollama
 api_key       =
-default_model = llama3.2:3b     # must match the model you pulled -- see `ollama list`
-fast_model    = llama3.2:3b
+model = llama3.2:3b     # must match the model you pulled -- see `ollama list`
 
 # or (no key needed)
 
 provider      = lmstudio
 api_key       =
-default_model = llama-3.2-3b-instruct   # the model's name in LM Studio
-fast_model    = llama-3.2-3b-instruct</code></pre>
+model = llama-3.2-3b-instruct   # the model's name in LM Studio</code></pre>
         <p>Save the file. If you're on Ollama, also confirm <code>ollama_endpoint = http://localhost:11434</code> matches wherever your server runs. Ollama users can run <code>llama.testconnection</code> in the cheat console after loading a save &#8212; it verifies Ollama is reachable, the model is downloaded, and end-to-end generation works. LM Studio users: the server runs at <code>http://localhost:1234</code> by default; if LM Studio shows a different address, set <code>lmstudio_endpoint</code> to it. <code>llama.testconnection</code> checks LM Studio the same way.</p>
       </div>
     </li>
@@ -998,7 +1000,7 @@ fast_model    = llama-3.2-3b-instruct</code></pre>
     <details class="faq-item">
       <summary>"Model not found" / "no longer available" / "no longer offers the model" / "is not found for API version"</summary>
       <div class="faq-body">
-        <p>The model in <code>default_model</code> or <code>fast_model</code> has been retired by the provider. AI companies retire old models every few months. Pick a current one from your provider's model list and put it in both lines, then <code>llama.reload</code>. For Claude, <code>claude-haiku-5-5</code> is a good choice; for Gemini, <code>gemini-3.5-flash-lite</code>. Google retires Gemini 2.5 on October 20, 2026, so if you use a <code>gemini-2.5</code> model, switch before then.</p>
+        <p>The model (Model in AI settings, or <code>model</code> in the cfg) has been retired by the provider. AI companies retire old models every few months. Pick a current one from your provider's model list and put it in both lines, then <code>llama.reload</code>. For Claude, <code>claude-haiku-5-5</code> is a good choice; for Gemini, <code>gemini-3.5-flash-lite</code>. Google retires Gemini 2.5 on October 20, 2026, so if you use a <code>gemini-2.5</code> model, switch before then.</p>
       </div>
     </details>
 
@@ -1016,7 +1018,7 @@ fast_model    = llama-3.2-3b-instruct</code></pre>
         <ul>
           <li>Update to v3.8.2 or newer &mdash; it gives thinking models room and fixes this for Claude Haiku 5.5 and LM Studio.</li>
           <li>Try a model that doesn't think, like <code>gpt-4o-mini</code> or, locally, Llama 3.2.</li>
-          <li>Or raise <code>max_tokens</code> in <code>llamafone.cfg</code> (for example to <code>1024</code>).</li>
+          <li>Or raise <em>Max tokens</em> in <em>Llamafone Settings &gt; AI settings</em> (for example to 2048).</li>
         </ul>
       </div>
     </details>
@@ -1059,7 +1061,7 @@ fast_model    = llama-3.2-3b-instruct</code></pre>
     <details class="faq-item">
       <summary>"No model is loaded" / the model in llamafone.cfg isn't installed</summary>
       <div class="faq-body">
-        <p>Run <code>llama.testconnection</code>: it lists the models your Ollama or LM Studio actually has. Copy one of those names into <code>default_model</code> and <code>fast_model</code>, or install the model you want (<code>ollama pull &lt;name&gt;</code>, or load it in LM Studio). Then <code>llama.reload</code>.</p>
+        <p>Run <code>llama.testconnection</code>: it lists the models your Ollama or LM Studio actually has. Set Model to one of those names (Llamafone Settings &gt; AI settings, or <code>model</code> in the cfg, then <code>llama.reload</code>), or install the model you want (<code>ollama pull &lt;name&gt;</code>, or load it in LM Studio).</p>
       </div>
     </details>
   </div>
@@ -1091,6 +1093,38 @@ fast_model    = llama-3.2-3b-instruct</code></pre>
   <p class="muted">What's changed in each release, newest first.</p>
 
   <ol class="changelog-list">
+
+    <li class="changelog-entry">
+      <div class="changelog-date">October 12, 2026</div>
+      <div class="changelog-body">
+        <h3>Settings in game and in folders, real job titles, and smarter replies (v3.8.4)</h3>
+        <p>Change almost everything without leaving the game, and sims that know more about each other. Drop-in over v3.8.3.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;">
+          <figure class="changelog-figure">
+            <img src="img/settingsorganization.PNG" alt="Llamafone Settings grouped into folders: AI settings, Incoming calls and texts, Texts and replies, Llamagram, Manage contacts, and Dating">
+            <figcaption class="muted small">Llamafone Settings, now in folders</figcaption>
+          </figure>
+          <figure class="changelog-figure">
+            <img src="img/aisettings.PNG" alt="Llamafone AI settings in game: Provider, Model, Thinking, Max tokens, Language, and Test connection">
+            <figcaption class="muted small">Llamafone Settings &gt; AI settings</figcaption>
+          </figure>
+        </div>
+        <ul>
+          <li><strong>AI settings in game.</strong> Pick a provider from a list, switch models, set the thinking level, max tokens, and language, and test the connection, all from <em>Llamafone Settings</em>. Only the API key stays in <code>llamafone.cfg</code>.</li>
+          <li><strong>Settings in folders.</strong> <em>Llamafone Settings</em> is grouped into AI settings, Incoming calls &amp; texts, Texts &amp; replies, and Llamagram, so it's shorter and easier to find things. New in there: incoming calls and texts on or off, and birth announcements.</li>
+          <li><strong>Language in game.</strong> Change the language your sims write in under AI settings. Dating profiles now follow it too (they were always in English).</li>
+          <li><strong>Max tokens</strong> is a cutoff, not a target: it doesn't make sims write more. New installs start at 1024; yours keeps its current value. Raise it if messages get cut off or come back empty, which happens most with local models and OpenRouter.</li>
+          <li><strong>One model setting.</strong> New <code>llamafone.cfg</code> files have a single <code>model</code> line instead of <code>default_model</code> and <code>fast_model</code>, and it's used for everything. Your existing cfg keeps working as is: if it has no <code>model</code> line, Llamafone uses your <code>fast_model</code> (then <code>default_model</code>), the same model your texts and calls already used.</li>
+          <li><strong>Fewer mix-ups on Claude Haiku 5.5.</strong> It now thinks harder before replying, so it keeps track of who's who (like who just moved in). Adjustable under <em>Thinking</em>.</li>
+          <li><strong>Real job titles and trait names.</strong> Sims say "Adept Attorney," not "level 5 in law," and traits read the way the game shows them, like "Heart on Your Sleeve" and "Family-Oriented."</li>
+          <li><strong>Replies know your household.</strong> Replying in a conversation now includes your sim's family and news, so a best friend knows about the new baby.</li>
+          <li><strong>Visiting a baby counts.</strong> Relatives who came over after the birth no longer say "can't wait to meet him," even after the baby grows into an infant.</li>
+          <li><strong>Calls and texts only go to sims at home with you</strong>, not to someone at work.</li>
+          <li><strong>No more auto-muting.</strong> Llamafone no longer mutes or pauses a sim based on words in a message (it misread jokes like "don't text me, get back to work! lol"). Mute and Ask for space are still in <em>Manage contacts</em>, and anyone already muted stays muted until you change it there.</li>
+          <li><strong>Squashed bugs.</strong> No more pets getting phone calls, cleaner relationship and career details in messages, and settings that didn't save when tapped now do.</li>
+        </ul>
+      </div>
+    </li>
 
     <li class="changelog-entry">
       <div class="changelog-date">October 10, 2026</div>
@@ -1153,66 +1187,6 @@ fast_model    = llama-3.2-3b-instruct</code></pre>
           <li><strong><code>llama.status</code> shows what's in use:</strong> the provider, the cfg file, and the Mods folder, or "NOT FOUND". If the cfg can't be found at startup, the popup now says so instead of asking for an API key.</li>
           <li>Your per-save Llamafone data stays where it is.</li>
         </ul>
-      </div>
-    </li>
-
-    <li class="changelog-entry">
-      <div class="changelog-date">October 1, 2026</div>
-      <div class="changelog-body">
-        <h3>Llamagram: social media for your sims (v3.8)</h3>
-        <p>Your sims can post now, and the sims in your save react. Plus fixes to how birth news gets shared. Drop-in over v3.7.</p>
-        <p><strong>New:</strong></p>
-        <ul>
-          <li><strong>Llamagram Post.</strong> Write a post as any household sim and choose who sees it: Friends (people your sim knows) or Public (anyone in the world). Real sims from your save comment over the next little while: family, friends, exes, and, on public posts, strangers who've never met you. Sometimes a few people comment, sometimes nobody does. Comments arrive a few at a time, with likes and views climbing as the post spreads.</li>
-          <li><strong>Llamagram Notifications.</strong> Each sim's own inbox: comments on their posts, replies to their comments, and friends' posts. It shows their follower count and their latest post's views, likes, and comments. Open a comment to reply, and that sim answers back.</li>
-          <li><strong>Friends post too.</strong> The sims you know post about their own lives on their own: the new job, the ranch, the baby. Comment on a post, or scroll past.</li>
-          <li><strong>Followers and fame.</strong> Posts that land well grow your follower count, and posts that start fights cost you followers. The count also drifts on its own over time. Famous sims (Get Famous) start with a following to match their stars, from 2,000 for an Up and Comer to 10 million for an Icon. Fame is hard to earn: only a post that truly goes viral, or passing a big follower milestone, raises it, and posts can boost fame at most once an in-game day. The AI judges how far each post travels from what it actually says, so a celebrity's "what are you all up to" is a nice post, not a viral one.</li>
-          <li><strong>Fans.</strong> Big accounts draw fan comments from made-up usernames on top of the real sims' comments. They're display only and don't touch relationships.</li>
-          <li><strong>Breakouts.</strong> Once in a long while a post gets huge: the AI judges from the content (a surprise engagement, a jaw-dropping moment, a real scandal), and a tiny number of ordinary viral posts just explode. A breakout reaches hundreds of thousands to millions of views no matter how small the account, pours in followers over the day, and with Get Famous is a real fame boost. A scandal spreads just as far, but costs followers.</li>
-          <li><strong>Posts carry into calls and texts.</strong> A friend who saw your post can call about it ("I saw your post about fatherhood..."), and someone you traded comments with picks up where the comments left off. Comments from people your sim knows move friendship and romance the same way texts do. Strangers' comments never do, and never add anyone to your relationship panel.</li>
-          <li><strong>Controls.</strong> In Llamafone Settings: turn Llamagram on or off, and turn off the pop-ups for friends' posts or for comments on yours (they still land in Llamagram Notifications). Muted contacts never post to you or comment on your posts. In <code>llamafone.cfg</code>: <code>social_enabled</code>, <code>social_npc_post_weight</code>, <code>social_post_popups</code>, <code>social_comment_popups</code>.</li>
-          <li><strong>Nothing lost on a quit.</strong> Comments that haven't arrived yet are saved and delivered quietly when you load the save again, with one "while you were away" notification instead of a pile of pop-ups. Everything lives in <code>Feed.json</code> in the save's folder, which you can edit by hand like <code>Journal.json</code>.</li>
-        </ul>
-        <p><strong>Fixes:</strong></p>
-        <ul>
-          <li><strong>No more announcing a birth twice.</strong> When one parent has already told someone about the baby, the other parent no longer calls that household with the news as if it's new.</li>
-          <li><strong>Correct kid counts after a birth.</strong> A new baby is no longer counted as an older sibling, so a first-time mom doesn't announce "two kids in the house now."</li>
-          <li><strong>"Can't wait to meet her" from someone who already has.</strong> Sims now know whether they've met a baby or toddler in person.</li>
-          <li><strong>The same milestone shown twice.</strong> Duplicate "had a baby" lines no longer appear in prompts.</li>
-          <li><strong>Grandparents hear about a birth in about a day, not an hour.</strong> "Grandmother" was matching the parent tier, so grandparents knew almost instantly and could even beat a sibling to the announcement text.</li>
-          <li><strong>No more announcing a birth twice after a restart.</strong> Quitting right after a birth could make the new parent text you again on the next load.</li>
-          <li><strong>Clearing a pregnancy isn't a birth.</strong> When the game drops an off-lot sim's pregnancy (or you clear one with MCCC) and no baby appears, the mod no longer records "had a baby" or sends an announcement.</li>
-          <li><strong>The baby's father hears fast.</strong> A father who lives elsewhere isn't assumed to know the moment the baby arrives (nobody has told him yet), but word reaches him within hours, like it reaches her parents, unless she texts him first. And when the birth happens in a household you aren't playing, the other parent always gets the announcement text, however bad things are between them.</li>
-          <li><strong>Nobody gets texted about a birth they were there for.</strong> Anyone on the lot when the baby arrives is treated as already knowing, and later messages say they were there.</li>
-          <li><strong>Switching households after a birth.</strong> If a baby is born in the household you're playing, then you switch to the father's or the grandparents' household, the announcement now arrives within a couple of minutes instead of never.</li>
-          <li><strong>Births after a rolled-back session.</strong> If you quit without saving and a sim gives birth again, the new baby is recorded and announced instead of being mistaken for the old one.</li>
-          <li><strong>New pregnancies in your household are tracked right away.</strong> The birth watcher now notices a household sim who just got pregnant on its own, without waiting for a text, call, or save load.</li>
-          <li><strong>Baby circumstances for off-lot parents.</strong> Kid count and money now show for parents who don't live on your lot, too.</li>
-          <li><strong>No romance across the teen/adult line.</strong> A flirty message or comment between a teen and an adult never changes their romance bar, and Llamagram commenters are told not to flirt with a teen's post.</li>
-        </ul>
-        <p><strong>Cheat console:</strong> <code>llama.post [public] text</code>, <code>llama.npcpost [First Last]</code>, <code>llama.feed</code>, <code>llama.inbox</code>.</p>
-      </div>
-    </li>
-
-          <li><strong>Pregnancy and birth news spreads the way it actually does.</strong> Contacts "hear" about a pregnancy or birth after a delay set by how close they are: parents within hours, siblings and spouses in half a day, grandparents a day, aunts/uncles/in-laws a day and a half, close friends two days, casual friends four, acquaintances only if told. Until they've heard, a sim who reaches out on their own gets no trace of it — not the milestone, not the newborn in the household or mutuals lists — so they can't lead with it. Being told directly always counts, and a visibly showing pregnancy is public. If you reply to someone who hasn't heard, the facts are still there so the AI can react when you bring it up.</li>
-          <li><strong>Sims announce their own household's news — once, plainly, in character.</strong> A sim whose spouse is pregnant (or just had the baby) breaks the news the next time they contact you, and never re-announces once it's in your history. Tone comes from a circumstances line — whether the other parent is their spouse, an unusual origin, teen or elder, relevant traits, existing kids, money trouble — so a planned baby reads as joy and a surprise reads as a surprise.</li>
-          <li><strong>Pregnancies have a visibility ladder.</strong> Sims 4 flips <code>is_pregnant</code> at conception — before the test, before anyone knows — and the mod used to tell every contact immediately. Now a pregnancy is <em>hidden</em> (pre-test: nobody knows, not even her), <em>confirmed</em> (test taken), or <em>visible</em> (Trimester 2/3: showing, public). Read from buffs for sims on the lot and from the pregnancy commodity's own state for off-lot sims, so NPC pregnancies across the world resolve correctly. Stale entries already in your save are handled.</li>
-          <li><strong>Both parents get the milestone.</strong> "Aksel and Francesca had a baby" / "Aksel is expecting a baby with Francesca" show up in the father's recent life as well as the mother's — so his side of the family has something to hear about.</li>
-          <li><strong>Autosave and in-game loads work.</strong> Loading the Autosave, or switching saves from the in-game Load menu, now picks up the right save's texts, journal, and memory. The game records inside every save which save slot it belongs to, and Llamafone reads that. Copies made with Save As get their own slot, so they stay separate. A save last written before that game patch doesn't have the record yet, so Llamafone stays off for it and tells you. Save it once and it works from then on.</li>
-          <li><strong>Incoming messages from a specific sim:</strong> <code>llama.textfrom First Last</code> and <code>llama.callfrom First Last</code>. (<code>llama.text</code> / <code>llama.call</code> pick a random contact and take no name.)</li>
-        </ul>
-        <p><strong>Fixes:</strong></p>
-        <ul>
-          <li><strong>Switching saves from the in-game menu no longer mixes them up.</strong> Since v3.5, if you loaded one save and then switched to another through the in-game Load menu (without going back to the main menu), texts, journal entries, and memory from the second save could be written into the first save's folder. Loading from the main menu was never affected. Now each save always uses its own folder. If you switched saves this way in v3.5 or v3.6, a save's folder may hold some entries from another save. Most of them are about sims who don't exist in that save, so they're ignored.</li>
-          <li><strong>Family voice.</strong> A grandmother texting her grandson about her husband says "your grandpa," not "Richard." Parents don't ask their kids for advice on running their own house. A sim the game happened to assign an NPC nanny career is no longer described to their own daughter as "a professional nanny, not a friend or family."</li>
-          <li><strong>The AI knows when a wedding is happening right now.</strong> Events that just started were dropped from the prompt, so mid-ceremony the AI would fabricate "what a day that was." Live events are now listed as happening right now, with a guard against wrap-up framing.</li>
-          <li><strong>No more "congrats, just heard!" about things they attended.</strong> Milestones are labeled established facts, a marriage milestone next to an attended wedding says so, facts a contact has already been shown are marked "already known" instead of silently dropped, and the fact blocks now outrank the AI's own earlier messages — so one bad line can't become canon.</li>
-          <li><strong>Events you weren't invited to are listed as exactly that.</strong> Upcoming and recent events on the recipient's calendar that the caller isn't attending are shown as forbidden knowledge — so a cousin who heard about the baby shower knows it's tomorrow and that he isn't going, instead of asking how it went or what to bring.</li>
-          <li><strong>Calendar noise.</strong> Holidays are background, not a topic (no more three Winterfest headcount calls in a row). Engine situations — NPC visit greetings, secret-society visits, civic inspector, walkbys, random gifts, restaurant outings, dance sessions, newborn caregivers — no longer show up as "events you both attended." A wedding you edited and re-saved under the other spouse no longer leaves a ghost wedding that reads as "today" days later. Mod-namespaced situation names render properly ("Ultrasound Hospital", "Romantic Date").</li>
-          <li><strong>Milestones use in-game time.</strong> "yesterday," "a few hours ago," "earlier this week" — not "[Sep 25]."</li>
-          <li><strong>Conversation memory doubled.</strong> Prompts carry the last 12 exchanges with a contact instead of 6.</li>
-        </ul>
-        <p><strong>Diagnostics (cheat console):</strong> <code>llama.saveinfo</code>, <code>llama.pregdebug First Last</code>, <code>llama.roledebug First Last</code>, <code>llama.birthwatch</code>, <code>llama.testbirth First Last</code> (test mode — never journaled), <code>llama.pastevents</code> / <code>llama.pastevents_drop id</code>, <code>llama.journal_undo First Last [count]</code>.</p>
       </div>
     </li>
 

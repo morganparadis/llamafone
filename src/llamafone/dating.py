@@ -2306,10 +2306,16 @@ def generate_bio_for(sim_info, callback):
                 pass
 
     try:
-        from . import api_client
+        from . import api_client, config
+        # The language setting applies here too (bios were always English).
+        # The BIO header stays as-is so the parser finds it.
+        language = config.get_language() or "English"
+        system = _BIO_SYSTEM + (
+            f"\nWrite the bio, the prompts, and the answers in {language}. Keep the "
+            "first line as the word BIO exactly." if language.strip().lower() != "english" else "")
         api_client.call_ai_async(
             messages=[{"role": "user", "content": user_msg}],
-            system=_BIO_SYSTEM,
+            system=system,
             use_fast_model=True,
             callback=_on_llm,
         )

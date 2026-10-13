@@ -2,6 +2,8 @@
 
 A phone-first AI mod for The Sims 4. Random sims call and text you in character — voices shaped by their traits, mood, relationships, and what's actually happening in your save. Bring your own AI — Claude, OpenAI, Gemini, or a local model through Ollama or LM Studio — and pick up calls and texts that read like they were written for the people in front of you.
 
+**v3.8.4:** AI settings in game (provider, model, thinking, max tokens, language), settings grouped into folders, one `model` setting, real job titles and trait names, and replies that know more about your household.
+
 **v3.8.3:** Gemini 3 and newer OpenAI models work, new installs default to Claude Haiku 5.5, and New Year's Eve is treated as the eve.
 
 **v3.8.2:** trip memory (sims remember vacations and who went, and everyone else hears about it the way news travels), LM Studio support (free, local, no key), and bug fixes, including Claude Haiku 5.5 support.
@@ -50,7 +52,7 @@ No Python install required for end users — the release ships compiled `.pyc` b
 
 For Ollama, `ollama_endpoint` in the config points at your local server (default `http://localhost:11434`). No key, no cost, no internet required after the model download. It's the most technical option — you install Ollama, keep the tray icon running, and `ollama pull` a model before the mod can use it. Run `llama.testconnection` in-game to verify setup end-to-end (checks reachability, lists installed models, verifies your configured models match, runs a tiny generation).
 
-For LM Studio, set `provider = lmstudio`. In LM Studio, load a model with **Context Length 16384** (12288 at the very least), then switch the server on in the Developer tab. `lmstudio_endpoint` defaults to `http://localhost:1234`; the address LM Studio shows (ending in `/v1`) works too. Put the model's name in `default_model` and `fast_model`; `llama.testconnection` lists the names LM Studio offers.
+For LM Studio, set `provider = lmstudio`. In LM Studio, load a model with **Context Length 16384** (12288 at the very least), then switch the server on in the Developer tab. `lmstudio_endpoint` defaults to `http://localhost:1234`; the address LM Studio shows (ending in `/v1`) works too. Put the model's name in `model`; `llama.testconnection` lists the names LM Studio offers.
 
 **Context size:** a call or text prompt is about 8,000 tokens (relationships, history, life events, the calendar), plus room for the reply. Give local models a context length of **16k** (12k at the very least): in LM Studio, set it when loading the model; in Ollama, set **Context length** in its settings (its default is too small, and it quietly cuts long prompts). With less, replies fail or the model loses part of what it was told.
 
@@ -58,7 +60,7 @@ Local models get up to 5 minutes per reply (cloud providers: 60 seconds). Withou
 
 **A note on local models:** they're free, but slower and less capable than the cloud options. Each reply takes anywhere from about 15 seconds with a decent graphics card to a minute or more without one, where cloud models answer in a few seconds. Small models also sometimes mix up details, like when an event is or what to call a family member. The cloud models follow the mod's instructions much more closely.
 
-For OpenRouter, model names use the `vendor/model` form so `default_model = anthropic/claude-haiku-4.5` gets you Claude via OpenRouter's proxy, `default_model = openai/gpt-4o-mini` gets you GPT, etc. One key covers everything — useful if you want to try several models without juggling separate accounts.
+For OpenRouter, model names use the `vendor/model` form so `model = anthropic/claude-haiku-4.5` gets you Claude via OpenRouter's proxy, `model = openai/gpt-4o-mini` gets you GPT, etc. One key covers everything — useful if you want to try several models without juggling separate accounts.
 
 ---
 
@@ -203,7 +205,6 @@ Mute, "asked for space" (paused), or favorite (priority), plus a freeform note f
 - **Phone → Llamafone → Settings → Manage contacts** — pick a sim, pick an action. Contacts with an existing state or note surface first, tagged in brackets ([paused], [muted], note).
 - **Cheat command:** `llama.contact First Last muted|paused|priority|clear|note <text>` (scoped to the currently active household sim).
 - **The paused state is the interesting one.** Instead of blocking the contact, it drops their auto-event rate to 20% AND injects a boundary note into every AI prompt for that pair. A love-heavy ex might ignore it and keep calling; a decent friend apologizes; a mean one guilt-trips. The drama plays out based on who they are.
-- **Auto-detects distance signals.** "Leave me alone", "we're done", "need space", "back off", etc. in either direction (their message OR yours) auto-applies the matching state. Priority-tier contacts are exempt.
 - **Freeform notes carry heavy weight in the prompt.** Write "kid's teacher" or "asked for space after breakup" or "boss's boss" and the AI reads that on every prompt for the pair.
 
 ---
@@ -328,13 +329,13 @@ Two paths to change settings:
 |---|---|---|---|
 | `provider` | `claude` | ❌ | `claude`, `openai`, `gemini`, `openrouter`, `ollama`, or `lmstudio` |
 | `api_key` | *(required for cloud providers)* | ❌ | Blank for Ollama and LM Studio |
-| `default_model` | `claude-haiku-5-5` | ❌ | Used for briefings and storyline generation |
-| `fast_model` | `claude-haiku-5-5` | ❌ | Used for calls, texts, and reply generation |
+| `model` | `claude-haiku-5-5` | ❌ | The AI model for everything: texts, calls, replies, Llamagram |
+| `fast_model`, `default_model` | *(older cfgs)* | ❌ | Older names for the model. If `model` isn't set, Llamafone uses `fast_model`, then `default_model` (deprecated), so existing setups keep working. |
 | `ollama_endpoint` | `http://localhost:11434` | ❌ | Only used when provider = `ollama` |
 | `lmstudio_endpoint` | `http://localhost:1234` | ❌ | Only used when provider = `lmstudio` |
-| `max_tokens` | `512` | ❌ | Max length of responses |
+| `max_tokens` | `1024` | ❌ | The longest a reply can be (in tokens; also in game as Max tokens). It doesn't make sims write more. Raise it if messages get cut off or come back empty, which happens most with local models and OpenRouter. |
+| `thinking_effort` | `auto` | ❌ | Claude only. How hard Claude thinks before replying: `auto` (xhigh for Haiku 5.x, model default otherwise), or `low` / `medium` / `high` / `xhigh`. Higher is more accurate but slower and costs more. (`max` isn't supported: it thinks so long the reply comes back empty; a cfg set to `max` uses `xhigh`.) |
 | `language` | `English` | ❌ | Language for all generated content |
-| `main_sim_name` | *(blank)* | ❌ | Your protagonist's full name. Blank = active sim. |
 | `phone_allow_ghosts` | `true` | ✅ | Allow ghost sims to call/text |
 | `auto_events_enabled` | `false` | ✅ | Turn on random auto-events |
 | `auto_event_interval_minutes` | `20` | ✅ | Real-world minutes between checks |
@@ -371,7 +372,7 @@ A typical session of ~30 calls costs a few cents on Claude Haiku 5.5 and under a
 
 **Llamagram adds a little:** each of your posts is one larger call (it writes all the comments at once), each reply to a comment is one more, and with auto-events on, friends' posts are about one in five auto-events at the default weight.
 
-**To minimize cost** on Claude/OpenAI, keep `default_model` and `fast_model` on the cheap tier (Haiku / gpt-4o-mini). Quality dips slightly for long-form stories but stays strong for calls, texts, dialogue, and short narratives — and cost drops ~20×.
+**To minimize cost** on Claude/OpenAI, keep `model` on the cheap tier (Haiku / gpt-4o-mini). Quality dips slightly for long-form stories but stays strong for calls, texts, dialogue, and short narratives — and cost drops ~20×.
 
 ---
 
@@ -430,7 +431,7 @@ src/
     trips.py                    trip memory: travel-group watcher, Trips.json, trip lines in prompts
     interactions.py             logs in-person interactions via Relationship.add_relationship_bit
     group_texts.py              persistent group thread storage (per save)
-    contact_prefs.py            per-pair contact prefs (state + note) + relationship_events (origin, etc.) + auto-detection
+    contact_prefs.py            per-pair contact prefs (state + note) + relationship_events (origin, etc.)
     dating.py                   Llamadate: opt-ins, bios, candidate filtering, cold outreach, reply classifier
     save_notes.py               save-level world-context notes prepended to every prompt
     sim_bios.py                 per-sim character notes (backstory / private context) injected into descriptor blocks

@@ -1094,6 +1094,24 @@ model = llama-3.2-3b-instruct   # the model's name in LM Studio</code></pre>
   <ol class="changelog-list">
 
     <li class="changelog-entry">
+      <div class="changelog-date">October 27, 2026</div>
+      <div class="changelog-body">
+        <h3>Every language, Save As, and smoother setup (v3.8.5)</h3>
+        <p>Fixes from your reports. Drop-in over v3.8.4.</p>
+        <ul>
+          <li><strong>Buttons show in every language.</strong> On games set to a language other than English, the LlamaDate, Llamagram Post, and Llamagram Notifications buttons were blank. They now show their names.</li>
+          <li><strong>Save As keeps your Llamafone data.</strong> A new save made with Save As starts with everything from the save you were playing: messages, memories, Sim bios, Save Notes, and Llamagram. Save As over a save that had its own Llamafone data? That data is moved to a backup folder, never deleted.</li>
+          <li><strong>Settings opens before you're set up.</strong> New Ollama and LM Studio players can open Llamafone Settings and pick their provider in game. Before, Settings wouldn't open until the cfg was set up.</li>
+          <li><strong>Sims who've met know each other.</strong> A sim who came to your dinner party, saw you recently, or has texted you before no longer asks if you remember them, even when your friendship is still low.</li>
+          <li><strong>Events remember who hosted and where.</strong> Sims know you hosted the dinner party at your home, or that happy hour was at the bar.</li>
+          <li><strong>Fewer repeats.</strong> In a long text conversation, sims don't keep opening with "good to hear from you."</li>
+          <li><strong>Cleaner settings menus</strong>, without the instructions under each header.</li>
+          <li><strong>Clearer help for empty replies</strong>, and Gemini keys are no longer part of the web address Llamafone calls, so they can't show up in a log.</li>
+        </ul>
+      </div>
+    </li>
+
+    <li class="changelog-entry">
       <div class="changelog-date">October 12, 2026</div>
       <div class="changelog-body">
         <h3>Settings in game and in folders, real job titles, and smarter replies (v3.8.4)</h3>
@@ -1171,20 +1189,6 @@ model = llama-3.2-3b-instruct   # the model's name in LM Studio</code></pre>
           <li><strong>No real-world dates.</strong> Conversations only ever use in-game time.</li>
           <li><strong>Local model fixes.</strong> Ollama and LM Studio get up to 5 minutes per reply, models that "think" first (like Gemma 4) no longer come back empty, and dashes and apostrophes no longer come out garbled.</li>
           <li><strong>Clearer errors.</strong> LM Studio problems are explained in plain English with the fix, an empty reply shows an error instead of nothing, and failed requests are noted in <code>Llamafone_Log.txt</code>.</li>
-        </ul>
-      </div>
-    </li>
-
-    <li class="changelog-entry">
-      <div class="changelog-date">October 3, 2026</div>
-      <div class="changelog-body">
-        <h3>Config file fix (v3.8.1)</h3>
-        <p>A fix for players whose <code>llamafone.cfg</code> was never created, or whose settings were ignored. Drop-in over v3.8.</p>
-        <ul>
-          <li><strong>The cfg is created and found wherever your Sims 4 folder lives.</strong> Llamafone used to look for the Mods folder only at <code>Documents\Electronic Arts\The Sims 4\Mods</code> in your user folder. If Windows keeps your Documents in OneDrive or on another drive, the cfg was never created, and a cfg you added yourself was never read, so the mod fell back to its defaults (Claude, no key) even when you'd picked Ollama. Llamafone now finds the Mods folder it's installed in, and works with non-English game folders like "Die Sims 4".</li>
-          <li><strong><code>llamafone.cfg.txt</code> works too.</strong> Windows hides file extensions, so a cfg saved from Notepad can end up named <code>llamafone.cfg.txt</code>. Llamafone now reads it.</li>
-          <li><strong><code>llama.status</code> shows what's in use:</strong> the provider, the cfg file, and the Mods folder, or "NOT FOUND". If the cfg can't be found at startup, the popup now says so instead of asking for an API key.</li>
-          <li>Your per-save Llamafone data stays where it is.</li>
         </ul>
       </div>
     </li>

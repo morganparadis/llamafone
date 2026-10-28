@@ -409,6 +409,9 @@ If past chat contradicts the current label, assume a falling-out happened since 
 CURRENT status overrides past tone. By tier:
 - friends / close / best friends: warm, glad to be in touch
 - friendly acquaintances: polite, normal
+- know each other a little: friendly but a bit formal. You've met and talked \
+  before, so you know who they are: never ask if they remember you, never act \
+  confused about who they are.
 - barely know each other: hesitant, confused, off-balance. You met the player \
   once or twice and barely remember them. Calling them feels random even to you. \
   Lead with confusion: "Hey... is this still the right number?", "Sorry, this is \
@@ -658,6 +661,9 @@ If past chat contradicts the current label, assume a falling-out happened since 
 CURRENT status overrides past tone. By tier:
 - friends / close / best friends: warm, glad to be in touch
 - friendly acquaintances: polite, normal
+- know each other a little: friendly but a bit formal. You've met and talked \
+  before, so you know who they are: never ask if they remember you, never act \
+  confused about who they are.
 - barely know each other: hesitant, confused, off-balance. You met the player \
   once or twice and barely remember them. Texting them feels random even to you. \
   Lead with confusion: "hey... sorry is this [player first name]?", "wait who is \
@@ -892,6 +898,9 @@ If past chat contradicts the current label, assume a falling-out happened since 
 CURRENT status overrides past tone. By tier:
 - friends / close / best friends: warm, glad to hear from them
 - friendly acquaintances: polite, normal
+- know each other a little: friendly but a bit formal. You've met and talked \
+  before, so you know who {main_name} is: never ask if they remember you, never \
+  act confused about who they are.
 - barely know each other: HESITANT, CONFUSED. You met {main_name} once or twice and \
   barely remember them. Getting a text from them feels random even to you. Lead with \
   confusion: "wait who is this lol", "sorry — is this {main_name}? remind me where we \
@@ -925,6 +934,9 @@ make a child act like an adult.
 1-2 SHORT messages, max 2 sentences each. React authentically to what {main_name} just \
 said — no generic responses. Stay reactive (don't pivot to your own unrelated topic \
 unless what {main_name} said genuinely doesn't warrant a substantive reply).
+The conversation so far is ONE ongoing conversation. Don't repeat greetings or openers \
+you already used in it ("good to hear from you", "of course I remember you"): after \
+your first reply, just pick up where it left off.
 
 # Geography rule (STRICT)
 Look at {other_name}'s world vs {main_name}'s world (both listed in the context).
@@ -3638,6 +3650,12 @@ def _describe_relationship(contact, recipient=None):
                             "recently matched on Llamadate -- actively "
                             "getting to know each other, curious and open"
                         )
+                    elif _have_clearly_met(si_id_for_origin, rec_id_for_origin):
+                        # Low friendship, but they've been to an event
+                        # together, met in person, or talked before:
+                        # not strangers who might not remember each other.
+                        f_label = ("know each other a little -- have met and "
+                                   "talked before")
             except Exception:
                 pass
         if f_label:
@@ -3973,6 +3991,27 @@ def _describe_relationship(contact, recipient=None):
             pass
 
     return "\n".join(parts)
+
+
+def _have_clearly_met(sim_a_id, sim_b_id):
+    """True when there's a record of the two sims knowing each other: a
+    shared event, an in-person meeting, or a past conversation."""
+    try:
+        if past_events.get_recent_for(sim_a_id, sim_b_id):
+            return True
+    except Exception:
+        pass
+    try:
+        if interactions.most_recent_for_pair(sim_a_id, sim_b_id):
+            return True
+    except Exception:
+        pass
+    try:
+        if journal.last_entry_timestamp_for_pair(sim_a_id, sim_b_id):
+            return True
+    except Exception:
+        pass
+    return False
 
 
 def _friendship_label(score):

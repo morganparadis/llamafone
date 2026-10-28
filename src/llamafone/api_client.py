@@ -455,11 +455,13 @@ def _call_gemini(api_key, model, max_tokens, system, messages):
     }
     if system:
         body["systemInstruction"] = {"parts": [{"text": system}]}
+    # Key in a header, not the URL: a URL can end up in an error message
+    # or a log, and players share their logs.
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{model}:generateContent?key={api_key}"
+        f"{model}:generateContent"
     )
-    headers = {"Content-Type": "application/json"}
+    headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
     stdout, err, _rc = _curl(url, headers, json.dumps(body))
     if err:
         return "", err
@@ -881,7 +883,8 @@ def call_ai_async(messages, system=None, use_fast_model=False, callback=None, ma
         # An empty reply used to reach callers as ("", None): no message
         # AND no error, so the player saw nothing at all.
         if not err and not (text or "").strip():
-            err = "The AI sent back an empty reply. Try again, or try a different model."
+            err = ("The AI sent back an empty reply. Try again, raise Max tokens "
+                   "(Llamafone > Settings > AI settings), or try a different model.")
         if err:
             _log_failure(provider, model, err, time.time() - started)
             err = _explain_model_gone(provider, model, err)

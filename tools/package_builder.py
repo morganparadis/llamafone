@@ -418,6 +418,15 @@ STRINGS = {
 #              remaining 7 bytes are an arbitrary unique value.
 STBL_GROUP = 0x80000000
 STBL_INSTANCE = 0x0080000000000001
+# One copy of the table per game language. With only the English one, a
+# game set to another language found no text for our own names and
+# showed blank buttons (Llamadate, Llamagram Post, Llamagram
+# Notifications on an Italian game, issue #10); buttons that reuse the
+# game's own strings were fine. The names stay in English. Codes are the
+# high byte of the instance, read from a shipping mod's STBLs
+# (thatssojordy_WorldTour_CORE: 18 languages) plus 0x16 (Swedish).
+STBL_LANGUAGES = (0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+                  0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x11, 0x12, 0x13, 0x15, 0x16)
 
 
 def main():
@@ -442,8 +451,9 @@ def main():
     # see the STRINGS comment for why.
     if STRINGS:
         stbl_body = build_stbl_v5(STRINGS)
-        resources.append((TYPE_STBL, STBL_GROUP, STBL_INSTANCE, stbl_body))
-        print(f"  + STBL ({len(STRINGS)} strings)")
+        for lang in STBL_LANGUAGES:
+            resources.append((TYPE_STBL, STBL_GROUP, STBL_INSTANCE | (lang << 56), stbl_body))
+        print(f"  + STBL ({len(STRINGS)} strings x {len(STBL_LANGUAGES)} languages)")
 
     # DDS image assets. Any .dds in package_src/ gets embedded as an
     # IMAGE resource. Type/group are Sims 4's UI-image conventions

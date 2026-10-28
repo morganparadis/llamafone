@@ -56,10 +56,10 @@ def _mod_ready():
     try:
         if not config.is_configured():
             notifications.show_error(
-                "Llamafone is not configured yet. Open llamafone.cfg in "
-                "your Mods folder, pick a provider, and add your API key "
-                "(or use provider=ollama or lmstudio for no-key local AI). Then run "
-                "llama.reload."
+                "Llamafone isn't set up yet. Add your API key to llamafone.cfg "
+                "in your Mods folder, then type llama.reload in the cheat "
+                "console. Using Ollama or LM Studio (no key)? Pick it in "
+                "Llamafone > Settings > AI settings."
             )
             return False
     except Exception:
@@ -279,13 +279,17 @@ class _LlamafonePhoneInteractionBase(SuperInteraction):
     (the API call is async).
     """
 
+    # Tiles that call the AI need a configured provider first. Settings
+    # doesn't: it's where a player sets the provider up.
+    _needs_ai = True
+
     def _fire(self):
         raise NotImplementedError
 
     def _run_interaction_gen(self, timeline):
         _log(f"{type(self).__name__}._run_interaction_gen() entered, sim={getattr(self.sim, 'first_name', '?')}")
         try:
-            ready = _mod_ready()
+            ready = _mod_ready() if self._needs_ai else True
             _log(f"  _mod_ready() -> {ready}")
             if ready:
                 self._fire()
@@ -547,7 +551,7 @@ def _start_outbound_text_or_group(sim_info):
 
 
 class LlamafoneCallInteraction(_LlamafonePhoneInteractionBase):
-    """Phone > Social > Call Someone -- pick a recipient, type a topic,
+    """Phone > Llamafone > Call Someone -- pick a recipient, type a topic,
     Llamafone crafts and delivers the call."""
 
     def _fire(self):
@@ -567,7 +571,7 @@ def _group_text_feature_enabled():
 
 
 class LlamafoneTextInteraction(_LlamafonePhoneInteractionBase):
-    """Phone > Social > Send Text -- pick 1 recipient for a direct text
+    """Phone > Llamafone > Send Text -- pick 1 recipient for a direct text
     or up to N for a group text. Llamafone routes based on selection
     count (see _start_outbound_text_or_group). Falls back to the
     original single-select flow when group_text_enabled=False."""
@@ -870,12 +874,7 @@ def _show_settings_picker(anchor_sim):
             version = "?"
 
         loc_title = LocalizationHelperTuning.get_raw_text(f"Llamafone Settings (v{version})")
-        loc_text = LocalizationHelperTuning.get_raw_text(
-            "Pick a setting to change. Toggles flip on/off; numeric "
-            "settings open a text box. Changes save instantly and apply "
-            "without reloading. Only the API key "
-            "lives in llamafone.cfg."
-        )
+        loc_text = LocalizationHelperTuning.get_raw_text("")
         loc_ok = LocalizationHelperTuning.get_raw_text("Change")
         loc_cancel = LocalizationHelperTuning.get_raw_text("Done")
 
@@ -2043,7 +2042,7 @@ def _show_group_settings_picker(anchor_sim, group):
 
         rows = [d for d in _setting_definitions() if d.get("home") == group]
         loc_title = LocalizationHelperTuning.get_raw_text(_SETTING_GROUPS.get(group, "Settings"))
-        loc_text = LocalizationHelperTuning.get_raw_text("Tap a setting to change it.")
+        loc_text = LocalizationHelperTuning.get_raw_text("")
         loc_ok = LocalizationHelperTuning.get_raw_text("Change")
         loc_cancel = LocalizationHelperTuning.get_raw_text("Back")
         dialog = UiItemPicker.TunableFactory().default(
@@ -2170,7 +2169,7 @@ def _show_int_input(anchor_sim, setting):
 # freeform note. All three levels re-open their parent picker after a
 # save so the player can chain edits without re-navigating.
 #
-# Reached via Phone > Social > Llamafone Settings > "Manage contacts..."
+# Reached via Phone > Llamafone > Settings > "Manage contacts..."
 # for v1. A pie-menu-on-sim entry point (Phase 2) will call the same
 # flow starting from _show_contact_actions(anchor_sim, contact).
 # ---------------------------------------------------------------------------
@@ -2865,12 +2864,14 @@ class LlamafoneDatingInteraction(_LlamafonePhoneInteractionBase):
 
 
 class LlamafoneSettingsInteraction(_LlamafonePhoneInteractionBase):
-    """Phone > Social > Settings -- opens the in-game settings
+    """Phone > Llamafone > Settings -- opens the in-game settings
     panel listing the runtime-toggleable settings (auto events on/off,
     chance, interval, reply delay). Selecting a row flips a bool or
     opens a text-input dialog for a numeric value; changes are saved
     to Llamafone_Settings.json and apply immediately without reloading
     the save."""
+
+    _needs_ai = False   # opens even before a provider is set up
 
     def _fire(self):
         sim_info = getattr(self.sim, "sim_info", None) or self.sim

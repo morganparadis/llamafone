@@ -2,6 +2,8 @@
 
 A phone-first AI mod for The Sims 4. Random sims call and text you in character — voices shaped by their traits, mood, relationships, and what's actually happening in your save. Bring your own AI — Claude, OpenAI, Gemini, or a local model through Ollama or LM Studio — and pick up calls and texts that read like they were written for the people in front of you.
 
+**v3.8.5:** Llamafone's buttons show in every game language, Save As keeps your Llamafone data, Settings opens before setup (pick Ollama or LM Studio in game), and sims who've met no longer ask if you remember them.
+
 **v3.8.4:** AI settings in game (provider, model, thinking, max tokens, language), settings grouped into folders, one `model` setting, real job titles and trait names, and replies that know more about your household.
 
 **v3.8.3:** Gemini 3 and newer OpenAI models work, new installs default to Claude Haiku 5.5, and New Year's Eve is treated as the eve.

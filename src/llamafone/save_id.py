@@ -699,9 +699,44 @@ def _auto_save_slot_id():
     return _auto_save_slot_const[0]
 
 
+def _carry_over_on_save_as(src_id, dst_id):
+    """Save As to another slot: the new save is a copy of this game, so
+    its Llamafone data comes along (messages, memories, bios, notes,
+    Llamagram, contacts). If the destination slot already had Llamafone
+    data (a Save As over another save), that data no longer matches its
+    game; it's moved to a backup folder next to it, never deleted.
+    Returns True when data was copied."""
+    import shutil, datetime
+    base_root = os.path.join(_saves_folder(), "Llamafone")
+    src = os.path.join(base_root, src_id)
+    dst = os.path.join(base_root, dst_id)
+    if not os.path.isdir(src) or not os.listdir(src):
+        return False
+    backup = None
+    if os.path.isdir(dst) and os.listdir(dst):
+        stamp = datetime.date.today().isoformat()
+        backup = f"{dst}.before-save-as-{stamp}"
+        n = 2
+        while os.path.exists(backup):
+            backup = f"{dst}.before-save-as-{stamp}-{n}"
+            n += 1
+        os.rename(dst, backup)
+    elif os.path.isdir(dst):
+        os.rmdir(dst)
+    shutil.copytree(src, dst)
+    _log(f"save hook: Save As {src_id} -> {dst_id}: copied Llamafone data"
+         + (f"; the slot's previous data moved to {os.path.basename(backup)}" if backup else ""))
+    return True
+
+
 def _on_real_save(save_game_data):
     """Record identity -> real slot when a save is committed to a real slot."""
     global _last_real_save_id, _last_real_slot_name, _last_handled_save_id
+    # The folder in use right now, before this save moves us to its slot.
+    try:
+        src_id = get_current_save_id()
+    except Exception:
+        src_id = None
     raw = getattr(save_game_data, "slot_id", None)
     try:
         slot_id = int(raw) if raw is not None else None
@@ -720,6 +755,15 @@ def _on_real_save(save_game_data):
     was = _last_real_save_id
     _log(f"save hook: REAL save committed to {sid} (slot_id={slot_id}, name={saved_name!r}, "
          f"household={_current_household_key()}); previous anchor was {was!r}")
+    if src_id and src_id != sid:
+        try:
+            if _carry_over_on_save_as(src_id, sid):
+                from . import notifications
+                notifications.show("Llamafone",
+                                   "Saved as a new save: your sims' messages, memories, "
+                                   "bios, and notes came along.")
+        except Exception as e:
+            _log(f"save hook: Save As copy {src_id} -> {sid} failed: {type(e).__name__}: {e}")
     _last_real_save_id = sid
     _last_real_slot_name = saved_name
     was_dormant = _last_handled_save_id is None

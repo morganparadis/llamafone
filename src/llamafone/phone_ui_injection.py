@@ -9,7 +9,7 @@ tuned interaction shows up on. Our .package ships three interactions
 (Llamafone_Call, Llamafone_Text, Llamafone_Settings) whose `category` points at
 the in-game phoneCategory_Social tile (instance 0x19DBF). This module
 appends them to the Sim object tuning's `_phone_affordances` after
-instance load so they appear under Phone > Social.
+instance load so they appear under the Llamafone tile on the phone.
 """
 import os
 import datetime

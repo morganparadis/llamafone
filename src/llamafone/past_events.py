@@ -246,7 +246,38 @@ def _ticks_to_minutes(ticks):
 # Public API
 # ---------------------------------------------------------------------------
 
-def record_seen(event_id, name, start_time, attendee_ids, honored=None, is_holiday=False):
+def _place_of(zone_id):
+    """Where an event happened, resolved when it's recorded (owners and
+    lot names can change later): the lot's name, and -- when a household
+    lives there -- that household's members, so the prompt can say
+    "at Aksel Hansen's home". Verified in player_planned_drama_node.pyc:
+    the game reads get_zone_proto_buff(zone_id).name for the lot name and
+    compares the seed's zone_id with household.home_zone_id itself."""
+    if not zone_id:
+        return {}
+    place = {"zone_id": int(zone_id)}
+    try:
+        import services
+        proto = services.get_persistence_service().get_zone_proto_buff(zone_id)
+        lot = str(getattr(proto, "name", "") or "").strip() if proto is not None else ""
+        if lot:
+            place["lot"] = lot
+    except Exception:
+        pass
+    try:
+        import services
+        for hh in services.household_manager().values():
+            if getattr(hh, "home_zone_id", None) == zone_id:
+                names = [f"{si.first_name} {si.last_name}".strip() for si in hh.sim_info_gen()]
+                if names:
+                    place["home_of"] = names
+                break
+    except Exception:
+        pass
+    return place
+
+
+def record_seen(event_id, name, start_time, attendee_ids, honored=None, is_holiday=False, zone_id=None):
     """Record/update a single event. Keyed by event_id so repeated calls
     for the same event just refresh the snapshot (newer attendee list etc.).
 
@@ -259,6 +290,7 @@ def record_seen(event_id, name, start_time, attendee_ids, honored=None, is_holid
     from three sim days ago as "86 minutes ago" was exactly this bug)."""
     if event_id is None or not name:
         return
+    place = _place_of(zone_id)
     new_start_ticks = _ticks_of(start_time)
     if new_start_ticks is None:
         return
@@ -276,6 +308,9 @@ def record_seen(event_id, name, start_time, attendee_ids, honored=None, is_holid
                 existing["attendees"] = list(attendee_ids or [])
                 existing["honored"] = list(honored or [])
                 existing["is_holiday"] = bool(is_holiday)
+                # First place wins, like start_ticks.
+                if place and not existing.get("zone_id"):
+                    existing.update(place)
                 cache[key] = existing
             else:
                 cache[key] = {
@@ -291,6 +326,7 @@ def record_seen(event_id, name, start_time, attendee_ids, honored=None, is_holid
                     # the renderer treats that as never-attended.
                     "recorded_ticks": _now_ticks(),
                 }
+                cache[key].update(place)
             _save(cache)
     except Exception as e:
         _log(f"record_seen failed: {type(e).__name__}: {e}")
@@ -672,11 +708,29 @@ def _event_line(e, now_ticks):
             honor_str = f" ({joined}'s)"
         elif first_role == "guest_of_honor":
             honor_str = f" (honoring {joined})"
+        elif first_role == "host":
+            honor_str = f" (hosted by {joined})"
         else:
             honor_str = f" (for {joined})"
     else:
         honor_str = ""
-    return f"  - {name}{honor_str} -- {when}"
+    return f"  - {name}{honor_str}{_place_str(e, honored_names if first_role == 'host' else ())} -- {when}"
+
+
+def _place_str(e, hosts=()):
+    """' at Aksel Hansen's home' / ' at the home of Melodie Chorus and
+    Kleff Chorus' / ' at The Blue Velvet'. Empty for events recorded
+    before places were tracked."""
+    home = [n for n in (e.get("home_of") or []) if n]
+    if home:
+        host_home = [h for h in hosts if h in home]
+        if host_home:
+            return f" at {host_home[0]}'s home"
+        names = home[:3]
+        joined = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+        return f" at the home of {joined}"
+    lot = (e.get("lot") or "").strip()
+    return f" at {lot}" if lot else ""
 
 
 def format_for_prompt(sim_a_id, sim_b_id):
@@ -754,6 +808,10 @@ def _record_from_drama_node(node, phase="complete"):
             honored = _events._get_honored_sims(node, event_name_for_log=name)
         except Exception:
             pass
+        try:
+            zone_id = getattr(getattr(node, "_situation_seed", None), "zone_id", None)
+        except Exception:
+            zone_id = None
         record_seen(
             event_id=event_id,
             name=name,
@@ -761,6 +819,7 @@ def _record_from_drama_node(node, phase="complete"):
             attendee_ids=list(attendees),
             honored=honored,
             is_holiday=False,
+            zone_id=zone_id,
         )
         _log(f"RECORDED drama event: {name!r} attendees={len(attendees)}")
     except Exception as e:
@@ -927,6 +986,12 @@ def _record_from_situation(sit):
         if start_time is None:
             return
 
+        try:
+            import services
+            zone = services.current_zone()   # situations only run on the active lot
+            zone_id = getattr(zone, "id", None) if zone else None
+        except Exception:
+            zone_id = None
         record_seen(
             event_id=sit_id,
             name=name,
@@ -934,6 +999,7 @@ def _record_from_situation(sit):
             attendee_ids=list(sim_ids),
             honored=[],
             is_holiday=False,
+            zone_id=zone_id,
         )
         _log(f"RECORDED situation event: cls={cls_name} attendees={len(sim_ids)}")
     except Exception as e:

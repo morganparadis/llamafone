@@ -737,6 +737,23 @@ section > p { max-width: 780px; margin-left: auto; margin-right: auto; }
   }
 }
 
+/* v3.9 Messages section: three columns in the order you'd use it --
+   the Messages tile and thread list, the tall chat on its own, then the
+   pie menu and the distance setting. Columns stack their own cards, so
+   the tall chat doesn't leave a gap beside it. One column on phones. */
+.messages-layout {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  margin: 2.5rem auto 0;
+  max-width: 1100px;
+  align-items: start;
+}
+.messages-col { display: grid; gap: 1.5rem; align-items: start; }
+@media (max-width: 900px) {
+  .messages-layout { grid-template-columns: 1fr; max-width: 420px; }
+}
+
 /* Modifier: 3-up layout that CENTERS the last (partial) row. Grid's
    1fr columns won't do this alone, but flexbox with wrap does. Used
    for sections with 5 cards where "3 on top, 2 centered on bottom"

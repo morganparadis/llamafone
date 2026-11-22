@@ -559,6 +559,115 @@ class LlamafoneCallInteraction(_LlamafonePhoneInteractionBase):
         _start_outbound("call", sim_info)
 
 
+def _picked_sim_info(picked_item_ids):
+    """The sim the player clicked in the Relationships panel. The game
+    passes it as picked_item_ids={clicked sim id}."""
+    try:
+        ids = list(picked_item_ids or ())
+        if not ids:
+            return None
+        import services
+        return services.sim_info_manager().get(ids[0])
+    except Exception:
+        return None
+
+
+def _rel_panel_reachable(picked_si, actor_si):
+    """Can the actor call or text this sim? Teen+ humans who are alive and
+    aren't the actor -- the same sims the phone's contact list allows."""
+    if picked_si is None:
+        return False
+    if actor_si is not None and getattr(picked_si, "sim_id", None) == getattr(actor_si, "sim_id", None):
+        return False
+    try:
+        return phone._is_phone_eligible(picked_si) and not phone._is_ghost(picked_si)
+    except Exception:
+        return False
+
+
+class _LlamafoneRelPanelBase(_LlamafonePhoneInteractionBase):
+    """Relationships panel > click a sim > Llamafone > Call / Text. Skips
+    the recipient picker: the clicked sim is the recipient. Hidden for
+    sims who can't use a phone (kids, pets, ghosts, yourself)."""
+
+    _kind = None
+
+    @classmethod
+    def _test(cls, target, context, **kwargs):
+        # The game calls inst_or_cls._test(target, context, **interaction_parameters)
+        # (interactions/base/interaction.py Interaction.test), so the clicked
+        # sim arrives here as picked_item_ids.
+        try:
+            actor_si = getattr(getattr(context, "sim", None), "sim_info", None)
+            if not _rel_panel_reachable(_picked_sim_info(kwargs.get("picked_item_ids")), actor_si):
+                from event_testing.results import TestResult
+                return TestResult(False, "Llamafone: this sim can't get calls or texts")
+        except Exception:
+            _log_exc(f"{cls.__name__}._test failed")
+        return super()._test(target, context, **kwargs)
+
+    def _fire(self):
+        sim_info = getattr(self.sim, "sim_info", None) or self.sim
+        params = getattr(self, "interaction_parameters", None) or {}
+        target_si = _picked_sim_info(params.get("picked_item_ids"))
+        contact = phone.contact_for_sim_info(sim_info, target_si)
+        if not contact:
+            notifications.show_error("Couldn't tell which sim you picked. Try again.")
+            return
+        kind = self._kind
+        _log(f"{type(self).__name__}: {kind} to {contact.get('name', '?')} from the Relationships panel")
+
+        def _on_message(message):
+            if kind == "call":
+                phone.send_call(contact, message)
+            else:
+                phone.send_text(contact, message)
+        if not _show_message_input(kind, sim_info, contact, _on_message):
+            notifications.show_error("Couldn't open the message dialog.")
+
+
+class LlamafoneRelCallInteraction(_LlamafoneRelPanelBase):
+    _kind = "call"
+
+
+class LlamafoneRelTextInteraction(_LlamafoneRelPanelBase):
+    _kind = "text"
+
+
+class LlamafoneRelMessagesInteraction(_LlamafoneRelPanelBase):
+    """Relationships panel > Llamafone > Messages: the text thread with the
+    clicked sim. Reading doesn't call the AI, so it works before setup."""
+    _kind = "messages"
+    _needs_ai = False
+
+    def _fire(self):
+        sim_info = getattr(self.sim, "sim_info", None) or self.sim
+        params = getattr(self, "interaction_parameters", None) or {}
+        target_si = _picked_sim_info(params.get("picked_item_ids"))
+        if target_si is None:
+            notifications.show_error("Couldn't tell which sim you picked. Try again.")
+            return
+        from . import messages
+        name = f"{getattr(target_si, 'first_name', '')} {getattr(target_si, 'last_name', '')}".strip()
+        thread = messages.direct_thread(sim_info, target_si.sim_id)
+        _log(f"{type(self).__name__}: thread with {name} from the Relationships panel "
+             f"({len(thread['messages']) if thread else 0} messages)")
+        if thread is None:
+            notifications.show("Llamafone", f"No texts with {getattr(target_si, 'first_name', '') or name} yet.")
+            return
+        _show_thread(sim_info, thread)
+
+
+class LlamafoneMessagesInteraction(_LlamafonePhoneInteractionBase):
+    """Llamafone > Messages: every text thread, newest first. Read-only,
+    and no AI call, so it opens before setup too."""
+    _needs_ai = False
+
+    def _fire(self):
+        sim_info = getattr(self.sim, "sim_info", None) or self.sim
+        _show_threads(sim_info)
+
+
 def _group_text_feature_enabled():
     """Master toggle for the group-text feature. When off, Send Text
     reverts to the single-select-only picker exactly as pre-3.4.
@@ -626,7 +735,7 @@ def _setting_definitions():
             "label":  "Texts & replies...",
             "kind":   "action",
             "getter": lambda: "",
-            "hint":   "Reply delay, group texts, how messages affect relationships, and ghost sims.",
+            "hint":   "Reply delay, group texts, sims in other worlds, how messages affect relationships, and ghost sims.",
         },
         {
             "key":    "llamagram_submenu",
@@ -727,6 +836,18 @@ def _setting_definitions():
             "kind":   "bool",
             "getter": config.get_phone_allow_ghosts,
             "hint":   "When off, ghost sims are filtered out of contact pickers and auto-call/auto-text pools.",
+        },
+        {
+            "key":    "world_distance",
+            "home":   "texting",
+            "label":  "Sims in other worlds: {value}",
+            "kind":   "enum",
+            "values": config.WORLD_DISTANCES,
+            "labels": {"near": "A SHORT TRIP", "far": "FAR AWAY", "same": "SAME TOWN"},
+            "getter": config.get_world_distance,
+            "hint":   "Short trip = they'll meet up for dinners and dates, no travel excuses. "
+                      "Far away = mostly calls and texts, visits only when planned. "
+                      "Same town = worlds don't matter at all.",
         },
         {
             "key":    "reply_delay_enabled",
@@ -839,7 +960,8 @@ def _format_value(setting):
     elif kind == "enum":
         # Show value as-is; the enum-cycle handler stringifies before
         # writing so the getter always returns a display-ready string.
-        val = str(val).upper() if val is not None else "?"
+        labels = setting.get("labels") or {}
+        val = labels.get(val) or (str(val).upper() if val is not None else "?")
     elif kind == "preset_int":
         # Map the stored int back to its preset label. Pick the preset
         # whose value is closest to (but not exceeding) the current
@@ -2455,6 +2577,173 @@ def _show_contact_actions(anchor_sim, sim_id, contact):
         return True
     except Exception:
         _log_exc("_show_contact_actions outer failure")
+        return False
+
+
+_THREADS_PAGE_SIZE = 25
+
+
+def _show_threads(anchor_sim, page=0):
+    """Llamafone > Messages: this sim's text threads, newest first,
+    _THREADS_PAGE_SIZE per page. Picking one opens the chat. Read-only."""
+    from . import messages
+    try:
+        from sims4.localization import LocalizationHelperTuning
+        from ui.ui_dialog_picker import UiItemPicker, BasePickerRow
+    except Exception:
+        _log_exc("_show_threads: import failed")
+        return False
+    try:
+        threads = messages.list_threads(anchor_sim)
+    except Exception:
+        _log_exc("_show_threads: list_threads failed")
+        notifications.show_error("Couldn't load your messages. Try again.")
+        return False
+    first = getattr(anchor_sim, "first_name", "") or "Your sim"
+    _log(f"Messages: {len(threads)} thread(s) for {first}, page {page + 1}")
+    if not threads:
+        notifications.show("Llamafone", f"No texts yet. When {first} texts someone, the thread shows up here.")
+        return True
+
+    start = page * _THREADS_PAGE_SIZE
+    if start >= len(threads):
+        page, start = 0, 0
+    shown = threads[start:start + _THREADS_PAGE_SIZE]
+    has_older = start + _THREADS_PAGE_SIZE < len(threads)
+    older_id = len(shown)
+
+    try:
+        title = "Messages" if page == 0 else f"Messages (page {page + 1})"
+        loc_title = LocalizationHelperTuning.get_raw_text(title)
+        loc_text = LocalizationHelperTuning.get_raw_text("")
+        loc_ok = LocalizationHelperTuning.get_raw_text("Open")
+        loc_cancel = LocalizationHelperTuning.get_raw_text("Back" if page else "Close")
+        dialog = UiItemPicker.TunableFactory().default(
+            anchor_sim,
+            title=lambda *_a, **_kw: loc_title,
+            text=lambda *_a, **_kw: loc_text,
+            text_ok=lambda *_a, **_kw: loc_ok,
+            text_cancel=lambda *_a, **_kw: loc_cancel,
+        )
+        try:
+            dialog.max_selectable = 1
+            dialog.min_selectable = 1
+        except Exception:
+            pass
+        for idx, t in enumerate(shown):
+            try:
+                dialog.add_row(BasePickerRow(
+                    option_id=idx,
+                    name=LocalizationHelperTuning.get_raw_text(t["title"]),
+                    row_description=LocalizationHelperTuning.get_raw_text(
+                        f"{messages.last_when(t)}. {messages.preview(t)}"),
+                    is_enable=True,
+                ))
+            except Exception:
+                _log_exc("messages: add_row failed")
+        if has_older:
+            try:
+                left = len(threads) - start - _THREADS_PAGE_SIZE
+                dialog.add_row(BasePickerRow(
+                    option_id=older_id,
+                    name=LocalizationHelperTuning.get_raw_text("Older threads..."),
+                    row_description=LocalizationHelperTuning.get_raw_text(f"{left} more"),
+                    is_enable=True,
+                ))
+            except Exception:
+                _log_exc("messages: older row failed")
+
+        def _on_response(response_dialog):
+            try:
+                if not response_dialog.accepted:
+                    if page > 0:
+                        _show_threads(anchor_sim, page - 1)
+                    return
+                picked = list(getattr(response_dialog, "picked_results", None) or ())
+                idx = picked[0] if picked else None
+                if idx == older_id and has_older:
+                    _show_threads(anchor_sim, page + 1)
+                elif idx is not None and 0 <= idx < len(shown):
+                    _show_thread(anchor_sim, shown[idx],
+                                 back=lambda: _show_threads(anchor_sim, page))
+                else:
+                    _show_threads(anchor_sim, page)
+            except Exception:
+                _log_exc("messages: on_response failed")
+
+        dialog.add_listener(_on_response)
+        dialog.show_dialog()
+        return True
+    except Exception:
+        _log_exc("_show_threads outer failure")
+        return False
+
+
+def _show_thread(anchor_sim, thread, page=0, back=None):
+    """One thread as a chat, oldest at top, newest at the bottom. Long
+    threads are split into pages (page 0 = newest); 'Earlier messages'
+    goes back. Back returns to the thread list (`back`), or closes when
+    opened from the Relationships panel."""
+    from . import messages
+    try:
+        from sims4.localization import LocalizationHelperTuning
+        from ui.ui_dialog import UiDialogOkCancel
+
+        pages = messages.pages(thread)
+        if not pages:
+            if back:
+                back()
+            return True
+        page = max(0, min(page, len(pages) - 1))
+        has_earlier = page + 1 < len(pages)
+        text = messages.render(pages[page], getattr(anchor_sim, "first_name", "") or "")
+        title = thread["title"]
+        if len(pages) > 1:
+            title += f" ({page + 1}/{len(pages)})"
+
+        if has_earlier:
+            ok_label, cancel_label = "Earlier messages", "Back"
+        else:
+            ok_label, cancel_label = "Back", "Close"
+        loc_title = LocalizationHelperTuning.get_raw_text(title)
+        loc_text = LocalizationHelperTuning.get_raw_text(text)
+        loc_ok = LocalizationHelperTuning.get_raw_text(ok_label)
+        loc_cancel = LocalizationHelperTuning.get_raw_text(cancel_label)
+        dialog = UiDialogOkCancel.TunableFactory().default(
+            anchor_sim,
+            title=lambda *_a, **_kw: loc_title,
+            text=lambda *_a, **_kw: loc_text,
+            text_ok=lambda *_a, **_kw: loc_ok,
+            text_cancel=lambda *_a, **_kw: loc_cancel,
+        )
+
+        def _go_back():
+            # From an earlier page, Back means newer messages; from the
+            # newest page, it's the thread list (or nothing).
+            if page > 0:
+                _show_thread(anchor_sim, thread, page - 1, back)
+            elif back:
+                back()
+
+        def _on_response(response_dialog):
+            try:
+                accepted = getattr(response_dialog, "accepted", False)
+                if has_earlier:
+                    if accepted:
+                        _show_thread(anchor_sim, thread, page + 1, back)
+                    else:
+                        _go_back()
+                elif accepted:
+                    _go_back()
+                # "Close" (or the X) on the last page just closes.
+            except Exception:
+                _log_exc("thread: on_response failed")
+
+        dialog.add_listener(_on_response)
+        dialog.show_dialog()
+        return True
+    except Exception:
+        _log_exc("_show_thread outer failure")
         return False
 
 

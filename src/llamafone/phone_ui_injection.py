@@ -21,10 +21,21 @@ import datetime
 _PHONE_INTERACTION_NAMES = (
     "Llamafone_Call",
     "Llamafone_Text",
+    "Llamafone_Messages",
     "Llamafone_Dating",
     "Llamafone_Post",
     "Llamafone_Notifications",
     "Llamafone_Settings",
+)
+# Shown when the player clicks a sim in the Relationships panel. These go
+# in the Sim tuning's `_relation_panel_affordances`; the game passes the
+# clicked sim as picked_item_ids (sims/sim.py
+# potential_relation_panel_interactions, called from
+# server_commands/interaction_commands.generate_choices on PICK_PORTRAIT).
+_RELATION_PANEL_INTERACTION_NAMES = (
+    "Llamafone_RelCall",
+    "Llamafone_RelText",
+    "Llamafone_RelMessages",
 )
 
 
@@ -105,12 +116,14 @@ def _inject_affordances():
     interaction by name and graft it onto every Sim object tuning's
     `_phone_affordances`."""
     tunings = []
-    for tuning_name in _PHONE_INTERACTION_NAMES:
-        cls = _find_interaction_tuning(tuning_name)
-        if cls is None:
-            _log(f"Inject: {tuning_name} not found -- skipping.")
-            continue
-        tunings.append((tuning_name, cls))
+    for names, attr_name in ((_PHONE_INTERACTION_NAMES, "_phone_affordances"),
+                             (_RELATION_PANEL_INTERACTION_NAMES, "_relation_panel_affordances")):
+        for tuning_name in names:
+            cls = _find_interaction_tuning(tuning_name)
+            if cls is None:
+                _log(f"Inject: {tuning_name} not found -- skipping.")
+                continue
+            tunings.append((tuning_name, cls, attr_name))
 
     if not tunings:
         _log("Inject aborted -- no Llamafone phone interactions loaded from .package.")
@@ -126,10 +139,10 @@ def _inject_affordances():
 
         sim_tunings = [t for k, t in obj_mgr.types.items() if _looks_like_sim(t)]
         per_interaction = {}
-        for tuning_name, cls in tunings:
+        for tuning_name, cls, attr_name in tunings:
             count = 0
             for sim_tuning in sim_tunings:
-                if _append_affordance(sim_tuning, cls, "_phone_affordances"):
+                if _append_affordance(sim_tuning, cls, attr_name):
                     count += 1
             per_interaction[tuning_name] = count
 

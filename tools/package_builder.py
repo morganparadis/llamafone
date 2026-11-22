@@ -407,6 +407,11 @@ STRINGS = {
     0x00CA1F00: "Llamadate",
     0x00CA2000: "Llamagram Post",
     0x00CA2100: "Llamagram Notifications",
+    # Relationships panel > click a sim > Llamafone > Call / Text
+    0x00CA2200: "Call",
+    0x00CA2300: "Text",
+    # Phone tile and Relationships-panel entry: the player's text threads
+    0x00CA2400: "Messages",
 }
 
 # STBL packaging:

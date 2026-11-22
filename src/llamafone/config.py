@@ -107,6 +107,19 @@ language = English
 ; Allow ghosts to call/text your sim? (true or false)
 phone_allow_ghosts = true
 
+; How far apart are the game's worlds? Changes how sims in a DIFFERENT world
+; from your sim talk about meeting up. Sims in the same world always make
+; in-person plans. You can also change it in game: Llamafone Settings >
+; Texts & replies.
+;   near = a short trip (default). Sims in other worlds invite you to
+;          dinner, dates, and hangouts and say yes to yours, with no travel
+;          excuses. They just don't "run into" you by chance.
+;   far  = long-distance. Sims in other worlds stick to calls, texts, and
+;          video chats, and only meet up when you plan a visit.
+;   same = one big town. Worlds don't matter at all: meetups and chance
+;          run-ins with anyone, anywhere.
+world_distance = near
+
 ; ── Reply delays ──────────────────────────────────────────────────────────
 ; When you text a sim (via Reply or llama.sendtext), how long should they
 ; "think" before responding? Instant replies feel uncanny -- this adds a small
@@ -700,6 +713,22 @@ def get_phone_allow_ghosts():
     """If False, ghost sims are filtered out of phone contact pickers and
     auto-call/auto-text recipient pools."""
     return _bool_setting_with_config_fallback("phone_allow_ghosts", "phone_allow_ghosts", True)
+
+
+WORLD_DISTANCES = ("near", "far", "same")
+
+
+def get_world_distance():
+    """How far apart the game's worlds feel, for sims in different worlds:
+    'near' (a short trip: in-person plans fine, no chance run-ins), 'far'
+    (long-distance), or 'same' (one big town). The in-game setting wins
+    over the cfg. Missing or unrecognized -> 'near'."""
+    for v in (get_setting("world_distance"),
+              get_config().get(_SECTION, "world_distance", fallback="near")):
+        v = str(v or "").strip().lower()
+        if v in WORLD_DISTANCES:
+            return v
+    return "near"
 
 
 def get_reply_delay_enabled():

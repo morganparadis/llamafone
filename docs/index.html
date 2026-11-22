@@ -243,6 +243,58 @@
   </div>
 </section>
 
+<section id="messages" class="screenshot-strip">
+  <div class="container">
+    <h2>View message history, calls from the pie menu, and distance settings <span class="muted small">(v3.9)</span></h2>
+    <p class="muted">Scroll back through every text thread like a real phone, reach any sim straight from their portrait, and decide whether sims in other worlds are a short trip away or long-distance.</p>
+    <div class="messages-layout">
+
+      <div class="messages-col">
+
+        <figure class="screenshot">
+          <img src="img/viewmessagesoption.PNG" alt="The Llamafone app menu listing Llamagram Post, Messages, Send Text, and Settings">
+          <figcaption><strong>A Messages tile in the app</strong><br><span class="muted small">Every text thread for the sim you're playing, one-on-one and group.</span></figcaption>
+        </figure>
+
+        <figure class="screenshot">
+          <img src="img/messagehistory.PNG" alt="Messages list for Francesca, newest first: Vivian Woodruff, Luca Woodruff, Bianca Capriano, Veronica Capriano, each with when the last message came in and its first words">
+          <figcaption><strong>Newest threads first</strong><br><span class="muted small">Each one shows when the last message came in, in game time, and how it starts.</span></figcaption>
+        </figure>
+
+      </div>
+
+      <div class="messages-col">
+
+        <figure class="screenshot">
+          <img src="img/messages.PNG" alt="A text thread with Olivia Eriksen: Olivia's messages on the left and Francesca's on the right, each under the sender's name, with day labels like 5 days ago">
+          <figcaption><strong>Reads like a phone</strong><br><span class="muted small">Their messages on the left, yours on the right, a label when the day changes. Long threads page back with Earlier messages.</span></figcaption>
+        </figure>
+
+      </div>
+
+      <div class="messages-col">
+
+        <figure class="screenshot">
+          <img src="img/piemenu1.PNG" alt="The Relationships panel with a sim's portrait clicked, showing a Llamafone option in the pie menu">
+          <figcaption><strong>Llamafone in the Relationships panel</strong><br><span class="muted small">Click any sim's portrait in the Relationships tab.</span></figcaption>
+        </figure>
+
+        <figure class="screenshot">
+          <img src="img/piemenu2.PNG" alt="The Llamafone submenu in the Relationships panel with Call, Text, and Messages">
+          <figcaption><strong>Call, Text, or Messages</strong><br><span class="muted small">Goes straight to that sim, no contact list. Works for acquaintances too, and they'll act like it.</span></figcaption>
+        </figure>
+
+        <figure class="screenshot">
+          <img src="img/distanceoptions.PNG" alt="Texts and replies settings with a Sims in other worlds row set to A SHORT TRIP, explaining the Short trip, Far away, and Same town options">
+          <figcaption><strong>How far apart are the worlds?</strong><br><span class="muted small">Short trip (default): sims in other worlds say yes to dinner, no travel excuses. Far away: mostly calls and texts. Same town: worlds don't matter.</span></figcaption>
+        </figure>
+
+      </div>
+
+    </div>
+  </div>
+</section>
+
 <section id="llamagram" class="screenshot-strip">
   <div class="container">
     <h2>Llamagram: social media for your sims <span class="muted small">(v3.8)</span></h2>
@@ -506,11 +558,6 @@
         <figcaption><strong>Settings, in-game</strong><br><span class="muted small">Everything in folders: AI settings, incoming calls and texts, texts and replies, Llamagram, contacts, and dating. Changes save instantly and write back to <code>llamafone.cfg</code>, keeping your comments.</span></figcaption>
       </figure>
 
-      <figure class="screenshot">
-        <img src="img/aisettings.PNG" alt="Llamafone AI settings in game: Provider, Model, Thinking, Max tokens, Language, and Test connection">
-        <figcaption><strong>AI settings, in-game</strong><br><span class="muted small">Switch provider and model, set how hard the AI thinks, and test the connection without leaving the game. Only the API key lives in <code>llamafone.cfg</code>.</span></figcaption>
-      </figure>
-
     </div>
   </div>
 </section>
@@ -525,7 +572,7 @@
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 00-8 8c0 5.5 8 12 8 12s8-6.5 8-12a8 8 0 00-8-8z"/></svg>
       </div>
       <h3>Geography aware</h3>
-      <p>If a sim lives in your world, they'll suggest grabbing coffee. If they live in San Myshuno and you're in Willow Creek, they keep it long-distance — no "come over" from across the map.</p>
+      <p>You choose how far apart the worlds are. A short trip (the default): sims in other worlds happily meet up for dinner, but never "run into" you from across the map. Far away: they keep it long-distance. Same town: worlds don't matter at all.</p>
     </article>
 
     <article class="feature-card">
@@ -1094,6 +1141,25 @@ model = llama-3.2-3b-instruct   # the model's name in LM Studio</code></pre>
   <ol class="changelog-list">
 
     <li class="changelog-entry">
+      <div class="changelog-date">November 22, 2026</div>
+      <div class="changelog-body">
+        <h3>View message history, calls from the pie menu, and distance settings (v3.9.0)</h3>
+        <p>Three things you asked for. Drop-in over v3.8.5.</p>
+        <ul>
+          <li><strong>Messages.</strong> A new Messages tile lists every text thread for the sim you're playing, newest first, group texts included. Open one and it reads like a phone: their messages on the left, yours on the right, each under the sender's name, with a label when the day changes. Long threads page back with Earlier messages. Messages only shows your texts. It doesn't change anything, and it doesn't use your AI.</li>
+          <li><strong>Call, text, or read messages from the Relationships panel.</strong> Click a sim's portrait in the Relationships tab, then Llamafone, then Call, Text, or Messages, and you go straight to that sim. It works for sims you barely know too, and they'll act like it. It doesn't show for children, pets, or ghosts.</li>
+          <li><strong>Sims in other worlds: you decide how far.</strong> Before, sims in a different world turned down dinner, made travel excuses, or suggested a video call instead. Now there's a setting in Llamafone Settings &gt; Texts &amp; replies (or <code>world_distance</code> in <code>llamafone.cfg</code>):
+            <ul>
+              <li><strong>A short trip</strong> (the new default): they suggest and say yes to dinners, dates, and hangouts, with no travel excuses. They still won't claim they "ran into" you by chance.</li>
+              <li><strong>Far away</strong>: the old behavior. Mostly calls and texts, and visits only when you plan one.</li>
+              <li><strong>Same town</strong>: worlds don't matter at all.</li>
+            </ul>
+            Liked the long-distance feel? Switch it to Far away.</li>
+        </ul>
+      </div>
+    </li>
+
+    <li class="changelog-entry">
       <div class="changelog-date">October 27, 2026</div>
       <div class="changelog-body">
         <h3>Every language, Save As, and smoother setup (v3.8.5)</h3>
@@ -1158,37 +1224,6 @@ model = llama-3.2-3b-instruct   # the model's name in LM Studio</code></pre>
           <li><strong>Realistic follower growth</strong> for big Llamagram accounts. A celebrity no longer gains tens of thousands of followers from an ordinary post.</li>
           <li><strong>Pregnant again?</strong> Sims now know about a new pregnancy that starts soon after a birth.</li>
           <li><strong>Up-to-date model examples</strong> in <code>llamafone.cfg</code>, with a reminder that model names change.</li>
-        </ul>
-      </div>
-    </li>
-
-    <li class="changelog-entry">
-      <div class="changelog-date">October 9, 2026</div>
-      <div class="changelog-body">
-        <h3>Trip memory, LM Studio, and squashed bugs (v3.8.2)</h3>
-        <p>Sims remember vacations, a new free local AI option, and a round of bug fixes. Drop-in over v3.8.1.</p>
-        <p><strong>New:</strong></p>
-        <ul>
-          <li><strong>Trip memory.</strong> Llamafone now notices when your household goes on a vacation or getaway, and who came along. Sims on the trip talk about being away together while it's happening and remember it together afterward ("Apollo and Francesca went to Gibbi Point together&hellip; got back yesterday"). Everyone else hears about it the way news travels: parents within a few hours, close friends in a couple of days, acquaintances only if they're told. Trips stay in conversations for a week of game time after you get home. Type <code>llama.trips</code> to see what's been recorded.</li>
-          <li><strong>LM Studio support.</strong> Set <code>provider = lmstudio</code> to run Llamafone on a model loaded in <a href="https://lmstudio.ai" target="_blank" rel="noopener">LM Studio</a>: free, private, no API key. Load the model with a context length of 16k. <code>llama.testconnection</code> checks the server, lists your models, and tells you exactly what's wrong if something's off.</li>
-        </ul>
-        <p><strong>Other bug fixes:</strong></p>
-        <ul>
-          <li><strong>Claude Haiku 5.5 works.</strong> Longer texts failed with "Empty response from Claude" because Llamafone only read the first part of the reply.</li>
-          <li><strong>Babies you've met aren't strangers.</strong> A grandparent who's been introduced to the new baby no longer gets a "you may not know this person" warning about them.</li>
-          <li><strong>Best friends aren't described as exes.</strong> Old "No Longer Friends" tags from a past falling-out no longer count when two sims are close now.</li>
-          <li><strong>Times read right.</strong> Something from last night is "last night," not "earlier today," and every part of a conversation agrees on when something happened.</li>
-          <li><strong>Life events stick around.</strong> They're remembered for a week of game time, however long you're away from the game between sessions.</li>
-          <li><strong>Events last as long as they should.</strong> Weddings, parties, and holidays stay "happening now" for as long as they actually last.</li>
-          <li><strong>In-person memories last.</strong> "Saw each other in person" memories no longer clear early.</li>
-          <li><strong>Llamagram comments survive a break.</strong> Comments still on the way when you quit always arrive, even after a long break.</li>
-          <li><strong>Fair Llamagram feeds.</strong> Every household sim gets friends' posts, from casual friends too, without the same friend posting twice in a day.</li>
-          <li><strong>Shared weather.</strong> A sim on the same lot or trip as you shares your weather.</li>
-          <li><strong>No phantom thank-yous.</strong> Baby follow-ups don't thank you for congratulations you never sent.</li>
-          <li><strong>Cleaner labels.</strong> Relationships read "Good Friend," not "Good," and Lovestruck's hidden relationship settings no longer show up as traits.</li>
-          <li><strong>No real-world dates.</strong> Conversations only ever use in-game time.</li>
-          <li><strong>Local model fixes.</strong> Ollama and LM Studio get up to 5 minutes per reply, models that "think" first (like Gemma 4) no longer come back empty, and dashes and apostrophes no longer come out garbled.</li>
-          <li><strong>Clearer errors.</strong> LM Studio problems are explained in plain English with the fix, an empty reply shows an error instead of nothing, and failed requests are noted in <code>Llamafone_Log.txt</code>.</li>
         </ul>
       </div>
     </li>

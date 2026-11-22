@@ -364,6 +364,55 @@ def _show_phone_dialog(caller_sim_info, title, message, ring=True, recipient_sim
         pass
     return False
 
+
+def _distance_rule(speaker, player):
+    """The Geography bullets for sims in DIFFERENT worlds, per the player's
+    world_distance setting. `speaker` is who's writing ("the caller", "the
+    sender", or their name); `player` is the player's sim ("the player" or
+    their name). Fills the {distance_rule} slot in the call, text, and
+    reply prompts."""
+    d = config.get_world_distance()
+    if d == "same":
+        return (
+            "- DIFFERENT worlds: the player treats every world as ONE BIG TOWN. "
+            "Ignore distance completely: in-person plans (\"come over\", dinner, "
+            "a date, drinks tonight) and chance encounters (\"ran into X at the "
+            "store\") are fine with anyone in any world. Never bring up travel, "
+            "distance, or long-distance, and don't steer toward video calls "
+            "instead of meeting.\n")
+    if d == "far":
+        return (
+            "- DIFFERENT worlds: the player treats the worlds as LONG-DISTANCE. "
+            "Don't casually suggest hanging out as if you live next door "
+            "(\"come over now\", \"stop by\", \"let's grab drinks tonight\"). "
+            f"NEVER claim to have \"run into\" or \"bumped into\" {player}. "
+            "Long-distance is the default framing: calls, texts, video chats, "
+            "social media, letter (when world context calls for it), or a "
+            "PLANNED visit. Same rule for mentions of mutuals: only \"ran into "
+            "X\" / \"saw X\" / \"bumped into X\" / \"got talking with X\" if X's "
+            f"listed world matches {speaker}'s world EXACTLY. Each mutual entry "
+            "includes \"lives in <world>\" -- check that before claiming any "
+            "in-person encounter.\n"
+            f"- EXCEPTION -- when {player} proposes an in-person visit (this "
+            "weekend, next month, on my day off, \"come see me\", \"I could "
+            "drive out\"), ENGAGE with it warmly. Say yes, negotiate timing, "
+            "express excitement. Distance is an obstacle to work around, not a "
+            "refusal to meet at all. Don't push back three messages in a row "
+            f"when {player} keeps insisting -- read the room and agree to make "
+            "it work.\n")
+    return (
+        "- DIFFERENT worlds: the player treats the worlds as A SHORT TRIP apart. "
+        "In-person plans are fine: dinner, a date, drinks, a party, \"come "
+        "over\". Suggest them and say yes to them as readily as if you lived "
+        "in the same world. No excuses about distance or travel, and don't "
+        "steer toward video calls or texting instead of meeting. The only "
+        f"difference: never claim to have \"run into\" or \"bumped into\" {player} "
+        "by chance, and only claim a chance encounter with a mutual (\"ran into "
+        f"X\", \"saw X\") if X's listed world matches {speaker}'s world EXACTLY. "
+        "Each mutual entry includes \"lives in <world>\". Across worlds, "
+        "meetups are planned, not accidental.\n")
+
+
 _CALL_SYSTEM = """You write one side of a Sims 4 phone call — what the caller says to the \
 player's sim. Stay in character as the caller. Write in {language}.
 
@@ -468,19 +517,7 @@ Occasional Simlish (Sul sul, Dag dag, Nooboo) is fine.
 # Geography rule (STRICT)
 Look at the caller's world vs the player's world (both listed in the context).
 - SAME world: in-person plans are fine ("come over", "let's grab drinks", "I ran into X").
-- DIFFERENT worlds: don't casually suggest hanging out as if you live next door \
-  ("come over now", "let's grab drinks tonight"). NEVER claim to have "run into" or \
-  "bumped into" the player. Long-distance is the default framing — phone call, text, \
-  video chat, letter (when world context calls for it), or a PLANNED visit. Same rule \
-  applies to mentions of mutual contacts: only "ran into X" / "saw X" / "bumped into X" \
-  / "got talking with X" if X's listed world matches the CALLER's world EXACTLY. Each \
-  mutual entry includes "lives in <world>" -- check that string before claiming any \
-  in-person encounter.
-- EXCEPTION -- when the PLAYER proposes an in-person visit (this weekend, next month, \
-  on my day off, "come see me", "I could drive out"), ENGAGE with it warmly. Say yes, \
-  negotiate timing, express excitement about seeing them. Distance is an obstacle to \
-  work around, not a refusal to meet at all. Don't push back three messages in a row \
-  when the player keeps insisting -- read the room and agree to make it work.
+{distance_rule}
 - HOUSEHOLD / CLOSE RELATIONSHIPS: if the caller lives in the same household as the player \
   (spouse, partner, parent/child, sibling all in the same household), or is the player's \
   romantic partner regardless of address, they NEVER "run into" the player by chance. \
@@ -718,18 +755,7 @@ Topic variety guide (rotate, don't keep picking the same kind):
 # Geography rule (STRICT)
 Look at the sender's world vs the player's world (both listed in the context).
 - SAME world: in-person plans are fine ("come over", "let's grab coffee", "I saw X").
-- DIFFERENT worlds: don't casually suggest hanging out as if you live next door \
-  ("come over", "stop by", "let's grab drinks tonight"). NEVER claim to have "run \
-  into" the player. Long-distance is the default framing — texts, video chats, social \
-  media, letter (when world context calls for it), or a PLANNED visit. Same rule for \
-  mentions of mutuals: only "ran into X" / "saw X" / "bumped into X" if X's listed \
-  world matches the SENDER's world EXACTLY. Each mutual entry includes "lives in \
-  <world>" -- check that before claiming any in-person encounter.
-- EXCEPTION -- when the PLAYER proposes an in-person visit (this weekend, next month, \
-  on my day off, "come see me", "I could drive out"), ENGAGE with it warmly. Say yes, \
-  negotiate timing, express excitement. Distance is an obstacle to work around, not a \
-  refusal to meet at all. Don't push back three messages in a row when the player \
-  keeps insisting.
+{distance_rule}
 - HOUSEHOLD / CLOSE RELATIONSHIPS: cohabiting sims (same household) and romantic partners \
   NEVER "run into" each other or "bump into" each other — they live shared lives. Frame \
   their texts as coordinating the day, asking what's for dinner, reacting to something \
@@ -941,18 +967,7 @@ your first reply, just pick up where it left off.
 # Geography rule (STRICT)
 Look at {other_name}'s world vs {main_name}'s world (both listed in the context).
 - SAME world: in-person plans are fine ("come over", "let's grab coffee", "I saw X").
-- DIFFERENT worlds: don't casually suggest hanging out as if you live next door \
-  ("come over", "stop by", "let's grab drinks tonight"). NEVER claim to have "run \
-  into" {main_name}. Long-distance is the default framing — texts, video chats, \
-  social media, letter (when world context calls for it), or a PLANNED visit. Same \
-  rule for mentions of mutuals: only "ran into X" / "saw X" / "bumped into X" if X's \
-  listed world matches {other_name}'s world EXACTLY. Each mutual entry includes \
-  "lives in <world>" -- check that before claiming any in-person encounter.
-- EXCEPTION -- when {main_name} proposes an in-person visit (this weekend, next \
-  month, on my day off, "come see me", "I could drive out"), ENGAGE with it warmly. \
-  Say yes, negotiate timing, express excitement. Distance is an obstacle to work \
-  around, not a refusal to meet at all. Don't push back three messages in a row when \
-  {main_name} keeps insisting.
+{distance_rule}
 - HOUSEHOLD / CLOSE RELATIONSHIPS: cohabiting sims (same household) and romantic partners \
   NEVER "run into" each other or "bump into" each other — they live shared lives. Frame \
   their replies as coordinating the day, asking what's for dinner, reacting to something \
@@ -1470,33 +1485,59 @@ def find_contact_by_name(full_name):
                 continue
             if last and si.last_name.lower() != last:
                 continue
-
-            friendship = None
-            romance = None
-            status = ""
-            if main_si is not None:
-                try:
-                    rt = main_si.relationship_tracker
-                    entry = sim_context._read_relationship_for_target(rt, si.sim_id, sm)
-                    if entry:
-                        friendship = entry.get("friendship")
-                        romance = entry.get("romance")
-                        status = entry.get("status", "") or ""
-                except Exception:
-                    pass
-
-            return {
-                "sim_info": si,
-                "sim_id": si.sim_id,
-                "name": f"{si.first_name} {si.last_name}".strip(),
-                "status": status,
-                "friendship": friendship,
-                "romance": romance,
-                "in_household": False,
-            }
+            return _contact_outside_network(main_si, si, sm)
     except Exception:
         pass
     return None
+
+
+def _contact_outside_network(main_si, si, sm):
+    """A contact dict for a sim the network search skipped (friendship
+    under 25), with the main sim's real scores so the "barely know each
+    other" tier still applies."""
+    friendship = None
+    romance = None
+    status = ""
+    if main_si is not None:
+        try:
+            rt = main_si.relationship_tracker
+            entry = sim_context._read_relationship_for_target(rt, si.sim_id, sm)
+            if entry:
+                friendship = entry.get("friendship")
+                romance = entry.get("romance")
+                status = entry.get("status", "") or ""
+        except Exception:
+            pass
+    return {
+        "sim_info": si,
+        "sim_id": si.sim_id,
+        "name": f"{si.first_name} {si.last_name}".strip(),
+        "status": status,
+        "friendship": friendship,
+        "romance": romance,
+        "in_household": False,
+    }
+
+
+def contact_for_sim_info(main_si, si):
+    """The contact dict for one specific sim, by id (no name collisions).
+    Used when the player picks the sim directly, e.g. from the
+    Relationships panel: the network's entry when they're in it,
+    otherwise one built from the main sim's relationship scores."""
+    if si is None:
+        return None
+    try:
+        hh_members, relationships = sim_context.get_main_sim_network(main_si)
+        for contact in list(hh_members) + list(relationships):
+            if getattr(contact.get("sim_info"), "sim_id", None) == si.sim_id:
+                return contact
+    except Exception:
+        pass
+    try:
+        import services
+        return _contact_outside_network(main_si, si, services.sim_info_manager())
+    except Exception:
+        return None
 
 
 def _is_age_appropriate_contact(contact, recipient):
@@ -2522,7 +2563,9 @@ def _get_mutual_contacts(contact, recipient=None, hide_newborns=False):
                     pass
 
                 world = _get_sim_home_world(si)
-                world_part = f", lives in {world}" if world else ", world unknown — treat as long-distance only"
+                world_part = f", lives in {world}" if world else (
+                    ", world unknown — treat as long-distance only" if config.get_world_distance() == "far"
+                    else ", world unknown — no chance run-ins")
 
                 # Ghost marker — the AI must NEVER write about ghosts as if alive
                 ghost_tag = ""
@@ -3161,10 +3204,15 @@ def _location_context(main_si, contact):
     if main_home and other_home:
         if main_home.lower() == other_home.lower():
             return f"\n[GEOGRAPHY: Both live in {main_home} — SAME world, in-person plans OK]{vacation_note}"
+        apart = {
+            "far": "NO casual in-person meetups, long-distance only",
+            "same": "but the player treats all worlds as one town: in-person plans and run-ins OK",
+        }.get(config.get_world_distance(),
+              "a short trip apart: in-person plans OK (dinner, dates, hangouts), no chance run-ins")
         return (
             f"\n[GEOGRAPHY: {main_si.first_name} lives in {main_home}, "
             f"{contact['name']} lives in {other_home} — DIFFERENT worlds, "
-            f"NO casual in-person meetups, long-distance only]"
+            f"{apart}]"
             f"{vacation_note}"
         )
     elif main_home:
@@ -4226,7 +4274,8 @@ def generate_call_for(recipient, contact, callback=None, output=None):
     _refresh_milestones_for(contact, recipient)
 
     language = config.get_language()
-    system = _CALL_SYSTEM.format(language=language)
+    system = _CALL_SYSTEM.format(language=language,
+                                 distance_rule=_distance_rule("the caller", "the player"))
     rel_desc = _describe_relationship(contact, recipient=recipient)
 
     contact_id = getattr(contact.get("sim_info"), "sim_id", None)
@@ -4349,7 +4398,8 @@ def generate_text_for(recipient, contact, callback=None, output=None,
     _refresh_milestones_for(contact, recipient)
 
     language = config.get_language()
-    system = system_override if system_override else _TEXT_SYSTEM.format(language=language)
+    system = system_override if system_override else _TEXT_SYSTEM.format(
+        language=language, distance_rule=_distance_rule("the sender", "the player"))
     rel_desc = _describe_relationship(contact, recipient=recipient)
 
     contact_id = getattr(contact.get("sim_info"), "sim_id", None)
@@ -4497,6 +4547,7 @@ def generate_reply(player_message, callback=None, output=None):
         language=language,
         other_name=other_name,
         main_name=main_name,
+        distance_rule=_distance_rule(other_name, main_name),
     )
     rel_desc = _describe_relationship(contact, recipient=recipient)
     convo_text = _format_conversation_history(history, main_name, other_name)
@@ -4678,6 +4729,7 @@ def send_text(contact, player_message, callback=None, output=None,
         language=language,
         other_name=other_name,
         main_name=main_name,
+        distance_rule=_distance_rule(other_name, main_name),
     )
     rel_desc = relationship_override if relationship_override else _describe_relationship(contact, recipient=main_si)
     contact_id = getattr(contact.get("sim_info"), "sim_id", None)
@@ -4832,6 +4884,7 @@ def send_call(contact, player_topic, callback=None, output=None):
         language=language,
         other_name=other_name,
         main_name=main_name,
+        distance_rule=_distance_rule(other_name, main_name),
     )
     rel_desc = _describe_relationship(contact, recipient=main_si)
     contact_id = getattr(contact.get("sim_info"), "sim_id", None)
